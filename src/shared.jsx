@@ -3688,6 +3688,7 @@ const RESERVED_SLUGS = new Set([
   "owner", "staff", "admin", "cancel", "privacy", "terms", "dpa",
   "voorwaarden", "contact", "api", "assets", "public", "static",
   "auth", "login", "signup", "signin", "logout", "reset", "review",
+  "integrations", "beoordeel", "rate",
   "_", "app", "www",
   "sitemap.xml", "robots.txt", "manifest.json",
 ]);

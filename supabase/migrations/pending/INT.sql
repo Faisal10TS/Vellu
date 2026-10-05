@@ -117,17 +117,64 @@ create trigger waitlist_notified_at
   before update of status on public.waitlist
   for each row execute function public.tg_waitlist_notified_at();
 
--- 3. Annuleerlinks van verplaatste afspraken (E1-05). Tot 05-10-2026 schoof de
---    vervaldatum van de link niet mee als een afspraak werd verplaatst of
---    bewerkt: bij 16 toekomstige afspraken verliep de link vóór de afspraak
---    (de klant kon niet meer annuleren) of pas erna. Eenmalig gelijkgetrokken
---    met de regel van book-appointment: verloopt op het startmoment, in de
---    tijdzone van de salon. Alleen landen waarvan de zone vaststaat.
+-- 3. Annuleerlinks van verplaatste afspraken (E1-05). De vervaldatum van de
+--    link schoof niet mee als een afspraak werd verplaatst: niet via het
+--    bewerkformulier van de eigenaar (saveEditAppt), en tot 05-10-2026 ook niet
+--    via reschedule-appointment. Bij 16 toekomstige afspraken verliep de link
+--    vóór de afspraak (de klant kon niet meer annuleren) of pas erna. Nu één
+--    regel in de database die elk pad volgt: verloopt op het startmoment, in de
+--    tijdzone van de salon (dezelfde kaart als TZ_BY_COUNTRY in src/shared.jsx en
+--    de edge functions, met Amsterdam als terugval). Plus een eenmalige
+--    gelijktrekking van de bestaande links.
+create or replace function public.salon_tz(p_country text)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select case upper(coalesce(p_country, ''))
+           when 'BE' then 'Europe/Brussels'
+           when 'GB' then 'Europe/London'
+           when 'AW' then 'America/Curacao'
+           when 'CW' then 'America/Curacao'
+           when 'BQ' then 'America/Curacao'
+           when 'SX' then 'America/Curacao'
+           else 'Europe/Amsterdam'
+         end
+$$;
+
+create or replace function public.tg_appointments_move_cancel_token()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_cc text;
+begin
+  if new.date is null or coalesce(new.time, '') !~ '^[0-9]{2}:[0-9]{2}' then
+    return null;
+  end if;
+  select country_code into v_cc from public.profiles where id = new.owner_id;
+  update public.cancellation_tokens
+     set expires_at = (new.date + new.time::time) at time zone public.salon_tz(v_cc)
+   where appointment_id = new.id
+     and used is not true;
+  return null;
+end;
+$$;
+
+revoke all on function public.tg_appointments_move_cancel_token() from public, anon, authenticated;
+
+drop trigger if exists appointments_move_cancel_token on public.appointments;
+create trigger appointments_move_cancel_token
+  after update of date, time on public.appointments
+  for each row
+  when (old.date is distinct from new.date or old.time is distinct from new.time)
+  execute function public.tg_appointments_move_cancel_token();
+
 update public.cancellation_tokens ct
-   set expires_at = (a.date + a.time::time) at time zone
-         case when p.country_code in ('AW', 'CW', 'BQ', 'SX') then 'America/Curacao'
-              when p.country_code = 'BE' then 'Europe/Brussels'
-              else 'Europe/Amsterdam' end
+   set expires_at = (a.date + a.time::time) at time zone public.salon_tz(p.country_code)
   from public.appointments a
   join public.profiles p on p.id = a.owner_id
  where a.id = ct.appointment_id
@@ -135,8 +182,4 @@ update public.cancellation_tokens ct
    and a.status not in ('cancelled', 'completed', 'no_show')
    and a.date >= current_date
    and a.time ~ '^[0-9]{2}:[0-9]{2}'
-   and coalesce(p.country_code, 'NL') in ('NL', 'BE', 'AW', 'CW', 'BQ', 'SX')
-   and ct.expires_at is distinct from ((a.date + a.time::time) at time zone
-         case when p.country_code in ('AW', 'CW', 'BQ', 'SX') then 'America/Curacao'
-              when p.country_code = 'BE' then 'Europe/Brussels'
-              else 'Europe/Amsterdam' end);
+   and ct.expires_at is distinct from ((a.date + a.time::time) at time zone public.salon_tz(p.country_code));

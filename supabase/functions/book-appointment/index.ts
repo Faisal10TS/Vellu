@@ -153,17 +153,31 @@ function clientIp(req: Request): string {
 // het oude gedrag. Zelfde regel als get_booked_slots(_range) in de database.
 function vensterVanBestaande(e: any, breakMin: number): { staffId: string | null; start: number; end: number }[] {
   const start = toMinutes(String(e.time || "00:00"));
+  const total = parseInt(e.service_duration);
   const parts = Array.isArray(e.service_breakdown) ? e.service_breakdown.filter((p: any) => p && typeof p === "object") : [];
-  if (parts.some((p: any) => p.staff_id)) {
-    return parts.map((p: any) => {
-      const s = start + (parseInt(p.offset_min) || 0);
-      const raw = parseInt(p.duration);
-      const dur = Number.isFinite(raw) ? raw : parseInt(e.service_duration);
-      return { staffId: p.staff_id || null, start: s, end: s + (dur || 60) + breakMin };
-    });
+  if (!parts.some((p: any) => UUID_RE_SLOT.test(String(p.staff_id || "")))) {
+    return [{ staffId: e.staff_id || null, start, end: start + (total || 60) + breakMin }];
   }
-  return [{ staffId: e.staff_id || null, start, end: start + (parseInt(e.service_duration || 60) || 60) + breakMin }];
+  // Zelfde regels als get_booked_slots_range: een deel zonder eigen stylist hoort
+  // bij de toewijzing per dienst (staff_assignments) en anders bij de primaire
+  // stylist; eindigen de delen vóór service_duration (alleen de duur aangepast),
+  // dan loopt het laatste deel door tot het einde van de afspraak.
+  const sa = e.staff_assignments && typeof e.staff_assignments === "object" ? e.staff_assignments : {};
+  const rows = parts.map((p: any) => {
+    const offRaw = Math.round(parseFloat(p.offset_min));
+    const durRaw = Math.round(parseFloat(p.duration));
+    const own = UUID_RE_SLOT.test(String(p.staff_id || "")) ? p.staff_id : null;
+    const viaSa = UUID_RE_SLOT.test(String(sa[p.service_id] || "")) ? sa[p.service_id] : null;
+    return { staffId: own || viaSa || e.staff_id || null, off: Number.isFinite(offRaw) ? offRaw : 0, dur: Number.isFinite(durRaw) ? durRaw : total };
+  });
+  const span = Math.max(...rows.map((r: any) => r.off + (r.dur || 0)));
+  return rows.map((r: any) => {
+    const dur = Number.isFinite(total) && r.off + (r.dur || 0) === span && span < total ? total - r.off : r.dur;
+    const s = start + r.off;
+    return { staffId: r.staffId, start: s, end: s + (dur || 60) + breakMin };
+  });
 }
+const UUID_RE_SLOT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Kassaverkoop (geen afspraak): bezet nooit een tijdslot. Oude rijen missen de
 // is_sale-vlag, vandaar ook de structurele herkenning.
@@ -947,7 +961,7 @@ serve(async (req) => {
   // verkooprijen zonder vlag vallen er in JS uit (isVerkoopRij).
   const haalBestaande = () => supabase
     .from("appointments")
-    .select("id, time, service_duration, staff_id, status, service_breakdown, is_sale, service_id, products, created_at")
+    .select("id, time, service_duration, staff_id, status, service_breakdown, staff_assignments, is_sale, service_id, products, created_at")
     .eq("owner_id", salon.id)
     .eq("date", date)
     .not("status", "in", '("cancelled","no_show")')

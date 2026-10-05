@@ -216,12 +216,20 @@ function OwnerEntryPage({ lang, setLang }) {
     }, 10000);
   };
   const noteInvite = (outcome) => {
-    if (outcome !== "invalid_or_expired" && outcome !== "has_salon") return;
+    if (!["invalid_or_expired", "has_salon", "already_staff", "not_own_row"].includes(outcome)) return;
     const lang = langRef.current;
     const msg = outcome === "has_salon"
       ? (lang === "nl" ? "Dit account heeft al een eigen salon. Gebruik een ander e-mailadres voor je teamaccount."
         : lang === "es" ? "Esta cuenta ya tiene su propio salón. Usa otro correo electrónico para tu cuenta de equipo."
         : "This account already has its own salon. Use a different email address for your team account.")
+      : outcome === "already_staff"
+      ? (lang === "nl" ? "Dit account is al gekoppeld aan een salonteam."
+        : lang === "es" ? "Esta cuenta ya está vinculada a un equipo de salón."
+        : "This account is already linked to a salon team.")
+      : outcome === "not_own_row"
+      ? (lang === "nl" ? "Deze uitnodiging is voor een teamlid. Log uit en laat haar de link zelf openen om haar account aan te maken."
+        : lang === "es" ? "Esta invitación es para un miembro del equipo. Cierra sesión y deja que ella abra el enlace para crear su cuenta."
+        : "This invitation is for a team member. Log out and let her open the link herself to create her account.")
       : (lang === "nl" ? "Deze uitnodiging is verlopen of al gebruikt."
         : lang === "es" ? "Esta invitación ha caducado o ya se ha usado."
         : "This invitation has expired or was already used.");

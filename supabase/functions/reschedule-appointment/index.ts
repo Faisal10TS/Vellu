@@ -82,17 +82,31 @@ function clientIp(req: Request): string {
 // alleen haar eigen deel. Letterlijk dezelfde regel als book-appointment.
 function vensterVanBestaande(e: any, breakMin: number): { staffId: string | null; start: number; end: number }[] {
   const start = toMinutes(String(e.time || "00:00"));
+  const total = parseInt(e.service_duration);
   const parts = Array.isArray(e.service_breakdown) ? e.service_breakdown.filter((p: any) => p && typeof p === "object") : [];
-  if (parts.some((p: any) => p.staff_id)) {
-    return parts.map((p: any) => {
-      const s = start + (parseInt(p.offset_min) || 0);
-      const raw = parseInt(p.duration);
-      const dur = Number.isFinite(raw) ? raw : parseInt(e.service_duration);
-      return { staffId: p.staff_id || null, start: s, end: s + (dur || 60) + breakMin };
-    });
+  if (!parts.some((p: any) => UUID_RE_SLOT.test(String(p.staff_id || "")))) {
+    return [{ staffId: e.staff_id || null, start, end: start + (total || 60) + breakMin }];
   }
-  return [{ staffId: e.staff_id || null, start, end: start + (parseInt(e.service_duration || 60) || 60) + breakMin }];
+  // Zelfde regels als get_booked_slots_range: een deel zonder eigen stylist hoort
+  // bij de toewijzing per dienst (staff_assignments) en anders bij de primaire
+  // stylist; eindigen de delen vóór service_duration (alleen de duur aangepast),
+  // dan loopt het laatste deel door tot het einde van de afspraak.
+  const sa = e.staff_assignments && typeof e.staff_assignments === "object" ? e.staff_assignments : {};
+  const rows = parts.map((p: any) => {
+    const offRaw = Math.round(parseFloat(p.offset_min));
+    const durRaw = Math.round(parseFloat(p.duration));
+    const own = UUID_RE_SLOT.test(String(p.staff_id || "")) ? p.staff_id : null;
+    const viaSa = UUID_RE_SLOT.test(String(sa[p.service_id] || "")) ? sa[p.service_id] : null;
+    return { staffId: own || viaSa || e.staff_id || null, off: Number.isFinite(offRaw) ? offRaw : 0, dur: Number.isFinite(durRaw) ? durRaw : total };
+  });
+  const span = Math.max(...rows.map((r: any) => r.off + (r.dur || 0)));
+  return rows.map((r: any) => {
+    const dur = Number.isFinite(total) && r.off + (r.dur || 0) === span && span < total ? total - r.off : r.dur;
+    const s = start + r.off;
+    return { staffId: r.staffId, start: s, end: s + (dur || 60) + breakMin };
+  });
 }
+const UUID_RE_SLOT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Kassaverkopen bezetten geen tijdslot (oude rijen zonder is_sale-vlag
 // structureel herkend), zelfde als book-appointment.
@@ -275,20 +289,31 @@ serve(async (req) => {
   // je kon een teamboeking verzetten naar een moment waarop zij niet kan.
   // Zonder breakdown (enkelvoudige of oude afspraak) is er precies één deel.
   const breakdown = Array.isArray(appt.service_breakdown) ? appt.service_breakdown : [];
+  // Zelfde regels als vensterVanBestaande / get_booked_slots_range: een deel
+  // zonder eigen stylist hoort bij staff_assignments van die dienst en anders
+  // bij de primaire stylist; eindigen de delen vóór de totale duur, dan loopt
+  // het laatste deel door tot het einde.
+  const toewijzing = appt.staff_assignments && typeof appt.staff_assignments === "object" ? appt.staff_assignments : {};
+  const ruweDelen = breakdown.map((p: any) => {
+    const off = Math.round(parseFloat(p.offset_min)) || 0;
+    const dur = Math.round(parseFloat(p.duration)) || 0;
+    const eigen = p.staff_id || toewijzing[p.service_id] || appt.staff_id || null;
+    return { p, off, dur, eigen };
+  });
+  const span = ruweDelen.length ? Math.max(...ruweDelen.map((d: any) => d.off + d.dur)) : 0;
   const delen: { staffId: string | null; serviceId: string | null; start: number; end: number }[] =
-    breakdown
-      .map((p: any) => {
-        const off = parseInt(p.offset_min) || 0;
-        const dur = parseInt(p.duration) || 0;
+    ruweDelen
+      .map(({ p, off, dur, eigen }: any) => {
+        const tot = (off + dur === span && span < duration) ? duration - off : dur;
         return {
           // Wisselt de eigenaar van stylist, dan verhuizen alleen de delen van
           // de vórige primaire stylist mee; de rest blijft bij haar eigen.
-          staffId: (new_staff_id !== undefined && (p.staff_id || null) === (appt.staff_id || null))
+          staffId: (new_staff_id !== undefined && eigen === (appt.staff_id || null))
             ? (new_staff_id || null)
-            : (p.staff_id || null),
+            : eigen,
           serviceId: p.service_id || null,
           start: startMin + off,
-          end: startMin + off + dur,
+          end: startMin + off + tot,
         };
       })
       .filter((d: any) => d.end > d.start);
@@ -418,7 +443,7 @@ serve(async (req) => {
   const breakMin = parseInt(salon.break_minutes || 0);
   const { data: existing, error: exErr } = await supabase
     .from("appointments")
-    .select("id, time, service_duration, staff_id, status, service_breakdown, is_sale, service_id, products")
+    .select("id, time, service_duration, staff_id, status, service_breakdown, staff_assignments, is_sale, service_id, products")
     .eq("owner_id", callerId).eq("date", new_date)
     .not("id", "eq", appointment_id)
     .not("status", "in", "(\"cancelled\",\"no_show\")")

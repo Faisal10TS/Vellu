@@ -2685,7 +2685,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
       //    Instagram-webview) → expliciet "je pagina lijkt verouderd";
       // 3. écht onbekend → generieke tekst MET de servercode erbij, zodat de
       //    salon bij een supportvraag meteen kan doorgeven wat er stond.
-      const STALE_CODES = ["invalid_json", "missing_salon_slug", "missing_services", "too_many_services", "invalid_date", "invalid_time", "missing_client", "invalid_request", "invalid_datetime", "variant_service_mismatch", "extra_service_mismatch"];
+      const STALE_CODES = ["variant_required", "invalid_json", "missing_salon_slug", "missing_services", "too_many_services", "invalid_date", "invalid_time", "missing_client", "invalid_request", "invalid_datetime", "variant_service_mismatch", "extra_service_mismatch"];
       let msg = MAP[code];
       if (!msg) {
         if (code.startsWith("db_error") || code === "client_create_failed" || code === "appointment_create_failed") {

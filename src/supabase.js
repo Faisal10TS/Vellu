@@ -54,9 +54,11 @@ export function clearStaffInvite() {
 // gelijk op (het aanmeldformulier zelf en de sessie-check van /owner die op
 // SIGNED_IN reageert); twee losse rpc-aanroepen zouden elkaar in de weg
 // zitten: de tweede krijgt "al gebruikt" terwijl de eerste net slaagde.
-// Uitkomst: 'claimed' | 'invalid_or_expired' | 'has_salon' | 'failed'.
-// Bij 'failed' (netwerk, geen sessie) blijft het token staan voor een
-// volgende poging; bij de andere drie is het token op.
+// Uitkomst: 'claimed' | 'invalid_or_expired' | 'has_salon' | 'already_staff' |
+// 'not_own_row' | 'failed'. Bij 'failed' (netwerk, geen sessie) blijft het
+// token staan voor een volgende poging; bij de andere is het voor DEZE browser
+// klaar. 'not_own_row': de ingelogde eigenaar opende de link van een teamlid;
+// de link zelf blijft geldig voor dat teamlid.
 let inviteClaim = null
 export function claimStaffInvite(token) {
   if (!token) return Promise.resolve('failed')
@@ -65,7 +67,7 @@ export function claimStaffInvite(token) {
     .then(({ data, error }) => {
       if (!error && data && data.success === true) { clearStaffInvite(); return 'claimed' }
       const code = data && data.error
-      if (code === 'invalid_or_expired' || code === 'has_salon') { clearStaffInvite(); return code }
+      if (code === 'invalid_or_expired' || code === 'has_salon' || code === 'already_staff' || code === 'not_own_row') { clearStaffInvite(); return code }
       inviteClaim = null
       return 'failed'
     }, () => { inviteClaim = null; return 'failed' })

@@ -697,6 +697,7 @@ declare
   v_token text := lower(btrim(coalesce(p_token, '')));
   v_id uuid;
   v_owner uuid;
+  v_email text;
 begin
   if v_uid is null then
     raise exception 'not_authenticated' using errcode = '42501';
@@ -706,7 +707,7 @@ begin
     return jsonb_build_object('success', false, 'error', 'invalid_or_expired');
   end if;
 
-  select sm.id, sm.owner_id into v_id, v_owner
+  select sm.id, sm.owner_id, sm.email into v_id, v_owner, v_email
     from public.staff_members sm
    where sm.invite_token_hash = encode(extensions.digest(v_token, 'sha256'), 'hex')
      and sm.user_id is null
@@ -733,6 +734,16 @@ begin
      and (exists (select 1 from public.services where owner_id = v_uid)
           or exists (select 1 from public.appointments where owner_id = v_uid)) then
     return jsonb_build_object('success', false, 'error', 'has_salon');
+  end if;
+
+  -- De eigenaar die (nog ingelogd) de uitnodigingslink van een teamlid opent,
+  -- koppelt niet haar eigen account aan die rij: alleen als de rij haar eigen
+  -- login-adres draagt (eigenaar op het eigen rooster). De link blijft geldig,
+  -- zodat het teamlid hem na het uitloggen of op haar eigen toestel kan gebruiken.
+  if v_owner = v_uid
+     and lower(btrim(coalesce(v_email, ''))) is distinct from
+         lower(btrim(coalesce((select u.email from auth.users u where u.id = v_uid), auth.jwt() ->> 'email', ''))) then
+    return jsonb_build_object('success', false, 'error', 'not_own_row');
   end if;
 
   update public.staff_members

@@ -46,7 +46,20 @@ begin
   r := r || pg_temp.t('I14 notified_at is server time', 'postgres', '{}', format($q$select 1 from public.waitlist where id = %L and notified_at > now() - interval '1 minute'$q$, wl), 'ok') || nl;
   -- annuleerlinks gelijk aan het startmoment
   r := r || pg_temp.t('I15 no future token out of line with its start', 'postgres', '{}', $q$select 1 from public.cancellation_tokens ct join public.appointments a on a.id = ct.appointment_id join public.profiles p on p.id = a.owner_id
-     where coalesce(ct.used,false) = false and a.status not in ('cancelled','completed','no_show') and a.date >= current_date and coalesce(p.country_code,'NL') in ('NL','BE','AW','CW','BQ','SX')
-       and abs(extract(epoch from (ct.expires_at - ((a.date + a.time::time) at time zone case when p.country_code in ('AW','CW','BQ','SX') then 'America/Curacao' when p.country_code = 'BE' then 'Europe/Brussels' else 'Europe/Amsterdam' end)))) > 60$q$, 'zero') || nl;
+     where coalesce(ct.used,false) = false and a.status not in ('cancelled','completed','no_show') and a.date >= current_date and a.time ~ '^[0-9]{2}:[0-9]{2}'
+       and ct.expires_at is distinct from ((a.date + a.time::time) at time zone public.salon_tz(p.country_code))$q$, 'zero') || nl;
+  insert into public.appointments (owner_id, client_name, client_email, service_name, date, time, service_duration, service_price, status)
+  values (bloom::uuid, 'ZZ int move', 'delivered@resend.dev', 'ZZ', current_date + 3, '10:00', 30, 10, 'confirmed') returning id::text into wl;
+  insert into public.cancellation_tokens (appointment_id, token, expires_at)
+  values (wl::uuid, repeat('a', 64), ((current_date + 3) + time '10:00') at time zone 'Europe/Amsterdam');
+  r := r || pg_temp.t('I16 owner moves visit via the edit form', 'authenticated', cb, format($q$update public.appointments set date = current_date + 9, time = '14:30' where id = %L$q$, wl), 'ok') || nl;
+  r := r || pg_temp.t('I17 cancel link follows the new start', 'postgres', '{}', format($q$select 1 from public.cancellation_tokens where appointment_id = %L and expires_at = ((current_date + 9) + time '14:30') at time zone 'Europe/Amsterdam'$q$, wl), 'ok') || nl;
+  -- eigenaar die de uitnodigingslink van een teamlid opent, koppelt zichzelf niet
+  insert into public.staff_members (owner_id, name, email, invite_token_hash, invite_expires_at)
+  values (bloom::uuid, 'ZZ invite', 'zz-stylist@example.test', encode(extensions.digest(repeat('b', 64), 'sha256'), 'hex'), now() + interval '1 day')
+  returning id::text into wl;
+  r := r || pg_temp.t('I19 owner opening a stylist invite gets not_own_row', 'authenticated', cb, $q$select 1 where (public.claim_staff_invite(repeat('b', 64)) ->> 'error') = 'not_own_row'$q$, 'ok') || nl;
+  r := r || pg_temp.t('I20 row stays unclaimed, link still valid', 'postgres', '{}', format($q$select 1 from public.staff_members where id = %L and user_id is null and invite_token_hash is not null$q$, wl), 'ok') || nl;
+  r := r || pg_temp.t('I18 salon_tz for Bonaire and unknown', 'postgres', '{}', $q$select 1 where public.salon_tz('BQ') = 'America/Curacao' and public.salon_tz(null) = 'Europe/Amsterdam' and public.salon_tz('gb') = 'Europe/London'$q$, 'ok') || nl;
   raise exception E'REPORT\n%', r;
 end $$;
