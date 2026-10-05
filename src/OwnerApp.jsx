@@ -16808,6 +16808,10 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         // dag. HH:MM-strings vergelijken lexicaal correct, dus
                         // gewone < volstaat voor open < start < eind < close.
                         const hasBreak = !!(hours.break_start && hours.break_end);
+                        // Kwartierraster van 05:00 tot 23:30. TIMES liep van 08:00
+                        // tot 21:00 per half uur, dus 07:30, 09:15 of 22:00 waren
+                        // niet in te stellen.
+                        const hourOpts = genTimes(15, 5, 23.5);
                         const selStyle = { background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" };
                         const setDay = (patch) => update(d => {
                           if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS};
@@ -16829,7 +16833,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           // pak de eerste twee opties ná openingstijd.
                           let bs = "12:00", be = "13:00";
                           if (!(hours.open < bs && be < hours.close)) {
-                            const inside = TIMES.filter(x => x > hours.open && x < hours.close);
+                            // Hele en halve uren, zoals vroeger met TIMES: een
+                            // pauze van een half uur, niet van een kwartier.
+                            const inside = hourOpts.filter(x => x > hours.open && x < hours.close && /:(00|30)$/.test(x));
                             if (inside.length < 2) return;
                             bs = inside[0]; be = inside[1];
                           }
@@ -16839,11 +16845,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         <div style={{ flex: 1, minWidth: 0, ...(isMobile ? { flexBasis: "100%" } : {}) }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                             <select value={hours.open} onChange={e => setDay({ open: e.target.value })} style={selStyle}>
-                              {TIMES.map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                              {timeOptionsWith(hourOpts, hours.open).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
                             </select>
                             <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
                             <select value={hours.close} onChange={e => setDay({ close: e.target.value })} style={selStyle}>
-                              {TIMES.map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                              {timeOptionsWith(hourOpts, hours.close).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
                             </select>
                             <button type="button" onClick={toggleBreak}
                               style={{ marginLeft: "auto", padding: "5px 10px", borderRadius: 6, fontSize: 9.5, fontWeight: 600, letterSpacing: "0.05em", cursor: "pointer", border: `1px solid ${hasBreak ? accent : c.inputBorder}`, background: hasBreak ? `${accent}14` : "transparent", color: hasBreak ? accent : c.textMuted, whiteSpace: "nowrap" }}>
@@ -16853,12 +16859,12 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           {hasBreak && (
                             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
                               <span style={{ fontSize: 9.5, color: c.textLabel, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Pauze" : lang === "es" ? "Pausa" : "Break"}</span>
-                              <select value={hours.break_start} onChange={e => setDay({ break_start: e.target.value, break_end: hours.break_end <= e.target.value ? (TIMES.find(x => x > e.target.value && x < hours.close) || hours.break_end) : hours.break_end })} style={selStyle}>
-                                {TIMES.filter(x => x > hours.open && x < hours.close).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                              <select value={hours.break_start} onChange={e => setDay({ break_start: e.target.value, break_end: hours.break_end <= e.target.value ? (hourOpts.find(x => x > e.target.value && x < hours.close) || hours.break_end) : hours.break_end })} style={selStyle}>
+                                {timeOptionsWith(hourOpts.filter(x => x > hours.open && x < hours.close), hours.break_start).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
                               </select>
                               <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
                               <select value={hours.break_end} onChange={e => setDay({ break_end: e.target.value })} style={selStyle}>
-                                {TIMES.filter(x => x > (hours.break_start || hours.open) && x < hours.close).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                                {timeOptionsWith(hourOpts.filter(x => x > (hours.break_start || hours.open) && x < hours.close), hours.break_end).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
                               </select>
                               {!isMobile && <span style={{ fontSize: 10, color: c.textMuted }}>
                                 {lang === "nl" ? "dicht tussen deze tijden" : lang === "es" ? "cerrado entre estas horas" : "closed between these times"}
@@ -17001,6 +17007,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.bookingPolicy}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{t.bookingPolicyDesc}</div>
+                {/* Bewust zonder esValue/onEsChange: het beleid heeft geen
+                    es-kolom. In de Spaanse interface geldt de getypte tekst dan
+                    als Spaans en vult Opslaan (autoFillTranslations met lang)
+                    NL en EN vanuit het Spaans, i.p.v. Spaans als Engels op te
+                    slaan. */}
                 <AutoTranslateField
                   nlValue={salonData.booking_policy || ""}
                   enValue={salonData.booking_policy_en || ""}
@@ -17187,12 +17198,13 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 {showExceptionForm ? (<>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                     <input type="date" className="input-field" value={newException.date} onChange={e => setNewException(f => ({...f, date: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 120 }} />
+                    {/* Zelfde kwartierraster (05:00–23:30) als de openingstijden. */}
                     <select value={newException.open} onChange={e => setNewException(f => ({...f, open: e.target.value}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif" }}>
-                      {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                      {timeOptionsWith(genTimes(15, 5, 23.5), newException.open).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                     </select>
                     <span style={{ color: c.textMuted, fontSize: 11, alignSelf: "center" }}>—</span>
                     <select value={newException.close} onChange={e => setNewException(f => ({...f, close: e.target.value}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif" }}>
-                      {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                      {timeOptionsWith(genTimes(15, 5, 23.5), newException.close).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                     </select>
                   </div>
                   {(salonData.staff || []).length > 0 && (
@@ -17278,11 +17290,45 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.blockedDays}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.blockedDesc}</div>
-                {Object.entries(salonData.day_overrides || {}).filter(([date, v]) => v.type === "blocked" && (!v.from || date === v.from || v.block_time_start)).map(([date, v]) => (
-                  <div key={date + (v.block_time_start || "")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${c.danger}10`, border: `1px solid ${c.danger}26`, borderRadius: 14, marginBottom: 6 }}>
+                {/* Twee bronnen, samen in één lijst:
+                    - profiles.day_overrides (oud model, één entry per datum):
+                      salonbrede hele dagen, plus oude medewerker- en
+                      tijdblokkades. Gegroepeerd op from/to/medewerker, zodat
+                      ook dagen van een reeks waarvan de eerste dag later is
+                      overschreven zichtbaar en verwijderbaar blijven (vroeger
+                      toonde de lijst alleen date === from, en verdwenen zulke
+                      dagen uit beeld terwijl ze geblokkeerd bleven).
+                    - staff_day_overrides-rijen (kind 'block'): blokkades voor
+                      één medewerker en tijdvakken, zoveel per datum als nodig.
+                      Rijen uit één opslagactie delen created_at en vormen samen
+                      één regel. Dienst- en wekelijkse blokkades staan in de
+                      agenda en blijven daar. */}
+                {(() => {
+                  const groups = new Map();
+                  for (const [date, v] of Object.entries(salonData.day_overrides || {})) {
+                    if (!v || v.type !== "blocked") continue;
+                    const gk = v.block_time_start ? `json|t|${date}` : `json|d|${v.from || date}|${v.to || ""}|${v.staff_id || ""}`;
+                    if (!groups.has(gk)) groups.set(gk, { key: gk, source: "json", dates: [], ids: [], v });
+                    groups.get(gk).dates.push(date);
+                  }
+                  for (const r of (salonData.staff_blocks || [])) {
+                    if (r.service_id || r.weekday != null || (r.kind && r.kind !== "block")) continue;
+                    const gk = ["rows", r.staff_id || "", r.block_time_start || "", r.block_time_end || "", r.reason || "", r.created_at || r.id].join("|");
+                    if (!groups.has(gk)) groups.set(gk, { key: gk, source: "rows", dates: [], ids: [], v: { staff_id: r.staff_id || null, reason: r.reason || "", block_time_start: r.block_time_start || null, block_time_end: r.block_time_end || null } });
+                    const g = groups.get(gk);
+                    g.dates.push(r.date); g.ids.push(r.id);
+                  }
+                  const all = [...groups.values()].map(g => ({ ...g, dates: [...g.dates].sort() }))
+                    .sort((a, b) => (a.dates[0] < b.dates[0] ? -1 : a.dates[0] > b.dates[0] ? 1 : 0));
+                  return all.map(g => {
+                  const v = g.v;
+                  const date = g.dates[0];
+                  const last = g.dates[g.dates.length - 1];
+                  return (
+                  <div key={g.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: `${c.danger}10`, border: `1px solid ${c.danger}26`, borderRadius: 14, marginBottom: 6 }}>
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        <span>{date}{v.to && v.to !== date ? ` → ${v.to}` : ""}</span>
+                        <span>{date}{last !== date ? ` – ${last}` : ""}</span>
                         {/* Scope badge: staff name when the block is per-staff,
                             "Iedereen" when it's salon-wide. Matches the label
                             in the agenda modal so it's the same wording. */}
@@ -17308,10 +17354,12 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         title={lang === "nl" ? "Bewerken" : lang === "es" ? "Editar" : "Edit"}
                         onClick={() => {
                           const isTime = !!v.block_time_start;
-                          setEditingBlocked({ origFrom: v.from || date, origTo: v.to || null, mode: isTime ? "time" : "day", staff_id: v.staff_id || null, staff_name: v.staff_name || null });
+                          // Precies de dagen/rijen van deze regel; bij opslaan
+                          // gaan die weg en komt de nieuwe versie ervoor in de plaats.
+                          setEditingBlocked({ source: g.source, keys: g.source === "json" ? g.dates : [], ids: g.ids });
                           setNewBlocked({
-                            from: v.from || date,
-                            to: (v.to && v.to !== date) ? v.to : "",
+                            from: date,
+                            to: !isTime && last !== date ? last : "",
                             reason: v.reason || "",
                             mode: isTime ? "time" : "day",
                             time_start: v.block_time_start || "09:00",
@@ -17324,24 +17372,31 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       </button>
                       <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: c.danger, borderColor: `${c.danger}26` }}
                         title={lang === "nl" ? "Verwijderen" : lang === "es" ? "Eliminar" : "Delete"}
-                        onClick={() => {
-                          update(d => {
-                            const o = {...(d.day_overrides || {})};
-                            // Remove all dates in range
-                            if (v.to) {
-                              // parseDate: local-midnight parsing. new Date("YYYY-MM-DD") is UTC
-                              // midnight, and fmt() reads local components — in any UTC-negative
-                              // timezone that combination deleted the day BEFORE each intended key.
-                              let cur = parseDate(v.from || date);
-                              const end = parseDate(v.to);
-                              while (cur <= end) { delete o[fmt(cur)]; cur.setDate(cur.getDate() + 1); }
-                            } else { delete o[date]; }
-                            d.day_overrides = o; return d;
-                          });
+                        disabled={blockSaving}
+                        onClick={async () => {
+                          // Direct opslaan, net als de uitzonderingsdagen hierboven:
+                          // eerst bleef dit lokaal tot de grote Opslaan-knop.
+                          if (!(await showConfirm(lang === "nl" ? "Deze blokkade verwijderen?" : lang === "es" ? "¿Eliminar este bloqueo?" : "Delete this block?"))) return;
+                          if (g.source === "json") {
+                            // Alleen de dagen van déze regel, niet alles tussen from
+                            // en to: daar kan inmiddels een andere blokkade staan.
+                            const o = { ...(salonData.day_overrides || {}) };
+                            for (const k of g.dates) delete o[k];
+                            const { error } = await supabase.from("profiles").update({ day_overrides: o }).eq("id", salonData.owner_id);
+                            if (error) { toast.show(t.somethingWrong, "error"); return; }
+                            update(d => { d.day_overrides = o; return d; });
+                          } else {
+                            const { error } = await supabase.from("staff_day_overrides").delete().in("id", g.ids).eq("owner_id", salonData.owner_id);
+                            if (error) { toast.show(t.somethingWrong, "error"); return; }
+                            update(d => { d.staff_blocks = (d.staff_blocks || []).filter(r => !g.ids.includes(r.id)); return d; });
+                          }
+                          toast.show(lang === "nl" ? "Blokkade verwijderd" : lang === "es" ? "Bloqueo eliminado" : "Block deleted");
                         }}>×</button>
                     </div>
                   </div>
-                ))}
+                  );
+                  });
+                })()}
                 {showBlockedForm ? (<>
                   {/* Block mode toggle: whole day or time slot */}
                   <div style={{ display: "flex", gap: 6, marginTop: 8, marginBottom: 10 }}>
@@ -17361,17 +17416,25 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <input type="date" className="input-field" value={newBlocked.from} onChange={e => setNewBlocked(f => ({...f, from: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateFrom} />
                     {(newBlocked.mode || "day") === "day" && (
-                      <input type="date" className="input-field" value={newBlocked.to} onChange={e => setNewBlocked(f => ({...f, to: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateTo} />
+                      <input type="date" className="input-field" min={newBlocked.from || undefined} value={newBlocked.to} onChange={e => setNewBlocked(f => ({...f, to: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 110 }} placeholder={t.dateTo} />
                     )}
-                    {newBlocked.mode === "time" && (<>
+                    {newBlocked.mode === "time" && (() => {
+                      // Raster van de salon, verankerd op de openingstijd van die
+                      // dag (anders begint 45/60 minuten op 06:00 en mist het de
+                      // echte uren). De gekozen tijd staat er altijd in, ook als
+                      // hij niet op het raster valt (standaard 17:30 bij 60 min):
+                      // anders toont de select iets anders dan er wordt opgeslagen.
+                      const grid = genTimes(salonData.slot_interval_minutes || 30, 5, 23.5, hoursForDate(newBlocked.from)?.open || null);
+                      return (<>
                       <select className="input-field" value={newBlocked.time_start || "09:00"} onChange={e => setNewBlocked(f => ({...f, time_start: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", minWidth: 75, background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, color: c.text, fontFamily: "'Jost',sans-serif" }}>
-                        {genTimes(salonData.slot_interval_minutes || 30).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                        {timeOptionsWith(grid, newBlocked.time_start || "09:00").map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                       </select>
                       <span style={{ color: c.textMuted, fontSize: 11, alignSelf: "center" }}>—</span>
                       <select className="input-field" value={newBlocked.time_end || "17:30"} onChange={e => setNewBlocked(f => ({...f, time_end: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", minWidth: 75, background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, color: c.text, fontFamily: "'Jost',sans-serif" }}>
-                        {genTimes(salonData.slot_interval_minutes || 30).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                        {timeOptionsWith(grid, newBlocked.time_end || "17:30").map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
                       </select>
-                    </>)}
+                      </>);
+                    })()}
                   </div>
                   <input className="input-field" value={newBlocked.reason} onChange={e => setNewBlocked(f => ({...f, reason: e.target.value}))} placeholder={t.blockedReason} style={{ fontSize: 11, padding: "8px 10px", width: "100%", marginTop: 6 }} />
                   {/* "Voor wie?" — zelfde keuze als bij uitzonderingsdagen. Zonder
@@ -17398,49 +17461,107 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   )}
                   <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                     <button className="btn-ghost" style={{ flex: 1, fontSize: 10, borderStyle: "dashed", borderColor: `${c.danger}33`, color: c.danger }}
-                      onClick={() => {
-                        if (!newBlocked.from) return;
-                        if (newBlocked.mode === "time" && newBlocked.time_end <= newBlocked.time_start) { toast.show(lang === "nl" ? "Eindtijd moet na starttijd liggen" : lang === "es" ? "La hora de fin debe ser posterior a la hora de inicio" : "End time must be after start time", "error"); return; }
-                        const endDate = newBlocked.to || newBlocked.from;
-                        // Scope komt nu uit de "Voor wie?"-select (bij bewerken
-                        // vooringevuld vanuit de rij, dus niets gaat verloren).
-                        // staff_name schrijven we mee zodat de scope-badge de
-                        // naam kan tonen ook als de medewerker later weg is.
+                      disabled={blockSaving}
+                      onClick={async () => {
+                        if (blockSaving || !newBlocked.from) return;
+                        const isTime = newBlocked.mode === "time";
+                        const timeStart = newBlocked.time_start || "09:00";
+                        const timeEnd = newBlocked.time_end || "17:30";
+                        if (isTime && timeEnd <= timeStart) { toast.show(lang === "nl" ? "Eindtijd moet na starttijd liggen" : lang === "es" ? "La hora de fin debe ser posterior a la hora de inicio" : "End time must be after start time", "error"); return; }
+                        const endDate = isTime ? newBlocked.from : (newBlocked.to || newBlocked.from);
+                        // 'Tot' vóór 'Van' blokkeerde niets maar meldde wel
+                        // "toegevoegd" — en bij bewerken was de oude blokkade dan
+                        // al weg. Nu weigeren vóórdat er iets verandert.
+                        if (endDate < newBlocked.from) { toast.show(lang === "nl" ? "De einddatum ligt vóór de begindatum" : lang === "es" ? "La fecha final es anterior a la fecha de inicio" : "The end date is before the start date", "error"); return; }
+                        // parseDate: lokale middernacht (zie de uitleg bij parseDate).
+                        const dates = [];
+                        for (let cur = parseDate(newBlocked.from), end = parseDate(endDate); cur <= end && dates.length <= 366; cur.setDate(cur.getDate() + 1)) dates.push(fmt(cur));
+                        if (dates.length === 0) return;
+                        if (dates.length > 366) { toast.show(lang === "nl" ? "Kies een periode van hooguit een jaar" : lang === "es" ? "Elige un periodo de un año como máximo" : "Choose a period of one year at most", "error"); return; }
                         const scopeStaff = (salonData.staff || []).find(sm => sm.id === newBlocked.staff_id);
-                        const scope = scopeStaff
-                          ? { staff_id: scopeStaff.id, staff_name: scopeStaff.name || null }
-                          : {};
-                        update(d => {
-                          const o = {...(d.day_overrides || {})};
-                          // Editing: drop the ORIGINAL entry/range first so a
-                          // changed date or shrunk range leaves no orphan keys.
-                          if (editingBlocked) {
-                            if (editingBlocked.origTo) {
-                              let cur = parseDate(editingBlocked.origFrom);
-                              const end = parseDate(editingBlocked.origTo);
-                              while (cur <= end) { delete o[fmt(cur)]; cur.setDate(cur.getDate() + 1); }
-                            } else { delete o[editingBlocked.origFrom]; }
-                          }
-                          if (newBlocked.mode === "time") {
-                            // Time-slot block: store on single date with time range
-                            o[newBlocked.from] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: newBlocked.from, to: newBlocked.from, block_time_start: newBlocked.time_start || "09:00", block_time_end: newBlocked.time_end || "17:30", ...scope };
-                          } else {
-                            // Whole day block
-                            let cur = parseDate(newBlocked.from);
-                            const end = parseDate(endDate);
-                            const first = fmt(cur);
-                            while (cur <= end) {
-                              o[fmt(cur)] = { type: "blocked", reason: newBlocked.reason || t.blocked, from: first, to: endDate, ...scope };
-                              cur.setDate(cur.getDate() + 1);
+                        const reasonTxt = newBlocked.reason || t.blocked;
+                        // Waar komt hij te staan? Eén medewerker of een tijdvak:
+                        // rijen in staff_day_overrides (kind 'block'), zoals de
+                        // agenda ze ook maakt — zoveel per datum als nodig, dus
+                        // Noor en Esther op dezelfde dag overschrijven elkaar niet
+                        // meer. Alleen hele dagen voor de hele salon blijven in
+                        // profiles.day_overrides (één entry per datum).
+                        const toRows = isTime || !!scopeStaff;
+                        const origKeys = editingBlocked?.source === "json" ? (editingBlocked.keys || []) : [];
+                        const origIds = editingBlocked?.source === "rows" ? (editingBlocked.ids || []) : [];
+                        const rows = toRows ? dates.map(ds => ({
+                          owner_id: salonData.owner_id, staff_id: scopeStaff?.id || null, date: ds, kind: "block",
+                          block_time_start: isTime ? timeStart : null, block_time_end: isTime ? timeEnd : null, reason: reasonTxt,
+                        })) : [];
+                        let nextOverrides = null;
+                        if (!toRows || origKeys.length) {
+                          const o = { ...(salonData.day_overrides || {}) };
+                          for (const k of origKeys) delete o[k];
+                          if (!toRows) {
+                            // Nooit meer stilletjes een andere entry op die datum
+                            // overschrijven. Een uitzonderingsdag weigeren we; een
+                            // oude blokkade voor één medewerker of een oud tijdvak
+                            // verhuist eerst naar een rij, zodat die blijft staan als
+                            // de salonbrede sluiting later weer weg gaat.
+                            const exceptionDates = dates.filter(ds => o[ds]?.type === "exception");
+                            if (exceptionDates.length) {
+                              const lijst = exceptionDates.slice(0, 3).join(", ") + (exceptionDates.length > 3 ? "…" : "");
+                              toast.show(lang === "nl" ? `Op ${lijst} staat een uitzonderingsdag; haal die eerst weg bij ${t.exceptionDays}` : lang === "es" ? `El ${lijst} tiene un día de excepción; elimínalo primero en ${t.exceptionDays}` : `${lijst} has an exception day; remove it under ${t.exceptionDays} first`, "error");
+                              return;
+                            }
+                            for (const ds of dates) {
+                              const ov = o[ds];
+                              // Medewerker inmiddels weg: niets te bewaren (en de
+                              // rij zou op de foreign key stuklopen).
+                              const staffBestaat = !ov?.staff_id || (salonData.staff || []).some(sm => sm.id === ov.staff_id);
+                              if (ov && ov.type === "blocked" && (ov.staff_id || ov.block_time_start) && staffBestaat) {
+                                rows.push({ owner_id: salonData.owner_id, staff_id: ov.staff_id || null, date: ds, kind: "block", block_time_start: ov.block_time_start || null, block_time_end: ov.block_time_start ? (ov.block_time_end || null) : null, reason: ov.reason || reasonTxt });
+                              }
+                              o[ds] = { type: "blocked", reason: reasonTxt, from: newBlocked.from, to: endDate };
                             }
                           }
-                          d.day_overrides = o; return d;
-                        });
-                        toast.show(editingBlocked ? (lang === "nl" ? "Blokkade bijgewerkt" : lang === "es" ? "Bloqueo actualizado" : "Block updated") : (lang === "nl" ? "Blokkade toegevoegd" : lang === "es" ? "Bloqueo añadido" : "Block added"));
-                        setNewBlocked({ from: "", to: "", reason: "", mode: newBlocked.mode || "day", time_start: "09:00", time_end: "17:30", staff_id: "" });
-                        setShowBlockedForm(false);
-                        setEditingBlocked(null);
-                      }}>{editingBlocked ? (lang === "nl" ? "Opslaan" : lang === "es" ? "Guardar" : "Save") : t.addBlocked}</button>
+                          nextOverrides = o;
+                        }
+                        const failed = () => toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error");
+                        setBlockSaving(true);
+                        try {
+                          // Volgorde: eerst het nieuwe wegschrijven, dan het oude
+                          // weghalen. Mislukt er onderweg iets, dan is hooguit de
+                          // oude blokkade er nog, nooit allebei kwijt.
+                          let inserted = [];
+                          if (rows.length) {
+                            const { data, error } = await supabase.from("staff_day_overrides").insert(rows).select("*");
+                            if (error) { failed(); return; }
+                            inserted = data || [];
+                          }
+                          if (nextOverrides) {
+                            const { error } = await supabase.from("profiles").update({ day_overrides: nextOverrides }).eq("id", salonData.owner_id);
+                            if (error) {
+                              if (inserted.length) await supabase.from("staff_day_overrides").delete().in("id", inserted.map(r => r.id)).eq("owner_id", salonData.owner_id);
+                              failed(); return;
+                            }
+                          }
+                          let removedIds = [];
+                          let oldLeft = false;
+                          if (origIds.length) {
+                            const { error } = await supabase.from("staff_day_overrides").delete().in("id", origIds).eq("owner_id", salonData.owner_id);
+                            if (error) oldLeft = true; else removedIds = origIds;
+                          }
+                          update(d => {
+                            if (nextOverrides) d.day_overrides = nextOverrides;
+                            if (inserted.length || removedIds.length) d.staff_blocks = [...(d.staff_blocks || []).filter(r => !removedIds.includes(r.id)), ...inserted];
+                            return d;
+                          });
+                          // De oude versie bleef staan (beide staan nu in de lijst).
+                          if (oldLeft) toast.show(lang === "nl" ? "Opgeslagen, maar de oude versie kon niet weg. Verwijder die zelf in de lijst." : lang === "es" ? "Guardado, pero no se pudo quitar la versión anterior. Elimínala tú en la lista." : "Saved, but the old version could not be removed. Delete it from the list yourself.", "error");
+                          else toast.show(editingBlocked ? (lang === "nl" ? "Blokkade bijgewerkt" : lang === "es" ? "Bloqueo actualizado" : "Block updated") : (lang === "nl" ? "Blokkade toegevoegd" : lang === "es" ? "Bloqueo añadido" : "Block added"));
+                          setNewBlocked({ from: "", to: "", reason: "", mode: newBlocked.mode || "day", time_start: "09:00", time_end: "17:30", staff_id: "" });
+                          setShowBlockedForm(false);
+                          setEditingBlocked(null);
+                        } finally {
+                          setBlockSaving(false);
+                        }
+                      }}>{blockSaving ? "…" : editingBlocked ? (lang === "nl" ? "Opslaan" : lang === "es" ? "Guardar" : "Save") : t.addBlocked}</button>
                     <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: c.textSub }}
                       onClick={() => { setNewBlocked({ from: "", to: "", reason: "", mode: "day", time_start: "09:00", time_end: "17:30", staff_id: "" }); setShowBlockedForm(false); setEditingBlocked(null); }}>×</button>
                   </div>
@@ -17468,8 +17589,16 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     </div>
                     <button className="btn-ghost" style={{ width: "100%", fontSize: 10, color: c.danger, borderColor: `${c.danger}33` }}
                       onClick={async () => {
-                        if (!await showConfirm(lang === "nl" ? "Google Agenda ontkoppelen?" : lang === "es" ? "¿Desconectar Google Calendar?" : "Disconnect Google Calendar?")) return;
-                        await supabase.functions.invoke("google-auth", { body: { action: "disconnect", owner_id: salonData.owner_id } });
+                        // Neutrale bevestiging met de echte actie op de knop; zonder
+                        // opties stond er een rode "Verwijderen".
+                        if (!await showConfirm(lang === "nl" ? "Google Agenda ontkoppelen?" : lang === "es" ? "¿Desconectar Google Calendar?" : "Disconnect Google Calendar?", { tone: "primary", confirmText: lang === "nl" ? "Ontkoppelen" : lang === "es" ? "Desconectar" : "Disconnect" })) return;
+                        // Alleen lokaal omzetten als de server het echt deed;
+                        // anders dacht de eigenaar dat hij ontkoppeld was terwijl
+                        // de koppeling na herladen gewoon weer aan stond.
+                        try {
+                          const { data, error } = await supabase.functions.invoke("google-auth", { body: { action: "disconnect", owner_id: salonData.owner_id } });
+                          if (error || data?.error) { toast.show(t.somethingWrong, "error"); return; }
+                        } catch { toast.show(t.somethingWrong, "error"); return; }
                         update(d => { d.google_calendar_connected = false; return d; });
                       }}>{t.googleCalendarDisconnect}</button>
                   </div>
@@ -17533,11 +17662,15 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     </a>
 
                     {/* Expandable per-platform instructions */}
-                    <button className="btn-ghost" style={{ width: "100%", fontSize: 11, color: c.textSub, borderColor: c.border }}
+                    <button className="btn-ghost" style={{ width: "100%", fontSize: 11, color: c.textSub, borderColor: c.border, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                       onClick={() => setCalHelpOpen(o => !o)}>
                       {calHelpOpen
-                        ? (lang === "nl" ? "Uitleg verbergen ▲" : lang === "es" ? "Ocultar instrucciones ▲" : "Hide instructions ▲")
-                        : (lang === "nl" ? "Hoe koppel ik dit? ▼" : lang === "es" ? "¿Cómo conecto esto? ▼" : "How do I connect this? ▼")}
+                        ? (lang === "nl" ? "Uitleg verbergen" : lang === "es" ? "Ocultar instrucciones" : "Hide instructions")
+                        : (lang === "nl" ? "Hoe koppel ik dit?" : lang === "es" ? "¿Cómo conecto esto?" : "How do I connect this?")}
+                      {/* Chevron als SVG i.p.v. ▲/▼-tekens (huisregel: geen glyphs). */}
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+                        <polyline points={calHelpOpen ? "6 15 12 9 18 15" : "6 9 12 15 18 9"} />
+                      </svg>
                     </button>
 
                     {calHelpOpen && (
@@ -17545,34 +17678,34 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         <div style={{ marginBottom: 12 }}>
                           <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>{lang === "nl" ? "iPhone / iPad" : "iPhone / iPad"}</div>
                           {lang === "nl"
-                            ? "Tik hierboven op \"Openen in Apple / iPhone agenda\" en bevestig met Abonneren. Klaar. (Handmatig kan ook: Instellingen → Agenda → Accounts → Account toevoegen → Anders → Agenda-abonnement toevoegen, en plak de gekopieerde link.)"
+                            ? "Tik hierboven op \"Openen in Apple / iPhone agenda\" en bevestig met Abonneren. Klaar. (Handmatig kan ook: Instellingen > Agenda > Accounts > Account toevoegen > Anders > Agenda-abonnement toevoegen, en plak de gekopieerde link.)"
                             : lang === "es"
-                            ? "Pulsa arriba en «Abrir en Calendario de Apple / iPhone» y confirma con Suscribirse. Listo. (También manualmente: Ajustes → Calendario → Cuentas → Añadir cuenta → Otra → Añadir calendario suscrito, y pega el enlace copiado.)"
-                            : "Tap \"Open in Apple / iPhone Calendar\" above and confirm with Subscribe. Done. (Or manually: Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar, and paste the copied link.)"}
+                            ? "Pulsa arriba en «Abrir en Calendario de Apple / iPhone» y confirma con Suscribirse. Listo. (También manualmente: Ajustes > Calendario > Cuentas > Añadir cuenta > Otra > Añadir calendario suscrito, y pega el enlace copiado.)"
+                            : "Tap \"Open in Apple / iPhone Calendar\" above and confirm with Subscribe. Done. (Or manually: Settings > Calendar > Accounts > Add Account > Other > Add Subscribed Calendar, and paste the copied link.)"}
                         </div>
                         <div style={{ marginBottom: 12 }}>
                           <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>{lang === "nl" ? "Mac (Agenda-app)" : lang === "es" ? "Mac (app Calendario)" : "Mac (Calendar app)"}</div>
                           {lang === "nl"
-                            ? "Agenda openen → menu Archief → Nieuw agenda-abonnement → plak de gekopieerde link → Abonneer."
+                            ? "Agenda openen > menu Archief > Nieuw agenda-abonnement > plak de gekopieerde link > Abonneer."
                             : lang === "es"
-                            ? "Abre Calendario → menú Archivo → Nueva suscripción de calendario → pega el enlace copiado → Suscribirse."
-                            : "Open Calendar → File menu → New Calendar Subscription → paste the copied link → Subscribe."}
+                            ? "Abre Calendario > menú Archivo > Nueva suscripción de calendario > pega el enlace copiado > Suscribirse."
+                            : "Open Calendar > File menu > New Calendar Subscription > paste the copied link > Subscribe."}
                         </div>
                         <div style={{ marginBottom: 12 }}>
                           <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>{lang === "nl" ? "Android" : "Android"}</div>
                           {lang === "nl"
-                            ? "Android's eigen agenda leest alleen Google-agenda's. Ga op een computer naar calendar.google.com → naast \"Andere agenda's\" op + → Via URL → plak de gekopieerde link. De afspraken verschijnen daarna vanzelf in de Agenda-app op je Android-telefoon."
+                            ? "Android's eigen agenda leest alleen Google-agenda's. Ga op een computer naar calendar.google.com > naast \"Andere agenda's\" op + > Via URL > plak de gekopieerde link. De afspraken verschijnen daarna vanzelf in de Agenda-app op je Android-telefoon."
                             : lang === "es"
-                            ? "El calendario de Android solo lee calendarios de Google. Desde un ordenador entra en calendar.google.com → junto a «Otros calendarios» pulsa + → Desde una URL → pega el enlace copiado. Las citas aparecerán solas en la app Calendario de tu Android."
-                            : "Android's calendar reads Google calendars only. On a computer go to calendar.google.com → next to \"Other calendars\" click + → From URL → paste the copied link. The appointments then show up automatically in the Calendar app on your Android phone."}
+                            ? "El calendario de Android solo lee calendarios de Google. Desde un ordenador entra en calendar.google.com > junto a «Otros calendarios» pulsa + > Desde una URL > pega el enlace copiado. Las citas aparecerán solas en la app Calendario de tu Android."
+                            : "Android's calendar reads Google calendars only. On a computer go to calendar.google.com > next to \"Other calendars\" click + > From URL > paste the copied link. The appointments then show up automatically in the Calendar app on your Android phone."}
                         </div>
                         <div style={{ marginBottom: 12 }}>
                           <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>{lang === "nl" ? "Outlook" : "Outlook"}</div>
                           {lang === "nl"
-                            ? "Outlook op het web → Agenda → Agenda toevoegen → Abonneren via internet → plak de gekopieerde link → Importeren."
+                            ? "Outlook op het web > Agenda > Agenda toevoegen > Abonneren via internet > plak de gekopieerde link > Importeren."
                             : lang === "es"
-                            ? "Outlook en la web → Calendario → Añadir calendario → Suscribirse desde la web → pega el enlace copiado → Importar."
-                            : "Outlook on the web → Calendar → Add calendar → Subscribe from web → paste the copied link → Import."}
+                            ? "Outlook en la web > Calendario > Añadir calendario > Suscribirse desde la web > pega el enlace copiado > Importar."
+                            : "Outlook on the web > Calendar > Add calendar > Subscribe from web > paste the copied link > Import."}
                         </div>
                         <div style={{ padding: "8px 10px", background: c.inputBg, borderRadius: 10, color: c.textMuted, fontSize: 10 }}>
                           {lang === "nl"
@@ -17686,7 +17819,22 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     const active = v === 0 ? !salonData.no_show_fee_enabled : (!!salonData.no_show_fee_enabled && (salonData.no_show_fee_pct ?? 20) === v);
                     return (
                       <div key={v} data-no-show-fee-opt={v}
-                        onClick={() => chooseNoShowFee(v)}
+                        onClick={() => {
+                          // Ander percentage: een eerder door Vellu toegevoegde
+                          // no-show-zin verandert mee. Anders bleef de oude 20% in
+                          // het beleid staan (en verdween de waarschuwing, want het
+                          // beleid noemt no-shows), en zette opnieuw aanzetten er
+                          // een tweede zin naast. Zelf geschreven tekst blijft
+                          // staan; daarvoor is de waarschuwing hieronder.
+                          if (v !== 0) update(d => {
+                            const nl = replaceNoShowSentence(d.booking_policy, noShowFeeSentence, "nl", v);
+                            const en = replaceNoShowSentence(d.booking_policy_en, noShowFeeSentence, "en", v);
+                            if (nl !== (d.booking_policy || "")) d.booking_policy = nl;
+                            if (en !== (d.booking_policy_en || "")) d.booking_policy_en = en;
+                            return d;
+                          });
+                          chooseNoShowFee(v);
+                        }}
                         style={{
                           padding: "8px 14px", borderRadius: 8, cursor: "pointer", fontSize: 11,
                           fontWeight: active ? 600 : 400,
@@ -17710,6 +17858,36 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     </button>
                   </div>
                 )}
+                {/* Het beleid noemt no-shows wél, maar met een ander percentage
+                    (eigen woorden, of een oude zin): de klant gaat dan akkoord
+                    met iets anders dan wat de afspraakkaart straks rekent. */}
+                {salonData.no_show_fee_enabled && policyMentionsNoShowFee() && (() => {
+                  const pct = Number(salonData.no_show_fee_pct ?? 20);
+                  const anders = noShowPctsInPolicy(`${salonData.booking_policy || ""}\n${salonData.booking_policy_en || ""}`).filter(p => p !== pct);
+                  if (!anders.length) return null;
+                  const genoemd = anders.map(p => `${String(p).replace(".", lang === "en" ? "." : ",")}%`).join(", ");
+                  // Staat het afwijkende percentage in een door Vellu gemaakte
+                  // zin, dan kan één knop hem bijwerken; eigen tekst niet.
+                  const nlNieuw = replaceNoShowSentence(salonData.booking_policy, noShowFeeSentence, "nl", pct);
+                  const enNieuw = replaceNoShowSentence(salonData.booking_policy_en, noShowFeeSentence, "en", pct);
+                  const herstelbaar = nlNieuw !== (salonData.booking_policy || "") || enNieuw !== (salonData.booking_policy_en || "");
+                  return (
+                    <div data-no-show-fee-mismatch style={{ marginTop: 12, padding: "10px 12px", background: `${c.warning}12`, border: `1px solid ${c.warning}44`, borderRadius: 10, fontSize: 11, color: c.textSub, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <NavIcon name="alerttri" size={12} color={c.warning} />
+                      <span style={{ flex: 1, minWidth: 160, lineHeight: 1.5 }}>
+                        {lang === "nl" ? `Je boekingsbeleid noemt bij no-shows ${genoemd}, maar de vergoeding staat op ${pct}%. Pas de tekst aan zodat klanten het juiste percentage zien.`
+                          : lang === "es" ? `Tu política de reservas menciona ${genoemd} para las ausencias, pero la tarifa está en ${pct}%. Ajusta el texto para que los clientes vean el porcentaje correcto.`
+                          : `Your booking policy mentions ${genoemd} for no-shows, but the fee is set to ${pct}%. Update the text so clients see the right percentage.`}
+                      </span>
+                      {herstelbaar && (
+                        <button type="button" className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px" }}
+                          onClick={() => update(d => { d.booking_policy = nlNieuw || d.booking_policy; d.booking_policy_en = enNieuw || d.booking_policy_en; return d; })}>
+                          {lang === "nl" ? "Zin bijwerken" : lang === "es" ? "Actualizar frase" : "Update sentence"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               </>}
 
@@ -17739,8 +17917,22 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 const trialDaysLeft = trialEnds ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86400000)) : null;
                 const fmtEUR = (n) => fmtAmt("€", n);
                 const fmtDate = (d) => d ? new Date(d).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
+                // Kale datums (period_start/period_end zijn DATE-kolommen):
+                // new Date("2026-09-28") is UTC-middernacht en toonde in een
+                // Caribische browser (UTC-4) de dag ervóór. parseDate = lokaal.
+                const fmtDay = (ds) => ds ? parseDate(String(ds).slice(0, 10)).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
+                // Jaarbetaling zonder Mollie-abonnement (eenmalig vooruit
+                // betaald, nu alleen My Whims): er wordt niets automatisch
+                // afgeschreven, dus geen "Volgende afschrijving" maar "Toegang
+                // tot", en zelf verlengen vanaf 30 dagen voor de einddatum.
+                const isYearlyOneOff = isActive && !willCancel && bp.billing_interval === "yearly" && !bp.mollie_subscription_id;
+                const canRenew = isYearlyOneOff && daysLeft !== null && daysLeft <= 30;
 
                 const statusColor = isActive ? c.success : isTrial ? ACCENT : isPastDue ? c.warning : c.textLabel;
+                // c.textLabel is een rgba()-waarde: `${...}18` erachter is
+                // ongeldige CSS (geen vulling, geen rand). Vulling en rand
+                // daarom op een hex-basis; de tekstkleur blijft gedempt.
+                const statusTint = (isActive || isTrial || isPastDue) ? statusColor : c.text;
                 const statusLabel = isTrial ? (lang === "nl" ? "Proefperiode" : lang === "es" ? "Prueba" : "Trial")
                   : isActive ? (willCancel ? (lang === "nl" ? "Actief — stopt aan einde periode" : lang === "es" ? "Activo — se cancela al final del periodo" : "Active — cancels at period end") : (lang === "nl" ? "Actief" : lang === "es" ? "Activo" : "Active"))
                   : isPastDue ? (lang === "nl" ? "Betaling mislukt" : lang === "es" ? "Pago fallido" : "Payment failed")
@@ -17793,7 +17985,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       <div style={{
                         padding: "5px 12px", borderRadius: 8, fontSize: 10, fontWeight: 700,
                         letterSpacing: "0.1em", textTransform: "uppercase",
-                        background: `${statusColor}18`, color: statusColor, border: `1px solid ${statusColor}44`,
+                        background: `${statusTint}18`, color: statusColor, border: `1px solid ${statusTint}44`,
                         whiteSpace: "nowrap",
                       }}>
                         {statusLabel}
@@ -17817,7 +18009,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         {(isActive || isPastDue) && expires && (
                           <div>
                             <div style={{ fontSize: 10, color: c.textLabel, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>
-                              {willCancel ? (lang === "nl" ? "Toegang tot" : lang === "es" ? "Acceso hasta" : "Access until") : (lang === "nl" ? "Volgende afschrijving" : lang === "es" ? "Próximo cobro" : "Next charge")}
+                              {(willCancel || isYearlyOneOff) ? (lang === "nl" ? "Toegang tot" : lang === "es" ? "Acceso hasta" : "Access until") : (lang === "nl" ? "Volgende afschrijving" : lang === "es" ? "Próximo cobro" : "Next charge")}
                             </div>
                             <div style={{ fontSize: 14, color: c.text }}>{fmtDate(expires)}</div>
                             {daysLeft !== null && (
@@ -17888,7 +18080,33 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           {lang === "nl" ? "Terug naar Starter" : lang === "es" ? "Volver a Starter" : "Back to Starter"}
                         </button>
                       )}
-                      {isActive && !willCancel && bp.plan === "starter" && (
+                      {canRenew && (
+                        <button
+                          className="btn-primary"
+                          style={{ width: "auto", flex: "0 0 auto" }}
+                          onClick={async () => {
+                            // Zelfde checkout als "Nu abonneren", maar weer een
+                            // jaar vooruit. Het nieuwe jaar gaat in op de huidige
+                            // einddatum (create-subscription/mollie-webhook), dus
+                            // vroeg verlengen kost geen dagen.
+                            // Checkout navigeert hard weg uit de instellingen.
+                            if (!(await confirmLeaveSettings(lang === "nl" ? "de betaalpagina" : lang === "es" ? "la página de pago" : "the payment page"))) return;
+                            try {
+                              const { data, error } = await supabase.functions.invoke("create-subscription", {
+                                body: { plan: bp.plan || "starter", billing_interval: "yearly" },
+                              });
+                              if (error || !data?.checkout_url) {
+                                toast.show(lang === "nl" ? "Checkout kon niet starten" : lang === "es" ? "No se pudo iniciar el pago" : "Could not start checkout", "error");
+                                return;
+                              }
+                              window.location.href = data.checkout_url;
+                            } catch { toast.show(t.somethingWrong, "error"); }
+                          }}
+                        >
+                          {lang === "nl" ? "Verlengen" : lang === "es" ? "Renovar" : "Renew"}
+                        </button>
+                      )}
+                      {isActive && !willCancel && !isYearlyOneOff && bp.plan === "starter" && (
                         <button
                           className="btn-primary"
                           style={{ width: "auto", flex: "0 0 auto", opacity: changingPlan ? 0.6 : 1 }}
@@ -18006,6 +18224,28 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       )}
                     </div>
 
+                    {isYearlyOneOff && (
+                      <div style={{ marginTop: 14, padding: 12, background: `${c.text}08`, border: `1px solid ${c.border}`, borderRadius: 12, fontSize: 12, color: c.textSub, lineHeight: 1.5 }}>
+                        {canRenew
+                          ? (lang === "nl" ? `Je hebt een jaar vooruit betaald; er wordt niets automatisch afgeschreven. Verleng vóór ${fmtDate(expires)}, dan loopt alles door. Het nieuwe jaar gaat in op die datum.`
+                            : lang === "es" ? `Pagaste un año por adelantado; no se cobra nada automáticamente. Renueva antes del ${fmtDate(expires)} para que todo siga funcionando. El nuevo año empieza en esa fecha.`
+                            : `You paid a year in advance; nothing is charged automatically. Renew before ${fmtDate(expires)} to keep everything running. The new year starts on that date.`)
+                          : (lang === "nl" ? `Je hebt een jaar vooruit betaald; er wordt niets automatisch afgeschreven. Vanaf 30 dagen voor ${fmtDate(expires)} kun je hier verlengen.`
+                            : lang === "es" ? `Pagaste un año por adelantado; no se cobra nada automáticamente. A partir de 30 días antes del ${fmtDate(expires)} puedes renovar aquí.`
+                            : `You paid a year in advance; nothing is charged automatically. From 30 days before ${fmtDate(expires)} you can renew here.`)}
+                        {/* Upgraden loopt via change-plan, en dat kan alleen met een
+                            lopend Mollie-abonnement (weigert jaarbetalers met
+                            yearly_oneoff). Dan maar eerlijk: even mailen. */}
+                        {bp.plan === "starter" && (
+                          <div style={{ marginTop: 8 }}>
+                            {lang === "nl" ? "Overstappen naar Professional met een jaarbetaling? Mail " : lang === "es" ? "¿Quieres pasar a Professional con pago anual? Escribe a " : "Want to switch to Professional on yearly billing? Email "}
+                            <a href="mailto:mirahventures@vellu.cc" style={{ color: accent }}>mirahventures@vellu.cc</a>
+                            {lang === "nl" ? ", dan regelen we het." : lang === "es" ? " y lo organizamos." : " and we'll arrange it."}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {willCancel && (
                       <div style={{ marginTop: 14, padding: 12, background: `${c.warning}11`, border: `1px solid ${c.warning}33`, borderRadius: 12, fontSize: 12, color: c.text }}>
                         {lang === "nl"
@@ -18068,7 +18308,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                               <div style={{ fontWeight: 600, color: c.text }}>{inv.invoice_number}</div>
                               <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
                                 {fmtDate(inv.issued_at)}
-                                {inv.period_start && inv.period_end ? ` · ${fmtDate(inv.period_start)} – ${fmtDate(inv.period_end)}` : ""}
+                                {inv.period_start && inv.period_end ? ` · ${fmtDay(inv.period_start)} – ${fmtDay(inv.period_end)}` : ""}
                               </div>
                               {/* De pdf werd wel opgehaald maar nergens getoond —
                                   de eigenaar kon zijn eigen factuur niet downloaden
@@ -18378,8 +18618,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       <a
                         href={`https://search.google.com/local/writereview?placeid=${encodeURIComponent(pid)}`}
                         target="_blank" rel="noreferrer"
-                        style={{ color: accent, textDecoration: "none", borderBottom: `1px solid ${accent}44` }}
-                      >{lang === "nl" ? "Test je review-link \u2192" : lang === "es" ? "Prueba tu enlace de rese\u00f1as \u2192" : "Test your review link \u2192"}</a>
+                        style={{ color: accent, textDecoration: "none", borderBottom: `1px solid ${accent}44`, display: "inline-flex", alignItems: "center", gap: 4 }}
+                      >{lang === "nl" ? "Test je review-link" : lang === "es" ? "Prueba tu enlace de rese\u00f1as" : "Test your review link"}
+                        {/* Pijl als SVG i.p.v. het teken (huisregel: geen glyphs). */}
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                      </a>
                     </div>
                   );
                 })()}
@@ -18424,7 +18667,15 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         </div>
                         {/* Active toggle */}
                         <div
-                          onClick={() => update(d => { d.discount_codes[idx].active = !d.discount_codes[idx].active; return d; })}
+                          onClick={async () => {
+                            // Direct opslaan, net als de uitzonderingsdagen: een
+                            // uitgezette code bleef tot de grote Opslaan-knop
+                            // gewoon bruikbaar op de boekingspagina.
+                            const next = (salonData.discount_codes || []).map((cd, i) => i === idx ? { ...cd, active: !cd.active } : cd);
+                            const { error } = await supabase.from("profiles").update({ discount_codes: next }).eq("id", salonData.owner_id);
+                            if (error) { toast.show(t.somethingWrong, "error"); return; }
+                            update(d => { d.discount_codes = next; return d; });
+                          }}
                           style={{
                             width: 36, height: 20, borderRadius: 10, cursor: "pointer",
                             background: code.active ? c.success : c.toggleInactive,
@@ -18435,7 +18686,13 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         {/* Delete */}
                         <button onClick={async () => {
                           if (!(await showConfirm(lang === "nl" ? "Deze kortingscode verwijderen?" : lang === "es" ? "¿Eliminar este código de descuento?" : "Delete this discount code?"))) return;
-                          update(d => { d.discount_codes = d.discount_codes.filter((_, i) => i !== idx); return d; });
+                          // Direct opslaan: "verwijderd" bleef anders tot Opslaan
+                          // gewoon inwisselbaar.
+                          const next = (salonData.discount_codes || []).filter((_, i) => i !== idx);
+                          const { error } = await supabase.from("profiles").update({ discount_codes: next }).eq("id", salonData.owner_id);
+                          if (error) { toast.show(t.somethingWrong, "error"); return; }
+                          update(d => { d.discount_codes = next; return d; });
+                          toast.show(lang === "nl" ? "Kortingscode verwijderd" : lang === "es" ? "Código de descuento eliminado" : "Discount code deleted");
                         }}
                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           <NavIcon name="xmark" size={11} color="currentColor" />
@@ -18456,13 +18713,37 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       <option value="fixed" style={{ background: c.selectBg }}>{cur}</option>
                     </select>
                   </div>
-                  <button className="btn-ghost" style={{ width: "100%", padding: "10px 16px", display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => {
-                    if (!newDiscount.code || !newDiscount.amount) return;
-                    update(d => {
-                      d.discount_codes = [...(d.discount_codes || []), { ...newDiscount, amount: parseFloat(newDiscount.amount) }];
-                      return d;
-                    });
-                    setNewDiscount({ code: "", amount: "", type: "percent", active: true });
+                  <button className="btn-ghost" style={{ width: "100%", padding: "10px 16px", display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={async (e) => {
+                    const code = String(newDiscount.code || "").trim().toUpperCase();
+                    const amount = parseFloat(newDiscount.amount);
+                    if (!code || !Number.isFinite(amount)) return;
+                    // book-appointment rekent totaal × (1 − pct/100) of
+                    // totaal − bedrag: −10% maakte de boeking duurder, 150%
+                    // gratis. En bij een dubbele code wint stilletjes de eerste.
+                    if (newDiscount.type === "percent" ? !(amount > 0 && amount <= 100) : !(amount > 0)) {
+                      toast.show(newDiscount.type === "percent"
+                        ? (lang === "nl" ? "Een percentage moet groter dan 0 en hooguit 100 zijn" : lang === "es" ? "Un porcentaje debe ser mayor que 0 y como máximo 100" : "A percentage must be above 0 and at most 100")
+                        : (lang === "nl" ? "Het bedrag moet groter dan 0 zijn" : lang === "es" ? "El importe debe ser mayor que 0" : "The amount must be greater than 0"), "error");
+                      return;
+                    }
+                    if ((salonData.discount_codes || []).some(cd => String(cd.code || "").trim().toUpperCase() === code)) {
+                      toast.show(lang === "nl" ? "Deze code bestaat al" : lang === "es" ? "Este código ya existe" : "This code already exists", "error");
+                      return;
+                    }
+                    // Direct opslaan, zoals aan/uit en verwijderen hierboven.
+                    // Knop even uit tegen een dubbele klik (twee keer dezelfde code).
+                    const btn = e.currentTarget;
+                    btn.disabled = true;
+                    try {
+                      const next = [...(salonData.discount_codes || []), { ...newDiscount, code, amount }];
+                      const { error } = await supabase.from("profiles").update({ discount_codes: next }).eq("id", salonData.owner_id);
+                      if (error) { toast.show(t.somethingWrong, "error"); return; }
+                      update(d => { d.discount_codes = next; return d; });
+                      setNewDiscount({ code: "", amount: "", type: "percent", active: true });
+                      toast.show(lang === "nl" ? "Kortingscode toegevoegd" : lang === "es" ? "Código de descuento añadido" : "Discount code added");
+                    } finally {
+                      btn.disabled = false;
+                    }
                   }}>
                     <NavIcon name="plus" size={13} color="currentColor" /> {t.addDiscountCode}
                   </button>
@@ -18641,7 +18922,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                              "Tras cada X visitas completadas, el cliente recibe automáticamente por correo un código de descuento personal para su próxima cita. Recibes un aviso y ves el progreso en cada ficha de cliente.")}
                         </div>
                       </div>
-                      <div onClick={() => update(d => { d.loyalty_enabled = !d.loyalty_enabled; if (d.loyalty_enabled && !d.loyalty_since) d.loyalty_since = fmt(getToday()); return d; })}
+                      <div onClick={() => update(d => { d.loyalty_enabled = !d.loyalty_enabled; if (d.loyalty_enabled && !d.loyalty_since) d.loyalty_since = fmt(salonNow(salonData.country_code)); return d; })}
                         style={{ width: 40, height: 22, borderRadius: 100, position: "relative", background: on ? accent : c.inputBorder, transition: "background 0.2s", flexShrink: 0, cursor: "pointer" }}>
                         <div style={{ position: "absolute", top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
                       </div>
@@ -18700,7 +18981,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         </div>
                         <div>
                           <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{L("Tel bezoeken vanaf", "Count visits from", "Contar visitas desde")}</div>
-                          <input className="input-field" type="date" max={fmt(getToday())} value={salonData.loyalty_since || ""}
+                          <input className="input-field" type="date" max={fmt(salonNow(salonData.country_code))} value={salonData.loyalty_since || ""}
                             onChange={e => update(d => { d.loyalty_since = e.target.value; return d; })}
                             style={{ width: "100%", fontSize: 13, padding: "10px 12px" }} />
                         </div>
@@ -19018,6 +19299,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     const selSvc = salonData.services.find(s => s.id === row.service_id);
                     const hasVariants = !!selSvc?.variants?.length;
                     const hasExtras = !!selSvc?.extras?.length;
+                    // Teamprijs van de gekozen stylist (zelfde regel als bij het
+                    // opslaan hieronder), zodat de keuzelijst toont wat er straks
+                    // echt op de afspraak komt.
+                    const rowStaff = (salonData.staff || []).find(m => m.id === row.staff_id);
+                    const shownPrice = (serviceId, variant) => staffPriceOverride(rowStaff, serviceId, variant?.id || null) ?? parseFloat(variant ? variant.price : (salonData.services.find(s => s.id === serviceId)?.price));
                     return (
                       <div key={row.id} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -19036,14 +19322,14 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, service_id: e.target.value, variant_id: "", extra_ids: [], variant_qty: 1, extra_qtys: {} } : r) }))}
                           style={{ fontSize: 12 }}>
                           <option value="" style={{ background: c.selectBg }}>—</option>
-                          {salonData.services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)} — {fmtAmt(cur, parseFloat(s.price))}</option>)}
+                          {salonData.services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl)} — {fmtAmt(cur, shownPrice(s.id, null))}</option>)}
                         </select>
                         {hasVariants && (<>
                           <select className="input-field" value={row.variant_id || ""}
                             onChange={e => setAddApptForm(f => ({ ...f, services: (f.services || []).map((r, i) => i === idx ? { ...r, variant_id: e.target.value, variant_qty: 1 } : r) }))}
                             style={{ fontSize: 12 }}>
                             <option value="" style={{ background: c.selectBg }}>— {lang === "nl" ? "Geen variant" : lang === "es" ? "Sin variante" : "No variant"}</option>
-                            {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)} — {fmtAmt(cur, parseFloat(v.price))} · {v.duration} min</option>)}
+                            {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)} — {fmtAmt(cur, shownPrice(selSvc.id, v))} · {v.duration} min</option>)}
                           </select>
                           {(() => {
                             const sv = selSvc.variants.find(v => v.id === row.variant_id);
@@ -19128,7 +19414,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     <div style={{ display: "flex", gap: 8 }}>
                       {/* min: een afspraak in het verleden invoeren is bijna
                           altijd een typefout in het jaartal. */}
-                      <input type="date" className="input-field" min={fmt(getToday())} value={addApptForm.date} onChange={e => setAddApptForm(f => ({...f, date: e.target.value}))} style={{ fontSize: 12, flex: 1 }} />
+                      {/* Salonklok, niet de browser: een Bonaire-afspraak voor
+                          vandaag moet ook om 01:00 NL-tijd nog in te voeren zijn. */}
+                      <input type="date" className="input-field" min={fmt(salonNow(salonData.country_code))} value={addApptForm.date} onChange={e => setAddApptForm(f => ({...f, date: e.target.value}))} style={{ fontSize: 12, flex: 1 }} />
                       {/* Alleen tijden binnen de openingstijden van de gekozen
                           dag (pauze eruit); 06:00–22:00 tonen los van de uren
                           nodigde uit tot boeken op een moment dat dicht is. */}
@@ -19173,7 +19461,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                               <div style={{ textAlign: "center", padding: "20px 0", color: c.textMuted, fontSize: 12 }}>
                                 {lang === "nl" ? "Geen klanten gevonden" : lang === "es" ? "No se encontraron clientes" : "No clients found"}
                                 <div style={{ marginTop: 8 }}>
-                                  <span onClick={() => setClientMode("new")} style={{ color: accent, cursor: "pointer", fontWeight: 600, fontSize: 12 }}>{t.newClient} →</span>
+                                  <span onClick={() => setClientMode("new")} style={{ color: accent, cursor: "pointer", fontWeight: 600, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>{t.newClient}
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
+                                  </span>
                                 </div>
                               </div>
                             );
@@ -19211,7 +19501,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                                     <div style={{ fontSize: 14, fontWeight: 500, color: c.text }}>{cl.first_name} {cl.last_name}</div>
                                     {(cl.email || cl.phone) && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cl.email}{cl.phone ? ` · ${cl.phone}` : ""}</div>}
                                   </div>
-                                  {isSelected && <div style={{ width: 20, height: 20, borderRadius: "50%", background: accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><span style={{ color: c.btnOnDark, fontSize: 12 }}>✓</span></div>}
+                                  {isSelected && <div style={{ width: 20, height: 20, borderRadius: "50%", background: accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="check" size={11} color={c.btnOnDark} /></div>}
                                 </div>
                               );
                             });
@@ -19251,7 +19541,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>
                           {t.birthday} ({t.allergiesOptional})
                         </div>
-                        <input className="input-field" type="date" max={fmt(getToday())} value={addApptForm.client_birthday || ""} onChange={e => setAddApptForm(f => ({...f, client_birthday: e.target.value}))} style={{ fontSize: 12, width: "100%" }} />
+                        <input className="input-field" type="date" max={fmt(salonNow(salonData.country_code))} value={addApptForm.client_birthday || ""} onChange={e => setAddApptForm(f => ({...f, client_birthday: e.target.value}))} style={{ fontSize: 12, width: "100%" }} />
                         <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.45 }}>
                           {lang === "nl" ? "Voor de verjaardagsactie — laat leeg als je 'm niet weet."
                             : lang === "es" ? "Para la acción de cumpleaños — déjalo vacío si no lo sabes."
@@ -19287,13 +19577,16 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           : "The confirmation and the reminder go out in this language."}
                       </div>
                     </div>
-                    {/* Opt-out for the client-facing confirmation (email + SMS).
+                    {/* Opt-out for the client-facing confirmation.
                         Useful when back-filling a phone booking the client
                         already knows about. Internal notifications to staff
-                        are not affected by this toggle. */}
+                        are not affected by this toggle. Geen "+ SMS" meer in
+                        de tekst: send-sms draait zonder provider (dry-run), er
+                        gaat dus geen sms de deur uit. Terugzetten zodra er een
+                        sms-provider live is. */}
                     <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, cursor: "pointer", fontSize: 12, color: c.textSub, userSelect: "none" }}>
                       <input type="checkbox" checked={addApptForm.notify_client !== false} onChange={e => setAddApptForm(f => ({...f, notify_client: e.target.checked}))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
-                      {lang === "nl" ? "Stuur bevestiging naar de klant (e-mail" + (salonData.plan === "professional" ? " + SMS" : "") + ")" : lang === "es" ? "Enviar confirmación al cliente (correo" + (salonData.plan === "professional" ? " + SMS" : "") + ")" : "Send confirmation to the client (email" + (salonData.plan === "professional" ? " + SMS" : "") + ")"}
+                      {lang === "nl" ? "Stuur bevestiging naar de klant (e-mail)" : lang === "es" ? "Enviar confirmación al cliente (correo)" : "Send confirmation to the client (email)"}
                     </label>
                   </div>
                 </div>
@@ -19308,6 +19601,13 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     // does: joined service_name, summed price + duration, primary
                     // staff on staff_id, full map on staff_assignments, ordered
                     // breakdown on service_breakdown.
+                    // Taal van de KLANT (keuze in het formulier), niet de
+                    // schermtaal van de eigenaar: die twee lopen op Bonaire
+                    // structureel uiteen. Ook de dienstnamen hieronder komen in
+                    // die taal (zoals book-appointment ze bouwt), anders ging een
+                    // Engelse bevestiging uit met "Gellak handen + Nail art".
+                    const apptLang = addApptForm.client_lang || defaultApptLang;
+                    const nmIn = (x) => apptLang === "nl" ? x.name_nl : apptLang === "es" ? (x.name_es || x.name_en || x.name_nl) : (x.name_en || x.name_nl);
                     const rows = [];
                     for (const r of (addApptForm.services || [])) {
                       const svc = salonData.services.find(s => s.id === r.service_id);
@@ -19322,14 +19622,20 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       // Extras with their own duration (removal, intricate design)
                       // lengthen the appointment; per-unit extras count × qty.
                       const extrasDuration = extras.reduce((s, ex) => s + (parseInt(ex.duration) || 0) * eQty(ex), 0);
-                      const price = (variant ? parseFloat(variant.price) * vQty : parseFloat(svc.price)) + extrasPrice;
+                      // Teamprijs (staff_service_prices) van de gekozen stylist
+                      // gaat vóór de standaardprijs, net als op de boekingspagina
+                      // (ClientApp staffPriceFor) en in book-appointment.
+                      const basePrice = variant
+                        ? (staffPriceOverride(staff, svc.id, variant.id) ?? parseFloat(variant.price)) * vQty
+                        : (staffPriceOverride(staff, svc.id, null) ?? parseFloat(svc.price));
+                      const price = basePrice + extrasPrice;
                       const duration = parseInt(variant ? variant.duration : svc.duration) + extrasDuration;
-                      const exNm = (ex) => lang === "nl" ? ex.name_nl : lang === "es" ? (ex.name_es || ex.name_en || ex.name_nl) : (ex.name_en || ex.name_nl);
+                      const exNm = (ex) => nmIn(ex);
                       const extrasSuffix = extras.length
                         ? " + " + extras.map(ex => { const q = eQty(ex); return q > 1 ? `${exNm(ex)} ×${q}` : exNm(ex); }).join(", ")
                         : "";
-                      const vNm = variant ? (lang === "nl" ? variant.name_nl : lang === "es" ? (variant.name_es || variant.name_en || variant.name_nl) : (variant.name_en || variant.name_nl)) : "";
-                      const svcNm = lang === "nl" ? svc.name_nl : lang === "es" ? (svc.name_es || svc.name_en || svc.name_nl) : (svc.name_en || svc.name_nl);
+                      const vNm = variant ? nmIn(variant) : "";
+                      const svcNm = nmIn(svc);
                       const labelBase = svcNm + (variant ? " — " + vNm + (variant.per_unit && vQty > 1 ? ` ×${vQty}` : "") : "") + extrasSuffix;
                       const labelFull = labelBase + (staff ? ` (${staff.name})` : "");
                       rows.push({ svc, variant, extras, staff, price, duration, labelBase, labelFull });
@@ -19339,10 +19645,6 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       setAddApptLoading(false);
                       return;
                     }
-                    // Taal van de KLANT (keuze in het formulier), niet de
-                    // schermtaal van de eigenaar: die twee lopen op Bonaire
-                    // structureel uiteen.
-                    const apptLang = addApptForm.client_lang || defaultApptLang;
                     const combinedName = rows.map(r => r.labelFull).join(" · ");
                     const totalPrice = rows.reduce((s, r) => s + (Number.isFinite(r.price) ? r.price : 0), 0);
                     const totalDuration = rows.reduce((s, r) => s + (Number.isFinite(r.duration) ? r.duration : 60), 0);
@@ -19446,22 +19748,62 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       setAddApptLoading(false);
                       return;
                     }
-                    update(d => { d.appointments = [appt, ...d.appointments]; return d; });
+                    // Toevoegen-of-vervangen op id: het realtime-kanaal kan
+                    // dezelfde rij al hebben binnengebracht (dan stond hij er
+                    // twee keer, met een dubbele dagomzet).
+                    update(d => {
+                      const al = d.appointments.some(a => a.id === appt.id);
+                      d.appointments = al ? d.appointments.map(a => a.id === appt.id ? appt : a) : [appt, ...d.appointments];
+                      return d;
+                    });
+                    // Verjaardag: manual_clients is de waarde van de salon zelf en
+                    // wint in de klantenlijst (en in de verjaardagsmail). Alleen
+                    // de RPC hierboven schreef hem op de gedeelde clients-rij, en
+                    // die vult een bekende verjaardag nooit opnieuw in. Een
+                    // gecorrigeerde datum bleef zo onzichtbaar.
+                    const bdayTyped = (addApptForm.client_birthday || "").trim();
+                    const gekozen = clientMode === "existing" && selectedClientKey ? clientList.find(cl => cl.key === selectedClientKey) : null;
+                    if (email && bdayTyped && bdayTyped !== (gekozen?.birthday || "")) {
+                      // ilike als hoofdletterongevoelige vergelijking; daarna
+                      // exact nagelopen (een _ in het adres is in ilike een joker).
+                      const { data: mRows, error: mSelErr } = await supabase.from("manual_clients")
+                        .select("id, email").eq("owner_id", salonData.owner_id).ilike("email", email);
+                      const mIds = (mRows || []).filter(m => String(m.email || "").trim().toLowerCase() === email).map(m => m.id);
+                      if (mSelErr) console.error("verjaardag bijwerken mislukt:", mSelErr);
+                      else if (mIds.length) {
+                        const { error: mUpdErr } = await supabase.from("manual_clients").update({ birthday: bdayTyped }).eq("owner_id", salonData.owner_id).in("id", mIds);
+                        if (mUpdErr) console.error("verjaardag bijwerken mislukt:", mUpdErr);
+                      } else if (gekozen?.birthday) {
+                        // Bekende klant met een ándere verjaardag op de gedeelde
+                        // rij en nog geen eigen rij: die eigen rij nu aanmaken,
+                        // anders gaat de correctie verloren.
+                        const { error: mInsErr } = await supabase.from("manual_clients")
+                          .insert({ owner_id: salonData.owner_id, email, name: nameTrim, phone: (addApptForm.client_phone || "").trim() || null, birthday: bdayTyped });
+                        if (mInsErr) console.error("verjaardag bijwerken mislukt:", mInsErr);
+                      }
+                    }
                     // Een klant zonder e-mailadres komt nergens terug: de
                     // klantenlijst groepeert afspraken op e-mail. Leg hem daarom
                     // vast als handmatige klant, zodat hij in de Klanten-tab
                     // staat en bij de volgende afspraak gewoon te kiezen is.
                     if (!email) {
                       const phoneTrim = (addApptForm.client_phone || "").trim();
-                      const known = clientList.some(cl => !cl.email && (
+                      const bekende = clientList.find(cl => !cl.email && (
                         phoneTrim
                           ? (cl.phone || "").trim() === phoneTrim
                           : `${cl.first_name || ""} ${cl.last_name || ""}`.trim().toLowerCase() === nameTrim.toLowerCase()
                       ));
-                      if (!known) {
+                      if (!bekende) {
                         const { error: mcErr } = await supabase.from("manual_clients")
-                          .insert({ owner_id: salonData.owner_id, name: nameTrim, phone: phoneTrim || null, birthday: (addApptForm.client_birthday || "").trim() || null });
+                          .insert({ owner_id: salonData.owner_id, name: nameTrim, phone: phoneTrim || null, birthday: bdayTyped || null });
                         if (mcErr) console.error("klant zonder e-mail vastleggen mislukt:", mcErr);
+                      } else if (bdayTyped && bdayTyped !== (bekende.birthday || "") && String(bekende.key || "").startsWith("manual:")) {
+                        // Al bekend: de nieuw ingevulde verjaardag ging hier
+                        // stilletjes verloren. Bijwerken op de eigen rij (id zit
+                        // in de sleutel, zie het laden van clientList).
+                        const { error: mbErr } = await supabase.from("manual_clients")
+                          .update({ birthday: bdayTyped }).eq("owner_id", salonData.owner_id).eq("id", String(bekende.key).slice("manual:".length));
+                        if (mbErr) console.error("verjaardag bijwerken mislukt:", mbErr);
                       }
                     }
                     // Client-facing confirmation (email + SMS) — skipped when the
@@ -19479,6 +19821,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       // vier uur naast.
                       const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time, salonData.country_code);
                       const bookingConfirmPayload = {
+                        // send-emails/send-sms halen ontvanger (adres, telefoon)
+                        // en salongegevens server-side uit deze afspraak.
+                        appointment_id: appt.id,
                         client_name: addApptForm.client_name, client_email: email,
                         client_phone: addApptForm.client_phone || null,
                         service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
@@ -19503,6 +19848,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     const staffEmails = Array.from(new Set(rows.map(r => r.staff?.email).filter(Boolean)));
                     if (staffEmails.length > 0) {
                       await sendEmails("booking_notification", {
+                        // owner_email null = de eigenaar zelf geen melding (hij
+                        // voerde de afspraak in); de server vult het adres niet aan.
+                        appointment_id: appt.id,
                         owner_email: null, staff_emails: staffEmails,
                         client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
                         service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
@@ -19576,6 +19924,47 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
       </div>
     </Layout>
   );
+}
+
+// Tijdkeuzes in de instellingen: het raster, plus de huidige waarde als die er
+// niet op ligt (oude opslag, ander raster). Anders toont een <select> de eerste
+// optie terwijl de state iets anders bewaart. "HH:MM" sorteert als tekst goed.
+function timeOptionsWith(list, current) {
+  return current && !list.includes(current) ? [...list, current].sort() : list;
+}
+
+// Teamprijs van een stylist voor een dienst/variant (staff_service_prices,
+// geladen als staff.price_overrides). Zelfde regel als staffPriceFor in
+// ClientApp en als book-appointment: null = geen afwijkende prijs.
+function staffPriceOverride(staff, serviceId, variantId) {
+  const row = (staff?.price_overrides || []).find(o => o.service_id === serviceId && (o.variant_id || null) === (variantId || null));
+  const p = row ? parseFloat(row.price) : NaN;
+  return Number.isFinite(p) ? p : null;
+}
+
+// Vervangt een door Vellu gegenereerde no-show-zin (sentence(pct, taal), zie
+// noShowFeeSentence in OwnerApp) met welk percentage dan ook door dezelfde zin
+// met `pct`. Het patroon komt uit de zin zelf, dus een tekstwijziging daar
+// breekt dit niet. Andere tekst in het beleid blijft onaangeroerd.
+function replaceNoShowSentence(text, sentence, l, pct) {
+  const MARK = "\u0001";
+  const patroon = sentence(MARK, l).replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(MARK, "\\d+(?:[.,]\\d+)?");
+  return String(text || "").replace(new RegExp(patroon, "g"), () => sentence(pct, l));
+}
+
+// Percentages in de zinnen van het beleid die no-shows noemen (voor de
+// waarschuwing "beleid noemt een ander percentage"). Alleen die zinnen, zodat
+// bijvoorbeeld "50% aanbetaling" elders in het beleid niet meetelt.
+function noShowPctsInPolicy(text) {
+  const out = [];
+  for (const zin of String(text || "").split(/\n|[.!?;](?:\s+|$)/)) {
+    if (!/no[- ]?show/i.test(zin)) continue;
+    for (const m of zin.matchAll(/(\d+(?:[.,]\d+)?)\s?%/g)) {
+      const p = parseFloat(m[1].replace(",", "."));
+      if (Number.isFinite(p) && !out.includes(p)) out.push(p);
+    }
+  }
+  return out;
 }
 
 // ─── STAFF APP (team member view) ─────────────────────────────
