@@ -5433,6 +5433,22 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       });
     return () => { alive = false; };
   }, [kassaDay, salonData?.owner_id]);
+  // Klok van de SALON (05-10-2026): bij het eerste render is het land nog
+  // onbekend, dus starten agenda en kassa op de apparaatdag. Zodra het profiel
+  // er is, zetten we ze op "vandaag" van de salon — een Curaçaose salon die om
+  // 20:00 vanuit NL kijkt zat anders al op morgen. Alleen als de eigenaar de
+  // dag nog niet zelf heeft verzet.
+  const deviceStartDay = useRef(fmt(getToday()));
+  useEffect(() => {
+    if (!salonData?.owner_id) return;
+    const dev = deviceStartDay.current;
+    const salonDay = fmt(salonNow(salonData.country_code));
+    if (salonDay === dev) return;
+    setCalDate(d => (d === dev ? salonDay : d));
+    setKassaDay(d => (d === dev ? salonDay : d));
+    // Ook de begindatum van het + Afspraak-formulier (useState verderop).
+    setAddApptForm(f => (f.date === dev ? { ...f, date: salonDay } : f));
+  }, [salonData?.owner_id, salonData?.country_code]);
 
   // Rapporten en periodetotalen mogen niet stilzwijgend ophouden bij het
   // 90-dagen-venster van salonData: een "jaarrapport" dat maar vier maanden
@@ -5451,23 +5467,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (from >= loadedFrom || !salonData?.owner_id) {
       return (salonData?.appointments || []).filter(a => a.date >= from && a.date <= to);
     }
-    const PAGE = 1000;
-    const out = [];
     // Pagineren: een druk jaar kan meer rijen tellen dan PostgREST in één
     // antwoord teruggeeft, en een afgekapt rapport is precies het probleem
-    // dat we hier oplossen.
-    for (let page = 0; page < 25; page++) {
-      const { data, error } = await supabase
-        .from("appointments").select("*")
-        .eq("owner_id", salonData.owner_id)
-        .gte("date", from).lte("date", to)
-        .order("date", { ascending: true })
-        .range(page * PAGE, page * PAGE + PAGE - 1);
-      if (error) { console.error("bereik ophalen mislukt:", error); return null; }
-      out.push(...(data || []));
-      if (!data || data.length < PAGE) break;
-    }
-    return out;
+    // dat we hier oplossen. Sorteren op datum ÉN id: alleen op datum is de
+    // volgorde binnen één dag niet vast, en dan kan een rij op de grens van
+    // twee pagina's dubbel of helemaal niet terugkomen. Daarom ook ontdubbelen.
+    const { data, error } = await fetchAllRows(() => supabase
+      .from("appointments").select("*")
+      .eq("owner_id", salonData.owner_id)
+      .gte("date", from).lte("date", to)
+      .order("date", { ascending: true })
+      .order("id"));
+    if (error) { console.error("bereik ophalen mislukt:", error); return null; }
+    const seen = new Set();
+    return (data || []).filter(a => (seen.has(a.id) ? false : (seen.add(a.id), true)));
   };
 
   // Jarige klanten vandaag voor de dashboardbanner (alleen met de optie
@@ -5479,10 +5492,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (!salonData?.owner_id || !salonData.birthday_feature_enabled || !salonData.birthday_notify_owner) { setBdayToday([]); return; }
     let dood = false;
     (async () => {
-      const md = fmt(getToday()).slice(5);
+      const md = fmt(salonNow(salonData.country_code)).slice(5);
       const [{ data: manual }, { data: booked }] = await Promise.all([
         fetchAllRows(() => supabase.from("manual_clients").select("name, email, birthday").eq("owner_id", salonData.owner_id).eq("hidden", false).not("birthday", "is", null).order("id")),
-        supabase.from("clients").select("first_name, last_name, email, birthday").not("birthday", "is", null),
+        fetchAllRows(() => supabase.from("clients").select("first_name, last_name, email, birthday").not("birthday", "is", null).order("id")),
       ]);
       if (dood) return;
       const namen = new Map();
@@ -5491,29 +5504,30 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       setBdayToday([...namen.values()]);
     })();
     return () => { dood = true; };
-  }, [salonData?.owner_id, salonData?.birthday_notify_owner, salonData?.birthday_feature_enabled]);
+  }, [salonData?.owner_id, salonData?.birthday_notify_owner, salonData?.birthday_feature_enabled, salonData?.country_code]);
 
   // Jaaromzet-tegel op het dashboard. Het geheugenvenster is ~90 dagen, dus
-  // dit haalt éénmalig per sessie het hele kalenderjaar op — een "dit jaar"-
-  // tegel die stilzwijgend maar een kwart telt zou liegen. Mislukt de fetch,
-  // dan blijft hij null en probeert het volgende dashboardbezoek het opnieuw.
-  const [yearRevTile, setYearRevTile] = useState(null);
+  // dit haalt éénmalig per sessie het DEEL van het kalenderjaar op dat vóór
+  // dat venster ligt — een "dit jaar"-tegel die stilzwijgend maar een kwart
+  // telt zou liegen. Mislukt de fetch, dan blijft hij null en probeert het
+  // volgende dashboardbezoek het opnieuw. De tegel zelf (yearRevTile, verderop
+  // ná shareOf) telt deze oude rijen op bij de rijen in het geheugen, zodat
+  // afrondingen van vandaag meteen meetellen en de stylist-chip ook hier geldt
+  // (05-10-2026: de tegel toonde altijd de hele salon en bleef een sessie stil).
+  // `until` = de venstergrens op het moment van ophalen: oude rijen tellen
+  // alleen vóór die datum, het geheugen vanaf die datum — nooit dubbel.
+  const [yearOlder, setYearOlder] = useState(null); // { year, until, rows } | null
   useEffect(() => {
-    if (view !== "dashboard" || yearRevTile !== null || !salonData?.owner_id) return;
+    if (view !== "dashboard" || yearOlder !== null || !salonData?.owner_id) return;
     let dood = false;
     (async () => {
-      const vandaag = fmt(getToday());
-      const rows = await fetchApptsBetween(vandaag.slice(0, 4) + "-01-01", vandaag);
+      const year = fmt(salonNow(salonData.country_code)).slice(0, 4);
+      const until = loadedWindowFrom();
+      const jan1 = `${year}-01-01`;
+      // Begint het jaar binnen het venster, dan staat alles al in het geheugen.
+      const rows = jan1 >= until ? [] : await fetchApptsBetween(jan1, until);
       if (dood || rows === null) return;
-      const perMaand = Array(12).fill(0);
-      let totaal = 0;
-      for (const a of rows) {
-        if (a.status !== "completed") continue;
-        const n = parseFloat(a.service_price || 0);
-        totaal += n;
-        perMaand[parseInt(a.date.slice(5, 7), 10) - 1] += n;
-      }
-      setYearRevTile({ totaal, perMaand });
+      setYearOlder({ year, until, rows: rows.filter(a => a.date < until) });
     })();
     return () => { dood = true; };
   }, [view, salonData?.owner_id]);
@@ -5521,7 +5535,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Het bereik dat de agenda-periodebalk toont, los berekend zodat het effect
   // hieronder kan zien of het (deels) vóór het geladen venster ligt.
   const agendaPeriodRange = useMemo(() => {
-    const today = getToday();
+    const today = salonNow(salonData.country_code);
     if (calViewMode === "day") return { from: calDate, to: calDate };
     if (calViewMode === "week") {
       const base = new Date(today);
@@ -5539,7 +5553,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     }
     const yr = today.getFullYear() + calWeekOffset;
     return { from: `${yr}-01-01`, to: `${yr}-12-31` };
-  }, [calViewMode, calWeekOffset, calDate]);
+  }, [calViewMode, calWeekOffset, calDate, salonData.country_code]);
   // Bladert de eigenaar naar een oudere maand of een vorig jaar, dan halen we
   // die periode bij; zonder dit tellen de balk-tegels alleen de laatste 90
   // dagen mee en lijkt een oud jaar bijna leeg.
@@ -5660,6 +5674,31 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // feel what they'd lose by picking Starter at conversion time.
   const isStarter = salonData.plan === "starter";
   const goUpgrade = () => { setView("instellingen"); setSettingsTab("billing"); try { window.scrollTo({ top: 0, behavior: "smooth" }); document.querySelector(".vl-app-scroll")?.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* older browsers */ } };
+  // Elke wissel van scherm of instellingentab opent bovenaan (05-10-2026).
+  // De schermen zijn state, geen routes, dus ScrollToTop in App.jsx komt hier
+  // nooit langs: op de telefoon hield .vl-app-scroll (één blijvend element)
+  // zijn stand vast en opende Facturen, Agenda of Planning halverwege de
+  // pagina. Eén plek voor alle knoppen: zijbalk, onderbalk, Meer-blad,
+  // dashboardtegels en "Betaling registreren".
+  useEffect(() => {
+    try { window.scrollTo(0, 0); document.querySelector(".vl-app-scroll")?.scrollTo(0, 0); } catch { /* oudere browsers */ }
+  }, [view, settingsTab]);
+  // Links uit mails (verlengen, plan kiezen, betaling mislukt) openen
+  // /owner?tab=billing — oudere mails nog ?tab=settings, en die gaan over
+  // hetzelfde. Beide openen Instellingen → Abonnement; daarna gaat de
+  // parameter uit de adresbalk, anders springt elke refresh er weer heen.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get("tab");
+      if (tab !== "billing" && tab !== "settings") return;
+      setView("instellingen");
+      setSettingsTab("billing");
+      params.delete("tab");
+      const rest = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
+    } catch { /* geen URL-API: dan gewoon het dashboard */ }
+  }, []);
   const [accountTypeInfo, setAccountTypeInfo] = useState(null); // null | "joint" | "team"
   // Account section state (Overig tab). Keep everything local so a dirty
   // change-email/change-password form never taints salonData or the main
@@ -5761,7 +5800,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         ] = await Promise.all([
           // De grens van dit venster is de referentie voor alle "zit deze dag al
           // in het geheugen?"-controles verderop — daarom één gedeelde helper.
-          supabase.from("appointments").select("*").eq("owner_id", data.id).gte("date", loadedWindowFrom()).order("date", { ascending: false }),
+          // Die controles gaan ervan uit dat het venster COMPLEET is, dus alle
+          // pagina's ophalen (PostgREST stopt anders stil bij 1000 rijen), op
+          // een vaste volgorde (datum + id) zodat de pagina's niet schuiven.
+          fetchAllRows(() => supabase.from("appointments").select("*").eq("owner_id", data.id).gte("date", loadedWindowFrom()).order("date", { ascending: false }).order("id")),
           supabase.from("reviews").select("*").eq("owner_id", data.id).order("created_at", { ascending: false }),
           supabase.from("staff_members").select("*, staff_services(service_id), staff_service_prices(service_id, variant_id, price)").eq("owner_id", data.id).order("position"),
           supabase.from("service_categories").select("*").eq("owner_id", data.id).order("position"),
@@ -5776,7 +5818,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // client-specific note (e.g. "prefers less pressure", "always late")
           // right at the point of service, so staff don't have to open a
           // separate client detail page mid-appointment.
-          supabase.from("manual_clients").select("email, notes").eq("owner_id", data.id).not("notes", "is", null),
+          fetchAllRows(() => supabase.from("manual_clients").select("email, notes").eq("owner_id", data.id).not("notes", "is", null).order("id")),
           // Staff-authored blocks (staff_day_overrides). Owner sees them in
           // the agenda so they know why a stylist isn't bookable, and can
           // remove one on their behalf if it was a mistake.
@@ -5973,9 +6015,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // aanstaat verscheen één verkoop twee keer in de kassalijst, met een
           // dagtotaal van het dubbele. In de database stond hij altijd maar één
           // keer — het was puur het scherm.
+          // Staat hij er al (eigen kassaverkoop of + Afspraak), dan op id
+          // samenvoegen in plaats van nog eens vooraan zetten: zo blijft er
+          // altijd precies één kopie, ongeacht wie het eerst was. De LOKALE
+          // waarden winnen: die zijn nooit ouder dan het invoegen (was de rij
+          // intussen al afgerond, dan zette de echo hem anders even terug op
+          // "bevestigd"); de echo vult alleen ontbrekende velden aan.
           let wasNieuw = false;
           update(d => {
-            if (d.appointments.some(a => a.id === payload.new.id)) return d;
+            if (d.appointments.some(a => a.id === payload.new.id)) {
+              d.appointments = d.appointments.map(a => (a.id === payload.new.id ? { ...payload.new, ...a } : a));
+              return d;
+            }
             wasNieuw = true;
             d.appointments = [payload.new, ...d.appointments];
             return d;
@@ -5984,7 +6035,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // kassaverkoop is geen "nieuwe boeking", en een rij die al lokaal
           // stond komt van hemzelf.
           if (wasNieuw && !payload.new.is_sale) {
-            toast.show(langRef.current === "nl" ? `Nieuwe boeking: ${payload.new.client_name}` : `New booking: ${payload.new.client_name}`);
+            const l = langRef.current;
+            toast.show(l === "nl" ? `Nieuwe boeking: ${payload.new.client_name}` : l === "es" ? `Nueva reserva: ${payload.new.client_name}` : `New booking: ${payload.new.client_name}`);
           }
         } else if (payload.eventType === "UPDATE") {
           // Merge the incoming row into the existing local copy instead of replacing
@@ -5993,6 +6045,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           update(d => { d.appointments = d.appointments.map(a => a.id === payload.new.id ? { ...a, ...payload.new } : a); return d; });
         } else if (payload.eventType === "DELETE") {
           update(d => { d.appointments = d.appointments.filter(a => a.id !== payload.old.id); return d; });
+          // De betalingen gaan in de database mee (ON DELETE CASCADE); hier ook
+          // uit Nog te ontvangen en de betaalhistorie, anders blijft een spook-
+          // post staan tot herladen.
+          setReceivables(r => r.filter(x => x.id !== payload.old.id));
+          setClientPayments(p => p.filter(x => x.appointment_id !== payload.old.id));
         }
       })
       // Bij (her)verbinden alles ophalen wat tijdens de onderbreking langskwam.
@@ -6048,11 +6105,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       if (!alive || busy || document.visibilityState !== "visible") return;
       if (Date.now() - lastSync < 10000) return;
       busy = true;
-      const { data, error } = await supabase
+      // Alle pagina's, vaste volgorde (zie de hoofdlading): een afgekapt
+      // antwoord zou hieronder rijen laten "verdwijnen" die er gewoon zijn.
+      const { data, error } = await fetchAllRows(() => supabase
         .from("appointments").select("*")
         .eq("owner_id", salonData.owner_id)
         .gte("date", loadedWindowFrom())
-        .order("date", { ascending: false });
+        .order("date", { ascending: false })
+        .order("id"));
       busy = false;
       if (!alive || error || !data) return;
       lastSync = Date.now();
@@ -6060,9 +6120,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         const fresh = new Map(data.map(a => [a.id, a]));
         const from = loadedWindowFrom();
         // Rijen buiten het opgehaalde venster (de 90-dagengrens schuift mee)
-        // blijven staan — die zegt deze query niets over.
+        // blijven staan — die zegt deze query niets over. Ontdubbeld op id:
+        // stond een rij lokaal twee keer (realtime + eigen toevoeging), dan
+        // blijft er hier één over.
+        const seenIds = new Set();
         const kept = (d.appointments || [])
           .filter(a => fresh.has(a.id) || a.date < from)
+          .filter(a => (seenIds.has(a.id) ? false : (seenIds.add(a.id), true)))
           .map(a => fresh.has(a.id) ? { ...a, ...fresh.get(a.id) } : a);
         const known = new Set(kept.map(a => a.id));
         const added = data.filter(a => !known.has(a.id));
@@ -6113,8 +6177,36 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Elke optelling per stylist loopt daarom via deze ene functie.
   const shareOf = (a, staffId) => staffShareOf(a, staffId, salonData.services || [], salonData.staff || []);
   const dashAppts = dashStaff ? appts.filter(a => apptInvolvesStaff(a, dashStaff)) : appts;
+  // "Vandaag" op de klok van de salon, en op tijd gesorteerd: de lijst in het
+  // geheugen staat alleen op datum (nieuwe rijen vooraan), en het dashboard
+  // toont er maar drie — zonder sortering kon de eerstvolgende klant achter
+  // "+ N meer" verdwijnen.
   const todayAppts = (dashStaff ? activeAppts.filter(a => apptInvolvesStaff(a, dashStaff)) : activeAppts)
-    .filter(a => a.date === fmt(getToday()));
+    .filter(a => a.date === fmt(salonNow(salonData.country_code)))
+    .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  // "Dit jaar"-tegel: de vóór het venster opgehaalde rijen (yearOlder) plus
+  // het geheugen vanaf die grens, met de stylist-chip net als week en maand
+  // (dashPrice: alleen haar aandeel). Zelfde vorm als vroeger: { totaal,
+  // perMaand }, null zolang de oude rijen nog niet binnen zijn.
+  const yearRevTile = useMemo(() => {
+    if (!yearOlder) return null;
+    const today = fmt(salonNow(salonData.country_code));
+    const perMaand = Array(12).fill(0);
+    let totaal = 0;
+    const add = (a) => {
+      if (a.status !== "completed" || !a.date || a.date.slice(0, 4) !== yearOlder.year || a.date > today) return;
+      if (dashStaff && !apptInvolvesStaff(a, dashStaff)) return;
+      const n = dashStaff ? shareOf(a, dashStaff) : (parseFloat(a.service_price || 0) || 0);
+      totaal += n;
+      perMaand[parseInt(a.date.slice(5, 7), 10) - 1] += n;
+    };
+    for (const a of yearOlder.rows) if (a.date < yearOlder.until) add(a);
+    for (const a of (salonData.appointments || [])) if (a.date >= yearOlder.until) add(a);
+    return { totaal, perMaand };
+    // shareOf is per render een nieuwe functie, maar leest alleen services en
+    // staff — die staan hier wél bij.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yearOlder, salonData.appointments, dashStaff, salonData.services, salonData.staff, salonData.country_code]);
   // A multi-service booking may have different staff per service. staff_id
   // only holds the "primary" (first service's) staff, so filtering on that
   // alone drops any appointment where the selected staff only handled a
@@ -6194,7 +6286,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     }
     return [...byId.values()];
   })();
-  const calAppts = agendaApptsUnique.filter(a => a.date === calDate);
+  const calAppts = agendaApptsUnique.filter(a => a.date === calDate)
+    .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
   const totalEarnings = completedAppts.reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
 
   // Currency symbol for THIS salon's own money (services, revenue, invoices),
@@ -6251,9 +6344,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       (async () => {
         // Klanten uit de afspraken in het geheugen — dat zijn er maar 90 dagen,
         // dus dit is nooit de hele klantenkring.
+        // Per klant de LAATSTE afspraak (datum + tijd): telefoon en allergieën
+        // van die afspraak zijn de eigen gegevens van deze salon en winnen
+        // hieronder van de gedeelde clients-rij.
         const uniqueClients = {};
+        const latestAt = {};
         (salonData.appointments || []).forEach(a => {
-          if (a.client_email && !uniqueClients[a.client_email.toLowerCase()]) {
+          const at = `${a.date || ""}T${a.time || ""}`;
+          if (a.client_email && !(latestAt[a.client_email.toLowerCase()] >= at)) {
+            latestAt[a.client_email.toLowerCase()] = at;
             uniqueClients[a.client_email.toLowerCase()] = {
               key: a.client_email.toLowerCase(),
               id: a.client_id,
@@ -6269,13 +6368,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // globally-unique column — the data model shares a single client row across
         // salons. A proper fix requires a (owner_id, email) unique constraint + a
         // migration to split shared rows. Until then, RLS is the only barrier here.
+        // Daarom vult die gedeelde rij alleen AAN: telefoon en allergieën van
+        // de laatste afspraak bij deze salon gaan voor (een boeking elders mocht
+        // ze vroeger overschrijven of wissen).
         const emails = Object.keys(uniqueClients);
         if (emails.length > 0) {
           const { data: fullClients } = await supabase.from("clients").select("id, first_name, last_name, email, phone, allergies, birthday").in("email", emails);
           if (fullClients) {
             fullClients.forEach(cl => {
               const k = String(cl.email || "").toLowerCase();
-              uniqueClients[k] = { ...uniqueClients[k], ...cl, key: k };
+              const fromAppt = uniqueClients[k] || {};
+              uniqueClients[k] = { ...fromAppt, ...cl, key: k, phone: fromAppt.phone || cl.phone || "", allergies: fromAppt.allergies || cl.allergies || "" };
             });
           }
         }
@@ -6373,14 +6476,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [payBusy, setPayBusy] = useState(false);
   const reloadClientPayments = useCallback(async () => {
     if (!salonData?.owner_id) return;
-    const { data } = await supabase.from("client_payments").select("*").eq("owner_id", salonData.owner_id).order("paid_on", { ascending: false }).order("created_at", { ascending: false });
+    // Alle pagina's (de historie groeit zonder grens), vaste volgorde met id.
+    const { data } = await fetchAllRows(() => supabase.from("client_payments").select("*").eq("owner_id", salonData.owner_id).order("paid_on", { ascending: false }).order("created_at", { ascending: false }).order("id"));
     setClientPayments(data || []);
   }, [salonData?.owner_id]);
   const reloadReceivables = useCallback(async () => {
     if (!salonData?.owner_id) return;
     // paid_at leeg = nog niet volledig betaald; de rest (betaalwijze, bedrag)
-    // toetst isOpenReceivable, dezelfde regel als de Klantenlijst.
-    const { data } = await supabase.from("appointments").select("*").eq("owner_id", salonData.owner_id).eq("status", "completed").is("paid_at", null).order("date", { ascending: true });
+    // toetst isOpenReceivable, dezelfde regel als de Klantenlijst. De
+    // betaalwijze filtert de database al voor (OPEN_PAY_METHODS), zodat oude
+    // pin/contant-rijen zonder paid_at de 1000-rijengrens niet opvullen.
+    const { data } = await fetchAllRows(() => supabase.from("appointments").select("*").eq("owner_id", salonData.owner_id).eq("status", "completed").is("paid_at", null)
+      .or('payment_method.is.null,payment_method.in.(account,online,"")')
+      .order("date", { ascending: true }).order("id"));
     setReceivables((data || []).filter(isOpenReceivable));
   }, [salonData?.owner_id]);
   useEffect(() => { reloadClientPayments(); reloadReceivables(); }, [reloadClientPayments, reloadReceivables]);
@@ -6409,7 +6517,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     (async () => {
       const [{ data: manual }, { data: booked }] = await Promise.all([
         fetchAllRows(() => supabase.from("manual_clients").select("id, name, email, phone, is_business, contact_name").eq("owner_id", salonData.owner_id).eq("hidden", false).order("id")),
-        supabase.from("appointments").select("client_name, client_email, client_phone").eq("owner_id", salonData.owner_id).neq("client_email", "").order("date", { ascending: false }).limit(2000),
+        // .limit(2000) haalde er nooit meer dan 1000 op (PostgREST-grens);
+        // nu alle pagina's, nieuwste eerst.
+        fetchAllRows(() => supabase.from("appointments").select("client_name, client_email, client_phone").eq("owner_id", salonData.owner_id).neq("client_email", "").order("date", { ascending: false }).order("id")),
       ]);
       if (!alive) return;
       const byKey = new Map();
@@ -6473,14 +6583,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [slugSaving, setSlugSaving] = useState(false);
   const slugCheckRef = useRef(null);
 
-  // Paths that must never become a salon slug — they'd shadow real app
-  // routes. Keep in sync with App.jsx <Routes>.
-  const RESERVED_SLUGS = new Set([
-    "owner", "staff", "admin", "cancel", "privacy", "terms", "dpa",
-    "voorwaarden", "contact", "api", "assets", "public", "static",
-    "auth", "login", "signup", "signin", "logout", "reset", "review",
-    "_", "app", "www",
-  ]);
+  // Paden die nooit een salon-slug mogen worden staan in RESERVED_SLUGS uit
+  // shared.jsx — één lijst voor de slug-editor, de aanmelding en de database.
 
   // dnd-kit sensors — pointer (mouse + touch) with a small activation distance
   // so accidental clicks don't start a drag, plus keyboard support for
@@ -6570,7 +6674,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     }, 450);
 
     return () => { if (slugCheckRef.current) clearTimeout(slugCheckRef.current); };
-  }, [slugDraft, salonData.id, lang]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [slugDraft, salonData.id, lang]);
 
   const saveSlug = async () => {
     if (slugStatus.state !== "available") return;
@@ -6627,18 +6731,34 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         body: { plan: newPlan, billing_interval: billingProfile?.billing_interval || "monthly" },
       });
       if (error || !data?.success) {
-        const code = data?.error || error?.message || "unknown";
+        // Bij een 4xx zit de foutcode in de body van het antwoord, niet in
+        // data (supabase-js geeft dan alleen `error` met de Response erin).
+        // Nooit de kale code tonen: alleen bekende codes krijgen een eigen zin.
+        const body = data?.error ? data : (error?.context?.json ? await error.context.json().catch(() => null) : null);
+        const code = body?.error || null;
+        console.error("change-plan:", code || error?.message || "unknown");
+        const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+        if (code === "no_change") {
+          // De server zegt: je zit al op dit plan. Dan ook het scherm bijwerken,
+          // anders blijft de upgradeknop staan.
+          update(d => { d.plan = newPlan; return d; });
+          setBillingProfile(p => (p ? { ...p, plan: newPlan } : p));
+          setUpgradeConfirm(false);
+        }
         toast.show(
-          lang === "nl"
-            ? `Wisselen mislukt: ${code}`
-            : lang === "es"
-            ? `No se pudo cambiar de plan: ${code}`
-            : `Plan change failed: ${code}`,
-          "error",
+          code === "no_change" ? L("Je zit al op dit abonnement.", "You're already on this plan.", "Ya tienes este plan.")
+          : code === "yearly_oneoff" ? L("Je hebt een jaartoegang zonder automatische verlenging; neem contact op met support om te wisselen.", "You have yearly access without automatic renewal; contact support to switch plans.", "Tienes un acceso anual sin renovación automática; contacta con soporte para cambiar de plan.")
+          : code === "busy" ? L("Er loopt al een wijziging, probeer het zo opnieuw.", "A change is already in progress, please try again in a moment.", "Ya hay un cambio en curso, inténtalo de nuevo en un momento.")
+          : L("Wisselen mislukt, probeer het later opnieuw.", "Plan change failed, please try again later.", "No se pudo cambiar de plan, inténtalo más tarde."),
+          code === "no_change" ? undefined : "error",
         );
         return;
       }
       update(d => { d.plan = newPlan; return d; });
+      // Ook de abonnementskaart (billingProfile) bijwerken: die bleef anders
+      // "Starter" met een actieve upgradeknop tonen, en een tweede klik gaf
+      // een kale foutcode.
+      setBillingProfile(p => (p ? { ...p, plan: newPlan } : p));
       setUpgradeConfirm(false);
       const charged = parseFloat(data.prorated_charge || 0);
       // Jaarabonnees betalen het jaarbedrag (maandprijs × 10, zoals op de
@@ -6679,19 +6799,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const newIdx = salonData.services.findIndex(s => s.id === over.id);
     if (oldIdx < 0 || newIdx < 0) return;
 
-    const reordered = arrayMove(salonData.services, oldIdx, newIdx);
+    // position meeschrijven in de lokale kopie: addService rekent de volgende
+    // positie uit deze waarden, en die liepen anders achter op de database.
+    const reordered = arrayMove(salonData.services, oldIdx, newIdx).map((s, idx) => ({ ...s, position: idx }));
     // Optimistic local update
     update(d => { d.services = reordered; return d; });
 
     // Persist. Parallel updates — one PATCH per service. Fine for under ~100
     // services; if a salon ever has more we can batch into a single RPC.
+    // supabase-js GOOIT niet bij een mislukte schrijfactie, hij geeft
+    // { error } terug — dus elk resultaat zelf nakijken.
     try {
-      await Promise.all(reordered.map((s, idx) =>
+      const res = await Promise.all(reordered.map((s, idx) =>
         supabase.from("services")
           .update({ position: idx })
           .eq("id", s.id)
           .eq("owner_id", salonData.owner_id)
       ));
+      if (res.some(r => r.error)) throw res.find(r => r.error).error;
     } catch (e) {
       console.error("Reorder save failed:", e);
       toast.show(lang === "nl" ? "Volgorde opslaan mislukt" : lang === "es" ? "No se pudo guardar el orden" : "Could not save order", "error");
@@ -6709,12 +6834,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const reordered = arrayMove(cats, oldIdx, newIdx).map((x, idx) => ({ ...x, position: idx }));
     update(d => { d.categories = reordered; return d; });
     try {
-      await Promise.all(reordered.map((x, idx) =>
+      const res = await Promise.all(reordered.map((x, idx) =>
         supabase.from("service_categories")
           .update({ position: idx })
           .eq("id", x.id)
           .eq("owner_id", salonData.owner_id)
       ));
+      if (res.some(r => r.error)) throw res.find(r => r.error).error;
     } catch (e) {
       console.error("Category reorder save failed:", e);
       toast.show(lang === "nl" ? "Volgorde opslaan mislukt" : lang === "es" ? "No se pudo guardar el orden" : "Could not save order", "error");
@@ -6733,9 +6859,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const reordered = arrayMove(list, oldIdx, newIdx).map((x, idx) => ({ ...x, position: idx }));
     update(d => { d.services = d.services.map(x => x.id === serviceId ? { ...x, variants: reordered } : x); return d; });
     try {
-      await Promise.all(reordered.map((x, idx) =>
+      const res = await Promise.all(reordered.map((x, idx) =>
         supabase.from("service_variants").update({ position: idx }).eq("id", x.id)
       ));
+      if (res.some(r => r.error)) throw res.find(r => r.error).error;
     } catch (e) {
       console.error("Variant reorder save failed:", e);
       toast.show(lang === "nl" ? "Volgorde opslaan mislukt" : lang === "es" ? "No se pudo guardar el orden" : "Could not save order", "error");
@@ -6752,9 +6879,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const reordered = arrayMove(list, oldIdx, newIdx).map((x, idx) => ({ ...x, position: idx }));
     update(d => { d.services = d.services.map(x => x.id === serviceId ? { ...x, extras: reordered } : x); return d; });
     try {
-      await Promise.all(reordered.map((x, idx) =>
+      const res = await Promise.all(reordered.map((x, idx) =>
         supabase.from("service_extras").update({ position: idx }).eq("id", x.id)
       ));
+      if (res.some(r => r.error)) throw res.find(r => r.error).error;
     } catch (e) {
       console.error("Extra reorder save failed:", e);
       toast.show(lang === "nl" ? "Volgorde opslaan mislukt" : lang === "es" ? "No se pudo guardar el orden" : "Could not save order", "error");
@@ -6763,31 +6891,89 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Afronden mét betaalwijze (verzoek Eydy): cash/pin/overschrijving = op dit
   // moment betaald (paid_at gezet, zoals de kassa doet); method null = "later"
   // — alleen afronden, betaling blijft open voor de factuur/het betaalverzoek.
-  const markComplete = async (id, method = null) => {
+  const markComplete = async (idOrRow, method = null) => {
     if (processingApptId) return;
+    // De kaart geeft de id door; een rij-object mag ook.
+    const id = idOrRow && typeof idOrRow === "object" ? idOrRow.id : idOrRow;
+    if (!id) return;
     setProcessingApptId(id);
     try {
+      // De rij in ÁLLE bronnen zoeken (fullAppt), ook periodExtra en
+      // kassaDayExtra: een afspraak van vóór het 90-dagenvenster stond anders
+      // als "niet gevonden" en kreeg amount_paid 0 mét paid_at — de volle prijs
+      // leek dan nog open. Nergens gevonden: één keer uit de database.
+      let apptRow = fullAppt({ id });
+      if (!apptRow || apptRow.service_price === undefined) {
+        const { data: fresh } = await supabase.from("appointments").select("*").eq("id", id).eq("owner_id", salonData.owner_id).maybeSingle();
+        apptRow = fresh || null;
+      }
+      if (!apptRow) { toast.show(t.errorCompleting, "error"); return; }
+      const price = parseFloat(apptRow.service_price || 0) || 0;
+      const paidBefore = paidAmountOf(apptRow);
+      const rest = Math.round((price - paidBefore) * 100) / 100;
+      const nowIso = new Date().toISOString();
+      // Deels vooruitbetaald en nu de rest ontvangen ("Nog X open. Hoe is de
+      // rest betaald?"): de betaalwijze van de afspraak blijft staan (meestal
+      // "prepaid") en ALLEEN het restant wordt een betaling in client_payments
+      // met de gekozen wijze. Zo telt het kasboek bij Contant alleen de rest
+      // als kas in, niet de hele prijs (05-10-2026: de la leek structureel het
+      // vooruitbetaalde bedrag te kort). Stond de afspraak al op contant, dan
+      // het oude pad — anders zou de rest dubbel als contant tellen.
+      const splitRest = !!method && paidBefore > 0.005 && rest > 0.005 && apptRow.payment_method !== "cash";
       // Betaald via de kiezer = het hele (huidige) bedrag is binnen; amount_paid
       // meeschrijven zodat een latere prijswijziging het verschil kan tonen.
-      const apptRow = (salonData.appointments || []).find(a => a.id === id);
       // "Later / factuur" (method null): de klant betaalt nog. De boekingspagina
       // zet elke afspraak op "on-arrival"; dat zou blijven staan en de post
       // onzichtbaar maken in Nog te ontvangen én de factuur zonder betaalblok
       // laten. Daarom dan expliciet naar null (= open post). Vooruitbetaald of
       // deels betaald ("prepaid") blijft staan: het restant loopt via amount_paid.
       const patch = { status: "completed", ...(method
-        ? { payment_method: method, paid_at: new Date().toISOString(), amount_paid: parseFloat(apptRow?.service_price || 0) || 0 }
-        : (apptRow?.payment_method === "on-arrival" ? { payment_method: null } : {})) };
+        ? (splitRest ? { paid_at: nowIso, amount_paid: price } : { payment_method: method, paid_at: nowIso, amount_paid: price })
+        : (apptRow.payment_method === "on-arrival" ? { payment_method: null } : {})) };
+      // Belasting bevriezen bij afronden, net als een kassaverkoop
+      // (completeWalkinSale): een latere tariefwijziging of KOR-overstap mag
+      // de omzet van vandaag niet met terugwerkende kracht herschrijven.
+      patch.tax_snapshot = buildSnapshot(
+        computeTax(linesFromSale(apptRow), taxCfg),
+        taxCfg,
+        { country: salonData.country_code, region: salonData.tax_region || null, currency: cur, at: nowIso },
+      );
+      let restPay = null;
+      if (splitRest) {
+        // Notitie "Restbetaling": in de betaalhistorie staat dan niet alleen
+        // "Contant" maar ook dat het het restant na de vooruitbetaling was.
+        const { data: pay, error: payErr } = await supabase.from("client_payments").insert({
+          owner_id: salonData.owner_id, appointment_id: id, amount: rest, method,
+          paid_on: fmt(salonNow(salonData.country_code)),
+          note: lang === "nl" ? "Restbetaling" : lang === "es" ? "Pago restante" : "Remaining payment",
+          client_name: apptRow.client_name || null, label: apptRow.service_name || null,
+        }).select().single();
+        if (payErr || !pay) { console.error("restbetaling vastleggen mislukt:", payErr); toast.show(t.errorCompleting, "error"); return; }
+        restPay = pay;
+      }
       const { error } = await supabase.from("appointments").update(patch).eq("id", id);
-      if (error) { toast.show(t.errorCompleting, "error"); return; }
-      update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, ...patch} : a); return d; });
+      if (error) {
+        // Afronden mislukt: de net geboekte restbetaling mag niet blijven staan.
+        if (restPay) await supabase.from("client_payments").delete().eq("id", restPay.id);
+        toast.show(t.errorCompleting, "error");
+        return;
+      }
+      if (restPay) setClientPayments(p => [restPay, ...p]);
+      const withPatch = (x) => (x.id === id ? { ...x, ...patch } : x);
+      update(d => { d.appointments = d.appointments.map(withPatch); return d; });
+      // Rijen van buiten het venster staan in periodExtra/kassaDayExtra; ook
+      // die bijwerken, anders blijft de kaart op "bevestigd" staan.
+      setPeriodExtra(prev => (prev ? { ...prev, rows: prev.rows.map(withPatch) } : prev));
+      setKassaDayExtra(prev => (prev ? { ...prev, rows: prev.rows.map(withPatch) } : prev));
+      const merged = { ...apptRow, ...patch };
+      setReceivables(r => (isOpenReceivable(merged) ? [...r.filter(x => x.id !== id), merged].sort((x, y) => x.date.localeCompare(y.date)) : r.filter(x => x.id !== id)));
       setCompleteFor(null);
       toast.show(method ? `${t.apptCompleted} · ${payMethodLabel(method, lang)}` : t.apptCompleted);
       // Stempelkaart: de trigger heeft bij deze afronding misschien net een
       // code aangemaakt. loyalty-notify mailt hem en zegt voor wie — was het
       // déze klant, dan hoort de eigenaar dat meteen.
       if (salonData.loyalty_enabled) {
-        const appt = (salonData.appointments || []).find(a => a.id === id);
+        const appt = apptRow;
         const mail = String(appt?.client_email || "").trim().toLowerCase();
         supabase.functions.invoke("loyalty-notify", { body: { client_email: mail || null } }).then(({ data }) => {
           const hit = (data?.sent || []).find(s => String(s.client_email || "").toLowerCase() === mail);
@@ -6824,7 +7010,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         toast.show(lang === "nl" ? "Kon de betaling niet vastleggen; ververs de pagina" : lang === "es" ? "No se pudo registrar el pago; recarga la página" : "Could not record the payment; refresh the page", "error");
         return;
       }
-      update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, ...patch } : x); return d; });
+      const withPatch = (x) => (x.id === a.id ? { ...x, ...patch } : x);
+      update(d => { d.appointments = d.appointments.map(withPatch); return d; });
+      // Ook de rijen van buiten het 90-dagenvenster (periodebalk, kassadag).
+      setPeriodExtra(prev => (prev ? { ...prev, rows: prev.rows.map(withPatch) } : prev));
+      setKassaDayExtra(prev => (prev ? { ...prev, rows: prev.rows.map(withPatch) } : prev));
       toast.show(first
         ? (lang === "nl" ? "Betaling vastgelegd, afspraak bevestigd" : lang === "es" ? "Pago registrado, cita confirmada" : "Payment recorded, appointment confirmed")
         : (lang === "nl" ? "Restbetaling vastgelegd, alles is betaald" : lang === "es" ? "Pago restante registrado, todo pagado" : "Remaining payment recorded, fully paid"));
@@ -6837,6 +7027,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           if (tok?.token) cancelUrl = `https://vellu.cc/cancel/${tok.token}`;
         } catch { /* dan zonder link */ }
         sendEmails("booking_confirmation", {
+          // De server haalt ontvanger en salongegevens bij deze afspraak-id
+          // uit de database (R-01); de rest van de velden blijft inhoud.
+          appointment_id: a.id,
           client_name: a.client_name, client_email: a.client_email, client_phone: a.client_phone || null,
           service_name: a.service_name, date: a.date, time: (a.time || "").slice(0, 5),
           payment: "prepaid", price: a.service_price,
@@ -6871,10 +7064,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const patch = { amount_paid: price, paid_at: a.paid_at || new Date().toISOString() };
       const { error } = await supabase.from("appointments").update(patch).eq("id", a.id);
       if (error) { toast.show(lang === "nl" ? "Kon de terugbetaling niet vastleggen" : lang === "es" ? "No se pudo registrar la devolución" : "Could not record the refund", "error"); return; }
-      update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, ...patch } : x); return d; });
+      const withPatch = (x) => (x.id === a.id ? { ...x, ...patch } : x);
+      update(d => { d.appointments = d.appointments.map(withPatch); return d; });
+      // Ook de rijen van buiten het 90-dagenvenster (periodebalk, kassadag).
+      setPeriodExtra(prev => (prev ? { ...prev, rows: prev.rows.map(withPatch) } : prev));
+      setKassaDayExtra(prev => (prev ? { ...prev, rows: prev.rows.map(withPatch) } : prev));
       toast.show(lang === "nl" ? `Terugbetaling van ${fmtAmt(cur, refund)} vastgelegd` : lang === "es" ? `Devolución de ${fmtAmt(cur, refund)} registrada` : `Refund of ${fmtAmt(cur, refund)} recorded`);
       if (a.client_email) {
         sendEmails("refund_sent", {
+          appointment_id: a.id,
           client_name: a.client_name, client_email: a.client_email,
           service_name: a.service_name, date: a.date, time: (a.time || "").slice(0, 5),
           price, amount_paid: paidBefore, refund,
@@ -6907,14 +7105,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   };
   const markNoShow = async (id) => {
     if (processingApptId) return;
+    // Eerst bevestigen: één tik naast Bewerk/Annuleer telde meteen mee voor de
+    // no-show-teller (en de blokkade), en er is geen weg terug naar bevestigd.
+    const appt = fullAppt({ id });
+    const who = appt?.client_name || (lang === "nl" ? "deze klant" : lang === "es" ? "este cliente" : "this client");
+    const vraag = lang === "nl"
+      ? `${who} markeren als niet verschenen (no-show)? Dit telt mee voor de no-show-teller van deze klant en kan niet ongedaan worden gemaakt.`
+      : lang === "es"
+      ? `¿Marcar a ${who} como ausente (no-show)? Cuenta para el total de ausencias de este cliente y no se puede deshacer.`
+      : `Mark ${who} as a no-show? This counts toward this client's no-show total and can't be undone.`;
+    if (!(await showConfirm(vraag, { tone: "primary", confirmText: "No-show" }))) return;
     setProcessingApptId(id);
     try {
       // .select() geeft de rij terug ná de triggers, dus mét het door de
       // database vastgelegde no_show_fee (anders zag de kaart het pas na herladen).
       const { data: fresh, error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id).select("no_show_fee");
-      if (error) return;
+      if (error) {
+        console.error("no-show vastleggen mislukt:", error);
+        toast.show(lang === "nl" ? "No-show vastleggen mislukt, probeer het opnieuw" : lang === "es" ? "No se pudo registrar la ausencia, inténtalo de nuevo" : "Could not record the no-show, please try again", "error");
+        return;
+      }
       const noShowFee = Array.isArray(fresh) && fresh[0] ? fresh[0].no_show_fee : null;
-      const appt = salonData.appointments.find(a => a.id === id);
 
       // De TELLING gebeurt server-side: een trigger op appointments
       // (appointments_count_no_show) hoogt client_no_shows op bij elke
@@ -6956,16 +7167,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       }
 
       // Legacy global counter — kept for backward compatibility with the analytics
-      // stat card. Not used for blocking decisions anymore.
+      // stat card. Not used for blocking decisions anymore. Alleen via de RPC
+      // (die toetst dat de klant bij deze salon hoort); de gedeelde clients-rij
+      // rechtstreeks bijwerken mag de browser niet meer.
       if (appt?.client_id) {
         const { error: rpcErr } = await supabase.rpc("increment_no_show_count", { client_id_param: appt.client_id });
-        if (rpcErr) {
-          const { data: client } = await supabase.from("clients").select("no_show_count").eq("id", appt.client_id).single();
-          if (client) await supabase.from("clients").update({ no_show_count: (client.no_show_count || 0) + 1 }).eq("id", appt.client_id);
-        }
+        if (rpcErr) console.error("increment_no_show_count:", rpcErr);
       }
 
-      update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, status:"no_show", no_show_fee: noShowFee} : a); return d; });
+      const noShowPatch = (a) => (a.id === id ? { ...a, status: "no_show", no_show_fee: noShowFee } : a);
+      update(d => { d.appointments = d.appointments.map(noShowPatch); return d; });
+      setPeriodExtra(prev => (prev ? { ...prev, rows: prev.rows.map(noShowPatch) } : prev));
+      setKassaDayExtra(prev => (prev ? { ...prev, rows: prev.rows.map(noShowPatch) } : prev));
     } finally { setProcessingApptId(null); }
   };
 
@@ -7023,17 +7236,35 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     try {
       if (salonData.waitlist_enabled === false) return null;
       if (!salonData.owner_id || !a.date) return null;
-      // Een afspraak in het verleden annuleren maakt geen plek vrij voor de wachtlijst.
-      if (a.date < fmt(getToday())) return null;
+      // Een afspraak in het verleden annuleren maakt geen plek vrij voor de
+      // wachtlijst. "Vandaag" op de klok van de salon, niet van het apparaat.
+      if (a.date < fmt(salonNow(salonData.country_code))) return null;
+      // select("*") en niet een vaste kolomlijst: waitlist.lang komt met de
+      // nieuwe migratie; zo werkt dit ook in de tussentijd.
       const { data: entries } = await supabase
-        .from("waitlist").select("id, client_name, client_email")
+        .from("waitlist").select("*")
         .eq("owner_id", salonData.owner_id)
         .eq("date", a.date)
         .eq("status", "waiting")
         .order("created_at", { ascending: true })
-        .limit(1);
-      const entry = entries?.[0];
-      if (!entry || !entry.client_email) return null;
+        .limit(200);
+      // Passend maken (zelfde regel als cancel-appointment en prepay-watch):
+      // de oudste wachtende die past — zonder stylistvoorkeur of met een
+      // stylist van deze afspraak, en met behandelingen die samen niet langer
+      // duren dan de vrijgekomen tijd. Past niemand, dan mailen we niemand
+      // (live 05-10: iemand met 455 minuten kreeg een vrijgekomen half uur).
+      const stylists = new Set([
+        a.staff_id,
+        ...Object.values(a.staff_assignments || {}),
+        ...(Array.isArray(a.service_breakdown) ? a.service_breakdown.map(p => p?.staff_id) : []),
+      ].filter(Boolean));
+      // Zelfde aanname als de tijdkiezer: een rij zonder duur bezet 60 minuten.
+      const freed = parseInt(a.service_duration) || 60;
+      const svcMinutes = (sid) => parseInt((salonData.services || []).find(s => s.id === sid)?.duration) || 0;
+      const entry = (entries || []).find(e => e.client_email
+        && (!e.staff_id || stylists.has(e.staff_id))
+        && (Array.isArray(e.service_ids) ? e.service_ids : []).reduce((sum, sid) => sum + svcMinutes(sid), 0) <= freed);
+      if (!entry) return null;
       // Eerst claimen, dan pas mailen: lukt de status-update niet, dan gaat er
       // ook geen mail uit — anders krijgt dezelfde klant bij élke volgende
       // annulering opnieuw hetzelfde bericht. De .eq("status", "waiting") maakt
@@ -7045,6 +7276,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         .eq("id", entry.id).eq("status", "waiting").select("id");
       if (updErr || !claimed || claimed.length === 0) return null;
       const mail = await sendEmails("waitlist_spot_open", {
+        // De server bindt de ontvanger aan deze (net geclaimde) wachtlijstrij.
+        waitlist_id: entry.id,
         client_name: entry.client_name,
         client_email: entry.client_email,
         salon_name: salonData.name,
@@ -7053,10 +7286,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // salonData.id is de slug; die maakt de "Boek nu"-knop in de mail.
         salon_slug: salonData.id || "",
         date: a.date,
-        // Een wachtlijstrij legt (nog) geen taal van de klant vast, dus is de
-        // markttaal van de salon het beste signaal — zelfde keuze als
-        // cancel-appointment maakt.
-        lang: ownerLangFor(salonData.country_code),
+        // De taal waarin de klant zich inschreef (waitlist.lang); oudere rijen
+        // zonder taal krijgen de markttaal van de salon, zoals
+        // cancel-appointment.
+        lang: entry.lang || ownerLangFor(salonData.country_code),
       });
       // sendEmails GOOIT niet bij een mislukte verzending, hij geeft
       // { success: false } terug. Zonder deze controle meldt de toast "X van de
@@ -7097,7 +7330,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       : lang === "es"
       ? `¿Cancelar la cita de ${a.client_name}? El cliente recibirá un aviso y el horario vuelve a quedar libre.`
       : `Cancel ${a.client_name}'s appointment? The client is notified and the time slot frees up again.`;
-    if (!(await showConfirm(msg))) return;
+    // Eigen knopteksten: zonder opts stond er "Annuleren" (= sluiten) naast een
+    // rode "Verwijderen" die juist annuleert — precies omgekeerd gelezen.
+    if (!(await showConfirm(msg, {
+      tone: "danger",
+      confirmText: lang === "nl" ? "Afspraak annuleren" : lang === "es" ? "Cancelar cita" : "Cancel appointment",
+      cancelText: lang === "nl" ? "Terug" : lang === "es" ? "Volver" : "Back",
+    }))) return;
     setProcessingApptId(a.id);
     try {
       const { error } = await supabase.from("appointments").update({ status: "cancelled" }).eq("id", a.id);
@@ -7111,6 +7350,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       // Nederlands terwijl veel klanten Engelstalig zijn.
       const clientLang = a.lang || ownerLangFor(salonData.country_code);
       const payload = {
+        // Mail én SMS: de server haalt ontvanger, telefoon en salongegevens bij
+        // deze afspraak uit de database (R-01/R-05).
+        appointment_id: a.id,
         client_name: a.client_name,
         client_email: a.client_email || "",
         client_phone: a.client_phone || null,
@@ -7183,7 +7425,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           ? " El cliente NO recibe aviso — usa Cancelar si debe enterarse."
           : " The client is NOT notified — use Cancel if they should know.")
       : "";
-    if (!(await showConfirm(baseMsg + extra + hint))) return;
+    // Wat er nog meer aan deze afspraak hangt: geregistreerde betalingen gaan
+    // in de database mee (ON DELETE CASCADE) en verdwijnen dus ook uit het
+    // kasboek; een review blijft staan. Dat moet de eigenaar vóóraf lezen.
+    const pays = clientPayments.filter(p => p.appointment_id === a.id);
+    const paySum = pays.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const payNote = pays.length
+      ? (lang === "nl"
+          ? ` Er ${pays.length === 1 ? "is 1 betaling" : `zijn ${pays.length} betalingen`} op geregistreerd (${fmtAmt(cur, paySum)}); die worden mee verwijderd en verdwijnen uit je kasboek.`
+          : lang === "es"
+          ? ` Tiene ${pays.length === 1 ? "1 pago registrado" : `${pays.length} pagos registrados`} (${fmtAmt(cur, paySum)}); se eliminan con ella y desaparecen de tu libro de caja.`
+          : ` It has ${pays.length === 1 ? "1 recorded payment" : `${pays.length} recorded payments`} (${fmtAmt(cur, paySum)}); they are deleted with it and disappear from your cash book.`)
+      : "";
+    const hasReview = (salonData.reviews || []).some(r => r.appointment_id === a.id);
+    const reviewNote = hasReview
+      ? (lang === "nl"
+          ? " De klant schreef een review voor dit bezoek; die blijft staan."
+          : lang === "es"
+          ? " El cliente dejó una reseña de esta visita; la reseña se conserva."
+          : " The client left a review for this visit; the review stays.")
+      : "";
+    if (!(await showConfirm(baseMsg + extra + hint + payNote + reviewNote))) return;
     setProcessingApptId(a.id);
     try {
       // Best-effort: drop the cancellation token first (FK guard would otherwise
@@ -7195,6 +7457,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         return;
       }
       update(d => { d.appointments = d.appointments.filter(x => x.id !== a.id); return d; });
+      // Ook uit Nog te ontvangen en de betaalhistorie (in de database al weg
+      // via de cascade) — de receivables-sync houdt rijen die niet meer in het
+      // geheugen staan anders als spookpost vast. Zelfde opruiming als deleteSale.
+      setReceivables(r => r.filter(x => x.id !== a.id));
+      setClientPayments(p => p.filter(x => x.appointment_id !== a.id));
+      setPayFor(f => (f && f.id === a.id ? null : f));
+      setPeriodExtra(prev => (prev ? { ...prev, rows: prev.rows.filter(x => x.id !== a.id) } : prev));
+      setKassaDayExtra(prev => (prev ? { ...prev, rows: prev.rows.filter(x => x.id !== a.id) } : prev));
       toast.show(lang === "nl" ? "Afspraak verwijderd" : lang === "es" ? "Cita eliminada" : "Appointment deleted");
     } finally { setProcessingApptId(null); }
   };
@@ -7268,7 +7538,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const hoursForDate = (dateStr) => {
     if (!dateStr) return null;
     const dow = new Date(`${dateStr}T12:00:00`).getDay();
-    return salonData.business_hours?.[dow] || DEFAULT_HOURS[dow] || null;
+    let h = salonData.business_hours?.[dow] || DEFAULT_HOURS[dow] || null;
+    // Uitzonderingsdagen (extra of andere openingstijden), zoals
+    // book-appointment ze toepast: een salonbrede uitzondering in
+    // day_overrides VERVANGT de uren van die dag, en elk uitzonderingsvenster
+    // (rijen in staff_day_overrides met kind 'exception' + die ene JSON-entry)
+    // verbreedt de grenzen. Zonder dit zei "+ Afspraak" op een extra open
+    // zondag "de salon is die dag gesloten" en bood hij geen gefilterde tijden.
+    const ov = (salonData.day_overrides || {})[dateStr];
+    const wins = (salonData.staff_exceptions || [])
+      .filter(r => r.date === dateStr && r.block_time_start && r.block_time_end)
+      .map(r => ({ open: r.block_time_start, close: r.block_time_end }));
+    if (ov && ov.type === "exception" && ov.open && ov.close) {
+      wins.push({ open: ov.open, close: ov.close });
+      if (!ov.staff_id) h = { open: ov.open, close: ov.close, closed: false };
+    }
+    if (wins.length > 0) {
+      let open = h && !h.closed && h.open ? h.open : "23:59";
+      let close = h && !h.closed && h.close ? h.close : "00:00";
+      for (const w of wins) { if (w.open < open) open = w.open; if (w.close > close) close = w.close; }
+      // Net als op de server: een uitzonderingsdag kent geen middagpauze.
+      h = { closed: false, open, close };
+    }
+    return h;
   };
   // Tijden binnen de openingstijden van de gekozen dag, met de middagpauze
   // eruit geknipt. Op een gesloten dag (of zonder datum) valt hij terug op de
@@ -7279,8 +7571,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // terwijl het formulier die tijd nog wél opslaat — de eigenaar boekt dan een
   // tijdstip dat hij nergens ziet staan.
   const timesForDate = (dateStr, keep) => {
-    const all = genTimes(salonData.slot_interval_minutes || 30);
     const h = hoursForDate(dateStr);
+    // Raster vanaf de openingstijd van die dag (anker): met 45 of 60 minuten
+    // begon het rooster anders op 06:00 en viel een opening om 10:00 of 09:30
+    // buiten het raster.
+    const all = genTimes(salonData.slot_interval_minutes || 30, undefined, undefined, h && !h.closed && h.open ? h.open : undefined);
     if (!h || h.closed || !h.open || !h.close) return all;
     const open = toMinutes(h.open);
     const close = toMinutes(h.close);
@@ -7387,7 +7682,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const breakdown = (Array.isArray(a.service_breakdown) && a.service_breakdown.length > 0)
       ? a.service_breakdown
       : [{ service_id: a.service_id || "", staff_id: a.staff_id || null, duration: a.service_duration || 60, offset_min: 0, label: a.service_name || "" }];
-    const estRowPrice = (bRow) => {
+    // Bestaande delen: de prijs die er echt op staat (partPricesOf: opgeslagen
+    // deelprijzen, anders de catalogus mét teamprijzen, geschaald naar het
+    // afspraakbedrag). De kale catalogusschatting hieronder is alleen nog het
+    // vangnet — die zag extra's en teamprijzen niet, zodat weghalen of
+    // wisselen van een deel het totaal met het verkeerde bedrag verschoof.
+    // Zonder service_breakdown (één behandeling) is dat deel het hele bedrag
+    // minus de producten. partPricesOf rekent NA korting, het prijsveld van
+    // dit formulier staat VÓÓR korting (finalPrice + storedDiscount): de korting
+    // dus naar rato terug bij de delen, anders verschoof wisselen of weghalen
+    // het totaal met (een deel van) de korting.
+    const productsSum = (Array.isArray(a.products) ? a.products : []).reduce((s, it) => s + (parseFloat(it?.price) || 0) * (parseInt(it?.qty) || 1), 0);
+    const partsAfterDiscount = partPricesOf(a, salonData.services || [], salonData.staff || [])
+      || (breakdown.length === 1 && !(Array.isArray(a.service_breakdown) && a.service_breakdown.length > 0) && finalPrice != null
+        ? [Math.max(0, finalPrice - productsSum)] : null);
+    const partsSum = partsAfterDiscount ? partsAfterDiscount.reduce((s, v) => s + (Number(v) || 0), 0) : 0;
+    const storedParts = partsAfterDiscount && storedDiscount > 0
+      ? partsAfterDiscount.map(v => Math.round((v + storedDiscount * (partsSum > 0 ? v / partsSum : 1 / partsAfterDiscount.length)) * 100) / 100)
+      : partsAfterDiscount;
+    const estRowPrice = (bRow, i) => {
+      if (storedParts && Number.isFinite(storedParts[i])) return storedParts[i];
+      if (Number.isFinite(parseFloat(bRow.price))) return parseFloat(bRow.price);
       const svc = (salonData.services || []).find(s => s.id === bRow.service_id);
       if (!svc) return 0;
       const vm = (svc.variants || []).find(v => bRow.label && (bRow.label.endsWith(v.name_nl || "") || (v.name_en && bRow.label.endsWith(v.name_en))));
@@ -7404,7 +7719,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         extra_ids: [],
         staff_id: bRow.staff_id || null,
         duration: parseInt(bRow.duration) || 60,
-        estPrice: estRowPrice(bRow),
+        estPrice: estRowPrice(bRow, i),
       })),
       date: a.date || "",
       time: (a.time || "").slice(0, 5),
@@ -7421,7 +7736,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // whichever day is currently in focus in the calendar so a single tap on
   // a day + this button gets the owner most of the way there.
   const openBlockModal = (opts) => {
-    const seed = calDate || fmt(getToday());
+    const seed = calDate || fmt(salonNow(salonData.country_code));
     setBlockEditId(null);
     setBlockForm({ mode: (opts && opts.mode) || "time", variant: (opts && opts.variant) || "generic", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "", service_id: "", repeat: false });
     setBlockModalOpen(true);
@@ -7463,6 +7778,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       toast.show(lang === "nl" ? "Kies eerst een behandeling" : lang === "es" ? "Elige primero un tratamiento" : "Choose a treatment first", "error");
       return;
     }
+    // Datumbereik: "Tot" vóór "Van" blokkeerde niets maar meldde wel "Dag
+    // geblokkeerd". Alleen in dag-modus zonder herhaling telt "Tot" mee.
+    if (!blockEditId && blockForm.mode !== "time" && !blockForm.repeat && blockForm.to && blockForm.to < from) {
+      toast.show(lang === "nl" ? "De einddatum ligt vóór de begindatum" : lang === "es" ? "La fecha final es anterior a la fecha de inicio" : "The end date is before the start date", "error");
+      return;
+    }
     setBlockSaving(true);
     // Denormalise staff name so the block card can show it without a
     // separate lookup, and future-proof against a rename (we snapshot).
@@ -7492,8 +7813,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     }
     // Time-mode blocks go into staff_day_overrides (row-per-block) so you can
     // stack multiple time windows on the same date (e.g. 10-11 AND 14-15).
-    // Full-day blocks stay in profiles.day_overrides (one per date) because
-    // the concept of "multiple full-day blocks" doesn't add anything.
+    // Only SALON-WIDE full-day blocks stay in profiles.day_overrides (one per
+    // date); full-day blocks for one stylist are rows too (see below).
     if (blockForm.mode === "time") {
       const { data: inserted, error } = await supabase
         .from("staff_day_overrides")
@@ -7523,7 +7844,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // model kent geen service_id/weekday, dus dit worden rijen in
     // staff_day_overrides zonder tijden. Bij herhaling is het ÉÉN rij
     // (weekday gezet, date = anker) — geen losse datums die ooit oplopen.
-    if (serviceId || repeatWeekday != null) {
+    // Hele dag(en) voor ÉÉN medewerker gaan sinds 05-10-2026 ook hierheen:
+    // day_overrides heeft maar één entry per datum, dus Lady's vrije dag
+    // overschreef de salonbrede sluiting op 25-12 (of de blokkade van een
+    // collega) en klanten konden een ander op eerste kerstdag boeken.
+    // book-appointment en de boekingspagina lezen deze rijen al.
+    if (serviceId || repeatWeekday != null || staffId) {
       let rows;
       const reasonTxt = blockForm.reason || (lang === "nl" ? "Geblokkeerd" : lang === "es" ? "Bloqueado" : "Blocked");
       if (repeatWeekday != null) {
@@ -7552,6 +7878,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           curD.setDate(curD.getDate() + 1);
         }
       }
+      // Nooit "gelukt" melden als er niets te schrijven viel.
+      if (rows.length === 0) {
+        setBlockSaving(false);
+        toast.show(lang === "nl" ? "Geen dagen om te blokkeren" : lang === "es" ? "No hay días que bloquear" : "No days to block", "error");
+        return;
+      }
       const { data: insertedRows, error } = await supabase.from("staff_day_overrides").insert(rows).select("*");
       setBlockSaving(false);
       if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
@@ -7559,27 +7891,74 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       setBlockModalOpen(false);
       toast.show(repeatWeekday != null
         ? (lang === "nl" ? "Wekelijkse blokkade ingesteld" : lang === "es" ? "Bloqueo semanal configurado" : "Weekly block set")
-        : (lang === "nl" ? "Dienst geblokkeerd voor die dag(en)" : lang === "es" ? "Tratamiento bloqueado para ese día" : "Treatment blocked for that day"));
+        : serviceId
+        ? (lang === "nl" ? "Dienst geblokkeerd voor die dag(en)" : lang === "es" ? "Tratamiento bloqueado para ese día" : "Treatment blocked for that day")
+        : (lang === "nl" ? `${staffName || "Medewerker"} geblokkeerd voor die dag(en)` : lang === "es" ? `${staffName || "Miembro del equipo"} bloqueado para ese día` : `${staffName || "Team member"} blocked for that day`));
       return;
     }
-    // Full-day / date-range block path — untouched.
+    // Hele dag(en) voor de HELE salon: blijft in profiles.day_overrides (één
+    // entry per datum). Een bestaande entry van een andere soort wordt nooit
+    // meer stilletjes overschreven:
+    // - een uitzonderingsdag (extra open) → weigeren; die haalt de eigenaar
+    //   eerst bewust weg in Planning;
+    // - een oude blokkade voor één medewerker → eerst als rij in
+    //   staff_day_overrides bewaard (de salonbrede sluiting dekt die dag, maar
+    //   haalt de eigenaar de sluiting later weg, dan is haar vrije dag er nog).
     const nextOverrides = { ...(salonData.day_overrides || {}) };
     const endDate = blockForm.to || from;
+    const reasonTxt = blockForm.reason || (lang === "nl" ? "Geblokkeerd" : lang === "es" ? "Bloqueado" : "Blocked");
     // parseDate: new Date("YYYY-MM-DD") is UTC-middernacht, waarna fmt() met
     // lokale componenten op Bonaire (UTC-4) de dag ervóór teruggeeft — je
     // blokkeert dan de verkeerde dag.
+    const dates = [];
     let cur = parseDate(from);
     const end = parseDate(endDate);
-    while (cur <= end) {
-      nextOverrides[fmt(cur)] = {
+    while (cur <= end) { dates.push(fmt(cur)); cur.setDate(cur.getDate() + 1); }
+    if (dates.length === 0) {
+      setBlockSaving(false);
+      toast.show(lang === "nl" ? "Geen dagen om te blokkeren" : lang === "es" ? "No hay días que bloquear" : "No days to block", "error");
+      return;
+    }
+    const exceptionDates = dates.filter(ds => nextOverrides[ds]?.type === "exception");
+    if (exceptionDates.length > 0) {
+      setBlockSaving(false);
+      const lijst = exceptionDates.slice(0, 3).join(", ") + (exceptionDates.length > 3 ? "…" : "");
+      toast.show(lang === "nl" ? `Op ${lijst} staat een uitzonderingsdag; haal die eerst weg onder Planning & boekingen`
+        : lang === "es" ? `El ${lijst} tiene un día de excepción; elimínalo primero en Horario y reservas`
+        : `${lijst} has an exception day; remove it under Schedule & bookings first`, "error");
+      return;
+    }
+    const keepStaffRows = dates
+      .map(ds => ({ ds, ov: nextOverrides[ds] }))
+      .filter(({ ov }) => ov && ov.type === "blocked" && ov.staff_id)
+      .map(({ ds, ov }) => ({
+        owner_id: salonData.owner_id,
+        staff_id: ov.staff_id,
+        date: ds,
+        kind: "block",
+        block_time_start: ov.block_time_start || null,
+        block_time_end: ov.block_time_end || null,
+        reason: ov.reason || reasonTxt,
+      }));
+    let movedRows = [];
+    if (keepStaffRows.length > 0) {
+      const { data: moved, error: moveErr } = await supabase.from("staff_day_overrides").insert(keepStaffRows).select("*");
+      if (moveErr) {
+        setBlockSaving(false);
+        toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error");
+        return;
+      }
+      movedRows = moved || [];
+    }
+    for (const ds of dates) {
+      nextOverrides[ds] = {
         type: "blocked",
-        reason: blockForm.reason || (lang === "nl" ? "Geblokkeerd" : lang === "es" ? "Bloqueado" : "Blocked"),
+        reason: reasonTxt,
         from,
         to: endDate,
-        staff_id: staffId,
-        staff_name: staffName,
+        staff_id: null,
+        staff_name: "",
       };
-      cur.setDate(cur.getDate() + 1);
     }
     const { error } = await supabase
       .from("profiles")
@@ -7587,10 +7966,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       .eq("id", salonData.owner_id);
     setBlockSaving(false);
     if (error) {
+      // De verhuisde medewerkerblokkades weer weghalen: de JSON-entry staat
+      // dan nog gewoon, anders zouden ze dubbel staan.
+      if (movedRows.length) await supabase.from("staff_day_overrides").delete().in("id", movedRows.map(r => r.id));
       toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error");
       return;
     }
-    update(d => { d.day_overrides = nextOverrides; return d; });
+    update(d => { d.day_overrides = nextOverrides; if (movedRows.length) d.staff_blocks = [...(d.staff_blocks || []), ...movedRows]; return d; });
     setBlockModalOpen(false);
     toast.show(lang === "nl" ? "Dag geblokkeerd" : lang === "es" ? "Día bloqueado" : "Day blocked");
   };
@@ -7626,6 +8008,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // Al (deels) betaald, bv. vooruitbetaald? De nieuwe prijs bepaalt of het
     // nog "volledig betaald" is; het ontvangen bedrag zelf blijft staan.
     Object.assign(payload, paymentPatchForPrice(orig, priceNum));
+    // Verplaatst naar een andere dag of tijd: de herinnering voor de OUDE
+    // datum is misschien al verstuurd (reminder_sent = true), en send-reminders
+    // pakt alleen rijen met false. Zonder reset kreeg de nieuwe afspraak er geen.
+    if (orig.date !== payload.date || (orig.time || "").slice(0, 5) !== payload.time) payload.reminder_sent = false;
+    // Taal van de KLANT (vastgelegd bij het boeken), niet de schermtaal van de
+    // eigenaar: de mail en SMS hieronder én de nieuwe behandelingsnaam.
+    const clientLang = orig.lang || ownerLangFor(salonData.country_code);
     // Service change: when the owner picks a different treatment, replace the
     // whole service the same shape a fresh booking uses — primary service_id,
     // a rolled-up name (keeping the assigned stylist), a single-entry
@@ -7645,7 +8034,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       validRows.some(r => !r.original || (r.extra_ids || []).length > 0)
     );
     if (serviceChanged) {
-      const svcLabelOf = (svc) => lang === "nl" ? (svc?.name_nl || svc?.name || "") : lang === "es" ? (svc?.name_es || svc?.name_en || svc?.name_nl || svc?.name || "") : (svc?.name_en || svc?.name_nl || svc?.name || "");
+      const svcLabelOf = (svc) => clientLang === "nl" ? (svc?.name_nl || svc?.name || "") : clientLang === "es" ? (svc?.name_es || svc?.name_en || svc?.name_nl || svc?.name || "") : (svc?.name_en || svc?.name_nl || svc?.name || "");
       const staffNameOf = (id) => (salonData.staff || []).find(s => s.id === id)?.name || "";
       let runningOffset = 0;
       // Prijs per deel bewaren: bestaande delen houden hun (opgeslagen of uit
@@ -7660,10 +8049,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           base = r.origLabel || svcLabelOf(svc);
         } else {
           const v = r.variant_id ? (svc?.variants || []).find(x => x.id === r.variant_id) : null;
-          base = svcLabelOf(svc) + (v ? " — " + (lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)) : "");
+          base = svcLabelOf(svc) + (v ? " — " + (clientLang === "nl" ? v.name_nl : clientLang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)) : "");
         }
         const exs = (r.extra_ids || []).map(id => (svc?.extras || []).find(e => e.id === id)).filter(Boolean);
-        if (exs.length > 0) base += " + " + exs.map(e => lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)).join(", ");
+        if (exs.length > 0) base += " + " + exs.map(e => clientLang === "nl" ? e.name_nl : clientLang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)).join(", ");
         const entry = { service_id: r.service_id, staff_id: r.staff_id || null, duration: parseInt(r.duration) || 60, offset_min: runningOffset, label: base };
         const partPrice = r.original
           ? (origPrices && Number.isFinite(origPrices[r.origIndex]) ? origPrices[r.origIndex] : null)
@@ -7681,6 +8070,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       payload.staff_id = validRows[0].staff_id || null;
       payload.staff_name = staffNames.length > 0 ? staffNames.join(", ") : null;
     }
+    // Afgeronde afspraken dragen een bevroren belastingberekening
+    // (tax_snapshot, zie markComplete). Verandert het bedrag of de behandeling
+    // daarna, dan hoort de bevroren berekening bij het NIEUWE bedrag — anders
+    // rekenen rapporten met een oud totaal.
+    if (orig.tax_snapshot && (parseFloat(orig.service_price || 0) !== priceNum || serviceChanged)) {
+      const nextRow = { ...orig, ...payload };
+      payload.tax_snapshot = buildSnapshot(
+        computeTax(linesFromSale(nextRow), taxCfg),
+        taxCfg,
+        { country: salonData.country_code, region: salonData.tax_region || null, currency: cur, at: new Date().toISOString() },
+      );
+    }
     const { error } = await supabase.from("appointments").update(payload).eq("id", editingAppt.id);
     if (error) {
       setEditApptSaving(false);
@@ -7696,7 +8097,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const dateChanged = orig.date !== payload.date;
     const timeChanged = (orig.time || "").slice(0, 5) !== payload.time;
     const priceChanged = parseFloat(orig.service_price || 0) !== priceNum;
-    const skipEmail = orig.status === "cancelled" || orig.status === "no_show";
+    // Ook geen "Je afspraak is gewijzigd … Zien we je dan!" voor een bezoek dat
+    // al geweest is: een correctie achteraf op een afgeronde afspraak, of een
+    // afspraak waarvan de (nieuwe) datum al voorbij is (salonklok).
+    const visitDone = orig.status === "completed" || payload.date < fmt(salonNow(salonData.country_code));
+    const skipEmail = orig.status === "cancelled" || orig.status === "no_show" || visitDone;
     if ((dateChanged || timeChanged || priceChanged || serviceChanged) && !skipEmail && orig.client_email) {
       try {
         // Try to surface an existing cancellation token so the client can
@@ -7711,9 +8116,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             .eq("used", false)
             .gt("expires_at", new Date().toISOString())
             .maybeSingle();
-          if (tok?.token) cancelUrl = `${window.location.origin}/cancel/${tok.token}`;
+          // Vast domein: send-emails neemt alleen https://vellu.cc/cancel/<token>
+          // aan (R-01), en www./preview-adressen zouden de link laten vallen.
+          if (tok?.token) cancelUrl = `https://vellu.cc/cancel/${tok.token}`;
         } catch { /* token lookup failure is non-fatal */ }
+        // Betaalgegevens volgens dezelfde regel als book-appointment en de
+        // kaart (payDetailsForAppt): één stylist met eigen IBAN/link → haar
+        // rekening. Anders vroeg de mail het restant op de salonrekening terwijl
+        // de vooruitbetaling naar de stylist ging.
+        const pd = payDetailsForAppt({ ...orig, ...payload });
         const notifyPayload = {
+          // Ontvanger, telefoon en salongegevens haalt de server bij deze id.
+          appointment_id: orig.id,
           client_name: orig.client_name,
           client_email: orig.client_email,
           client_phone: orig.client_phone || null,
@@ -7736,13 +8150,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           owner_id: salonData.owner_id,
           cancel_url: cancelUrl || null,
           currency: cur,
-          lang,
+          lang: clientLang,
           // Al (vooruit)betaald? Dan toont de mail het verschil, met betaalblok
           // voor wat er nog openstaat (of de terugbetaling bij een lagere prijs).
           amount_paid: paidAmountOf(orig),
-          payment_link: salonData.payment_link || "",
-          salon_iban: salonData.iban || "",
-          iban_holder: salonData.iban_holder || salonData.name || "",
+          payment_link: pd.paymentLink || "",
+          salon_iban: pd.iban || "",
+          iban_holder: pd.ibanHolder || salonData.name || "",
           payment_ref: `${salonData.name} ${payload.date} ${payload.time}`.slice(0, 100),
         };
         await sendEmails("appointment_updated", notifyPayload);
@@ -7797,21 +8211,39 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (error) { toast.show(t.somethingWrong, "error"); return; }
     update(d => { d.products = d.products.map(x => x.id === productId ? { ...x, photo_url: null } : x); return d; });
   };
-  // Best-effort: stock only decrements for products that track it (stock != null).
-  // A failed decrement never blocks the sale itself.
-  const decrementStock = async (items) => {
-    const updates = [];
-    for (const it of items) {
+  // Voorraad bijstellen met een RELATIEVE wijziging (sign -1 = verkocht,
+  // +1 = teruggeboekt) via de RPC adjust_product_stock: de database telt op
+  // bij de stand van DAT moment en geeft de nieuwe stand terug. Vroeger
+  // schreven we een absolute waarde uit de lokale kopie (producten hebben geen
+  // realtime), waarmee een online bestelling of een verkoop op een tweede
+  // apparaat ongedaan werd gemaakt. Alleen producten die voorraad bijhouden
+  // (stock != null); een mislukte wijziging blokkeert de verkoop nooit.
+  const adjustStock = async (items, sign) => {
+    const changes = [];
+    for (const it of items || []) {
       const p = (salonData.products || []).find(x => x.id === it.id);
       if (!p || p.stock == null) continue;
-      updates.push({ id: p.id, stock: Math.max(0, p.stock - it.qty) });
+      changes.push({ id: p.id, delta: sign * (parseInt(it.qty) || 1), local: p.stock });
     }
-    if (!updates.length) return;
+    if (!changes.length) return;
     try {
-      await Promise.all(updates.map(u => supabase.from("products").update({ stock: u.stock }).eq("id", u.id)));
-      update(d => { d.products = d.products.map(x => { const u = updates.find(y => y.id === x.id); return u ? { ...x, stock: u.stock } : x; }); return d; });
-    } catch { /* sale already recorded; stock can be corrected manually */ }
+      const results = await Promise.all(changes.map(async ch => {
+        const { data, error } = await supabase.rpc("adjust_product_stock", { p_product_id: ch.id, p_delta: ch.delta });
+        if (error && error.code === "PGRST202") {
+          // Overgang: de RPC staat nog niet in de database (migratie nog niet
+          // toegepast). Dan het oude gedrag, zodat de voorraad blijft lopen.
+          const stock = Math.max(0, ch.local + ch.delta);
+          const { error: e2 } = await supabase.from("products").update({ stock }).eq("id", ch.id);
+          return e2 ? null : { id: ch.id, stock };
+        }
+        if (error) { console.error("voorraad bijstellen mislukt:", ch.id, error); return null; }
+        return data == null ? null : { id: ch.id, stock: Number(data) };
+      }));
+      const got = results.filter(Boolean);
+      if (got.length) update(d => { d.products = d.products.map(x => { const u = got.find(y => y.id === x.id); return u ? { ...x, stock: u.stock } : x; }); return d; });
+    } catch (e) { console.error("voorraad bijstellen:", e); /* sale already recorded; stock can be corrected manually */ }
   };
+  const decrementStock = (items) => adjustStock(items, -1);
   // Kassa-invoer via barcode: camera-scan én vaste USB-scanner komen hier
   // samen. Een USB-scanner gedraagt zich als toetsenbord (typt de code +
   // Enter in het zoekveld); de camera geeft dezelfde string. Match op het
@@ -7918,16 +8350,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     try {
       const { error } = await supabase.from("appointments").delete().eq("id", sale.id).eq("owner_id", salonData.owner_id);
       if (error) { toast.show(t.somethingWrong, "error"); return; }
-      const back = [];
-      for (const it of items) {
-        const prod = (salonData.products || []).find(x => x.id === it.id);
-        if (!prod || prod.stock == null) continue;
-        back.push({ id: prod.id, stock: prod.stock + (parseInt(it.qty) || 1) });
-      }
-      if (back.length) {
-        await Promise.all(back.map(u => supabase.from("products").update({ stock: u.stock }).eq("id", u.id)));
-        update(d => { d.products = d.products.map(x => { const u = back.find(y => y.id === x.id); return u ? { ...x, stock: u.stock } : x; }); return d; });
-      }
+      // Voorraad terug: relatief (+qty) via de database, zie adjustStock.
+      await adjustStock(items, +1);
       for (const it of items) {
         if (!it.voucher_id) continue;
         if (it.kind === "voucher_redeem") {
