@@ -1,6 +1,32 @@
 import { useNavigate } from "react-router-dom";
 import { useSEO, T, Layout, NavIcon, LangToggle, AT, AT_COLORS, AtelierSkin } from "./shared.jsx";
 
+// Pijltje als inline SVG (currentColor): letterlijke pijlen in de tekst
+// breken de huisregel "geen glyphs in de site".
+function Arrow({ dir = "right", size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"
+      style={{ display: "inline-block", verticalAlign: "-0.125em", flexShrink: 0, transform: dir === "left" ? "rotate(180deg)" : undefined }}>
+      <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+    </svg>
+  );
+}
+
+// Voetlinks in drie talen.
+const privacyLink = (lang) => (lang === "nl" ? "Privacybeleid" : lang === "es" ? "Política de privacidad" : "Privacy Policy");
+const homeLink = (lang) => (lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home");
+
+// Juridische teksten bestaan in het Nederlands en Engels; de inhoud zelf
+// vertalen we niet zonder jurist. In het Spaans tonen we de Engelse versie
+// met deze ene regel erboven (L3-10).
+function EsNote({ c }) {
+  return (
+    <div data-legal-es-note style={{ fontSize: 12, color: c.textSub, lineHeight: 1.6, marginBottom: 24, padding: "10px 14px", background: `${AT.PUTTY}66`, border: `1px solid ${AT.PUTTY}`, borderRadius: 10 }}>
+      Este documento está disponible en inglés y neerlandés. A continuación figura la versión en inglés.
+    </div>
+  );
+}
+
 // Gedeelde Atelier-schil voor de juridische pagina's (Faisal 16-09: "heeft nog
 // het oude thema"): bone-achtergrond, espresso-tekst, wordmark + Terug +
 // taalkeuze bovenin. Geen licht/donker-schakelaar meer — de website heeft één
@@ -16,7 +42,7 @@ function LegalShell({ lang, setLang, maxWidth = 600, children }) {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "22px 0 36px", flexWrap: "wrap" }}>
             <a href="/" aria-label="vellu" style={{ fontFamily: "'Jost',sans-serif", fontSize: 22, fontWeight: 400, letterSpacing: "0.28em", color: AT.ESPRESSO, textDecoration: "none" }}>vellu</a>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button className="btn-ghost" style={{ fontSize: 11, padding: "9px 14px" }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}>← {t.back}</button>
+              <button className="btn-ghost" style={{ fontSize: 11, padding: "9px 14px", display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/"); }}><Arrow dir="left" size={11} /> {t.back}</button>
               <LangToggle lang={lang} setLang={setLang} />
             </div>
           </div>
@@ -31,7 +57,15 @@ function PrivacyPage({ lang, setLang }) {
   const c = AT_COLORS;
   const navigate = useNavigate();
   const t = T[lang];
-  useSEO({ title: lang === "nl" ? "Privacybeleid | Vellu" : "Privacy Policy | Vellu", url: "https://vellu.cc/privacy" });
+  // Eigen beschrijving per pagina: anders bleef de meta-omschrijving van de
+  // homepage staan (L3-05). De canonical volgt `url` (useSEO).
+  useSEO({
+    title: lang === "nl" ? "Privacybeleid | Vellu" : lang === "es" ? "Política de privacidad | Vellu" : "Privacy Policy | Vellu",
+    description: lang === "nl" ? "Hoe Vellu persoonsgegevens verwerkt: welke gegevens, waarom, hoe lang, met wie we ze delen en welke rechten je hebt."
+      : lang === "es" ? "Cómo trata Vellu los datos personales: qué datos, por qué, durante cuánto tiempo, con quién los compartimos y cuáles son tus derechos."
+      : "How Vellu processes personal data: what we collect, why, for how long, who we share it with and what your rights are.",
+    url: "https://vellu.cc/privacy"
+  });
   const content = lang === "nl" ? {
     title: "Privacybeleid",
     updated: "Laatst bijgewerkt: april 2026",
@@ -72,6 +106,7 @@ function PrivacyPage({ lang, setLang }) {
     <LegalShell lang={lang} setLang={setLang} maxWidth={600}>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
           <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 32 }}>{content.updated}</div>
+          {lang === "es" && <EsNote c={c} />}
           {content.sections.map(([title, body], i) => (
             <div key={i} style={{ marginBottom: 24 }}>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{title}</div>
@@ -87,7 +122,13 @@ function TermsPage({ lang, setLang }) {
   const c = AT_COLORS;
   const navigate = useNavigate();
   const t = T[lang];
-  useSEO({ title: lang === "nl" ? "Voorwaarden | Vellu" : "Terms of Service | Vellu", url: "https://vellu.cc/terms" });
+  useSEO({
+    title: lang === "nl" ? "Voorwaarden | Vellu" : lang === "es" ? "Términos del servicio | Vellu" : "Terms of Service | Vellu",
+    description: lang === "nl" ? "De algemene voorwaarden van Vellu, het boekingsplatform voor beautyprofessionals: abonnementen, verplichtingen, aansprakelijkheid en opzeggen."
+      : lang === "es" ? "Los términos del servicio de Vellu, la plataforma de reservas para profesionales de la belleza: suscripciones, obligaciones, responsabilidad y baja."
+      : "The terms of service of Vellu, the booking platform for beauty professionals: subscriptions, obligations, liability and cancellation.",
+    url: "https://vellu.cc/terms"
+  });
   const content = lang === "nl" ? {
     title: "Algemene Voorwaarden",
     updated: "Laatst bijgewerkt: april 2026",
@@ -130,6 +171,7 @@ function TermsPage({ lang, setLang }) {
     <LegalShell lang={lang} setLang={setLang} maxWidth={600}>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
           <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 32 }}>{content.updated}</div>
+          {lang === "es" && <EsNote c={c} />}
           {content.sections.map(([title, body], i) => (
             <div key={i} style={{ marginBottom: 24 }}>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{title}</div>
@@ -137,8 +179,8 @@ function TermsPage({ lang, setLang }) {
             </div>
           ))}
           <div style={{ marginTop: 40, paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
-            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
-            <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
+            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{privacyLink(lang)}</a>
+            <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{homeLink(lang)}</a>
           </div>
     </LegalShell>
   );
@@ -149,15 +191,45 @@ function ContactPage({ lang, setLang }) {
   const c = AT_COLORS;
   const navigate = useNavigate();
   const t = T[lang];
-  useSEO({ title: lang === "nl" ? "Contact | Vellu" : "Contact | Vellu", url: "https://vellu.cc/contact" });
-  const content = lang === "nl" ? {
+  useSEO({
+    title: lang === "es" ? "Contacto | Vellu" : "Contact | Vellu",
+    description: lang === "nl" ? "Over Vellu en contact: mail info@vellu.cc. Bedrijfsgegevens van Mirah Ventures (KVK 42045867)."
+      : lang === "es" ? "Sobre Vellu y cómo contactarnos: escribe a info@vellu.cc. Datos de la empresa Mirah Ventures (KVK 42045867)."
+      : "About Vellu and how to reach us: email info@vellu.cc. Company details of Mirah Ventures (CoC 42045867).",
+    url: "https://vellu.cc/contact"
+  });
+  // Eigen Spaanse versie (L3-10): dit is geen juridische tekst maar uitleg,
+  // contact en de verplichte bedrijfsgegevens.
+  const content = lang === "es" ? {
+    title: "Sobre Vellu", subtitle: "La historia detrás de la plataforma",
+    mission: "Vellu nació con una misión: dar a los profesionales de la belleza su propia plataforma de reservas online, sin comisiones y sin complicaciones. Sin un 10% por reserva, sin suscripciones caras con costes ocultos. Solo una tarifa fija y tu marca en primer plano.",
+    why: "¿Por qué Vellu?", whyText: "Demasiados salones de uñas, peluquerías y artistas de pestañas dependen de plataformas que se quedan con un buen porcentaje de cada reserva. O trabajan con WhatsApp y mensajes directos: está bien, pero no escala. Vellu te da tu propia página de reservas profesional con tu nombre, tus colores y tus servicios. Los clientes reservan directamente y tú te quedas con el 100% de tus ingresos.",
+    who: "¿Quién está detrás?", whoText: "Vellu lo ha creado un desarrollador independiente de los Países Bajos con pasión por la tecnología y el emprendimiento. La plataforma está construida desde cero pensando en lo que los profesionales de la belleza realmente necesitan: ni más ni menos.",
+    contact: "Contacto", contactText: "¿Tienes preguntas, comentarios o quieres colaborar? Escríbenos.",
+    emailLabel: "Correo", responseTime: "Normalmente respondemos en 24 horas.",
+    cta: "¿Listo para empezar?", ctaText: "Crea gratis tu propia página de reservas.", ctaBtn: "Empieza gratis",
+    imprintTitle: "Datos de la empresa",
+    imprintIntro: "Conforme al art. 3:15d del Código Civil neerlandés:",
+    imprintCompany: "Nombre comercial",
+    imprintCompanyValue: "Vellu (un producto de Mirah Ventures)",
+    imprintOwner: "Empresa",
+    imprintOwnerValue: "Mirah Ventures (empresa unipersonal neerlandesa)",
+    imprintAddress: "Domicilio",
+    imprintAddressValue: "Amersfoort, Países Bajos — dirección completa a petición en info@vellu.cc",
+    imprintKvk: "N.º Cámara de Comercio (KVK)",
+    imprintKvkValue: "42045867",
+    imprintVat: "NIF-IVA",
+    imprintVatValue: "NL005453873B29",
+    imprintAuthority: "Autoridad de control",
+    imprintAuthorityValue: "Autoridad neerlandesa de Protección de Datos (autoriteitpersoonsgegevens.nl)",
+  } : lang === "nl" ? {
     title: "Over Vellu", subtitle: "Het verhaal achter het platform",
     mission: "Vellu is gebouwd met één missie: beauty professionals hun eigen online boekingsplatform geven, zonder commissie en zonder gedoe. Geen 10% per boeking, geen dure abonnementen met verborgen kosten. Gewoon een vast tarief en jouw merk voorop.",
     why: "Waarom Vellu?", whyText: "Te veel nagelsalons, kappers en wimperspecialisten zijn afhankelijk van platforms die een flink percentage van elke boeking pakken. Of ze werken met WhatsApp en DM's — prima, maar niet schaalbaar. Vellu geeft je je eigen professionele boekingspagina met jouw naam, jouw kleuren en jouw diensten. Klanten boeken direct, jij houdt 100% van je omzet.",
     who: "Wie zit erachter?", whoText: "Vellu is gebouwd door een solo developer uit Nederland met een passie voor technologie en ondernemerschap. Het platform is van de grond af opgebouwd met de focus op wat beauty professionals echt nodig hebben — niet meer, niet minder.",
     contact: "Contact", contactText: "Heb je vragen, feedback of wil je samenwerken? Neem gerust contact op.",
     emailLabel: "E-mail", responseTime: "We reageren meestal binnen 24 uur.",
-    cta: "Klaar om te beginnen?", ctaText: "Maak gratis je eigen boekingspagina aan.", ctaBtn: "Gratis beginnen →",
+    cta: "Klaar om te beginnen?", ctaText: "Maak gratis je eigen boekingspagina aan.", ctaBtn: "Gratis beginnen",
     imprintTitle: "Bedrijfsgegevens",
     imprintIntro: "Overeenkomstig art. 3:15d BW:",
     imprintCompany: "Handelsnaam",
@@ -179,7 +251,7 @@ function ContactPage({ lang, setLang }) {
     who: "Who's behind it?", whoText: "Vellu is built by a solo developer from the Netherlands with a passion for technology and entrepreneurship. The platform is built from the ground up with a focus on what beauty professionals actually need — nothing more, nothing less.",
     contact: "Contact", contactText: "Got questions, feedback, or want to collaborate? Don't hesitate to reach out.",
     emailLabel: "Email", responseTime: "We usually respond within 24 hours.",
-    cta: "Ready to get started?", ctaText: "Create your free booking page.", ctaBtn: "Get started free →",
+    cta: "Ready to get started?", ctaText: "Create your free booking page.", ctaBtn: "Get started free",
     imprintTitle: "Company details",
     imprintIntro: "Pursuant to art. 3:15d Dutch Civil Code:",
     imprintCompany: "Trade name",
@@ -214,7 +286,8 @@ function ContactPage({ lang, setLang }) {
           <div style={{ textAlign: "center", padding: "28px 20px", background: `${AT.PUTTY}66`, border: `1px solid ${AT.PUTTY}`, borderRadius: 12, marginBottom: 32 }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{content.cta}</div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 16 }}>{content.ctaText}</div>
-            <button className="btn-primary" onClick={() => navigate("/owner")}>{content.ctaBtn}</button>
+            {/* Naar het registratie-tabblad, niet naar Inloggen (L3-03). */}
+            <button className="btn-primary" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => navigate("/owner?signup=1")}>{content.ctaBtn} <Arrow size={12} /></button>
           </div>
           <div style={{ marginBottom: 32 }}>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>{content.imprintTitle}</div>
@@ -236,7 +309,7 @@ function ContactPage({ lang, setLang }) {
             </div>
           </div>
           <div style={{ paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
-            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
+            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{privacyLink(lang)}</a>
             <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
           </div>
     </LegalShell>
@@ -248,7 +321,13 @@ function DpaPage({ lang, setLang }) {
   const c = AT_COLORS;
   const navigate = useNavigate();
   const t = T[lang];
-  useSEO({ title: lang === "nl" ? "Verwerkingsovereenkomst | Vellu" : "Data Processing Agreement | Vellu", url: "https://vellu.cc/dpa" });
+  useSEO({
+    title: lang === "nl" ? "Verwerkingsovereenkomst | Vellu" : lang === "es" ? "Acuerdo de tratamiento de datos | Vellu" : "Data Processing Agreement | Vellu",
+    description: lang === "nl" ? "De verwerkersovereenkomst tussen Vellu en salons: welke gegevens we verwerken, sub-verwerkers, beveiliging en de meldplicht bij datalekken."
+      : lang === "es" ? "El acuerdo de tratamiento de datos entre Vellu y los salones: qué datos tratamos, subencargados, seguridad y notificación de brechas."
+      : "The data processing agreement between Vellu and salons: the data we process, sub-processors, security and breach notification.",
+    url: "https://vellu.cc/dpa"
+  });
   const content = lang === "nl" ? {
     title: "Verwerkingsovereenkomst",
     updated: "Laatst bijgewerkt: april 2026",
@@ -296,6 +375,7 @@ function DpaPage({ lang, setLang }) {
     <LegalShell lang={lang} setLang={setLang} maxWidth={600}>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 8 }}>{content.title}</div>
           <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 20 }}>{content.updated}</div>
+          {lang === "es" && <EsNote c={c} />}
           <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 32, padding: "16px 20px", background: `${AT.PUTTY}66`, border: `1px solid ${AT.PUTTY}`, borderRadius: 12 }}>{content.intro}</div>
           {content.sections.map(([title, body], i) => (
             <div key={i} style={{ marginBottom: 24 }}>
@@ -304,9 +384,9 @@ function DpaPage({ lang, setLang }) {
             </div>
           ))}
           <div style={{ marginTop: 40, paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
-            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
+            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{privacyLink(lang)}</a>
             <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
-            <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
+            <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{homeLink(lang)}</a>
           </div>
     </LegalShell>
   );
@@ -325,7 +405,13 @@ function GoogleIntegrationPage({ lang, setLang }) {
   const c = AT_COLORS;
   const navigate = useNavigate();
   const t = T[lang];
-  useSEO({ title: lang === "nl" ? "Google Agenda-integratie | Vellu" : "Google Calendar Integration | Vellu", url: "https://vellu.cc/integrations/google" });
+  useSEO({
+    title: lang === "nl" ? "Google Agenda-integratie | Vellu" : lang === "es" ? "Integración con Google Calendar | Vellu" : "Google Calendar Integration | Vellu",
+    description: lang === "nl" ? "Hoe Vellu je Google Agenda gebruikt: welke toestemming, wat er gebeurt bij boeken, wijzigen en annuleren, en hoe je de koppeling intrekt."
+      : lang === "es" ? "Cómo usa Vellu tu Google Calendar: el permiso que pide, qué pasa al reservar, cambiar o cancelar, y cómo desconectarlo."
+      : "How Vellu uses your Google Calendar: the permission it requests, what happens on booking, changes and cancellation, and how to disconnect.",
+    url: "https://vellu.cc/integrations/google"
+  });
 
   const content = lang === "nl" ? {
     title: "Google Agenda-integratie",
@@ -353,12 +439,12 @@ function GoogleIntegrationPage({ lang, setLang }) {
     disconnectTitle: "Hoe intrekken?",
     disconnectBody: "Je kunt de koppeling op twee manieren verwijderen. Beide werken onmiddellijk: bestaande events blijven in je agenda staan, nieuwe events worden niet meer aangemaakt.",
     disconnectSteps: [
-      "In Vellu: Instellingen → Overig → Google Agenda → 'Loskoppelen'.",
-      "Op Google: myaccount.google.com/permissions → zoek Vellu → 'Toegang intrekken'.",
+      "In Vellu: Instellingen > Overig > Google Agenda > 'Loskoppelen'.",
+      "Op Google: myaccount.google.com/permissions > zoek Vellu > 'Toegang intrekken'.",
     ],
     moreTitle: "Meer informatie",
     moreBody: "Voor een volledig overzicht van gegevensverwerking en je rechten onder de AVG, zie ons privacybeleid.",
-    privacyLabel: "Lees ons privacybeleid →",
+    privacyLabel: "Lees ons privacybeleid",
   } : {
     title: "Google Calendar Integration",
     subtitle: "How Vellu uses your Google Calendar — in plain language.",
@@ -385,12 +471,12 @@ function GoogleIntegrationPage({ lang, setLang }) {
     disconnectTitle: "How to disconnect",
     disconnectBody: "You can revoke access two ways. Both take effect immediately: existing events stay in your calendar, but no new events will be created.",
     disconnectSteps: [
-      "In Vellu: Settings → Other → Google Calendar → 'Disconnect'.",
-      "On Google: myaccount.google.com/permissions → find Vellu → 'Remove access'.",
+      "In Vellu: Settings > Other > Google Calendar > 'Disconnect'.",
+      "On Google: myaccount.google.com/permissions > find Vellu > 'Remove access'.",
     ],
     moreTitle: "More information",
     moreBody: "For a full account of how we handle personal data and your rights under GDPR, see our privacy policy.",
-    privacyLabel: "Read our privacy policy →",
+    privacyLabel: "Read our privacy policy",
   };
 
   return (
@@ -399,6 +485,7 @@ function GoogleIntegrationPage({ lang, setLang }) {
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 6 }}>{content.title}</div>
           <div style={{ fontSize: 13, color: c.textSub, marginBottom: 4, lineHeight: 1.5 }}>{content.subtitle}</div>
           <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 28 }}>{content.updated}</div>
+          {lang === "es" && <EsNote c={c} />}
 
           {/* Overview card */}
           <div style={{ fontSize: 14, color: c.textSub, lineHeight: 1.7, marginBottom: 28, padding: "18px 20px", background: `${AT.PUTTY}66`, border: `1px solid ${AT.PUTTY}`, borderRadius: 12 }}>{content.overview}</div>
@@ -457,13 +544,13 @@ function GoogleIntegrationPage({ lang, setLang }) {
           <div style={{ marginBottom: 40 }}>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>{content.moreTitle}</div>
             <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.7, marginBottom: 8 }}>{content.moreBody}</div>
-            <a href="/privacy" style={{ fontSize: 13, color: AT.ESPRESSO, textDecoration: "none", fontWeight: 500 }}>{content.privacyLabel}</a>
+            <a href="/privacy" style={{ fontSize: 13, color: AT.ESPRESSO, textDecoration: "none", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 6 }}>{content.privacyLabel} <Arrow size={12} /></a>
           </div>
 
           <div style={{ paddingTop: 20, borderTop: "1px solid " + c.border, display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
-            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Privacybeleid" : "Privacy Policy"}</a>
+            <a href="/privacy" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{privacyLink(lang)}</a>
             <a href="/terms" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{t.terms}</a>
-            <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{lang === "nl" ? "Terug naar home" : "Back to home"}</a>
+            <a href="/" style={{ color: c.textMuted, textDecoration: "none", borderBottom: "1px solid " + c.border }}>{homeLink(lang)}</a>
           </div>
     </LegalShell>
   );

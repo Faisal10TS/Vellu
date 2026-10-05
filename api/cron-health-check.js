@@ -85,8 +85,10 @@ export default async function handler(req, res) {
       // Eerst de foutrij, dan de watchdog aantrappen: zo staat de melding al
       // klaar op het moment dat de watchdog zijn MONITORED-lijst doorloopt.
       await supabase.from('cron_health').insert({ job_name: JOB, status: 'error', items_processed: 1, error_message: detail });
+      // x-cron-secret: cron-watchdog draait alleen nog met het cron-geheim
+      // (audit E2-04); zonder header zou deze noodtrap 401 krijgen.
       const r = await fetch(`${SUPABASE_URL}/functions/v1/cron-watchdog`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET }, body: '{}',
       });
       out.action = `${detail} → triggered cron-watchdog directly: HTTP ${r.status}`;
       if (!r.ok) throw new Error(out.action);

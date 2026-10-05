@@ -26,7 +26,7 @@ import SupportChat from "./SupportChat.jsx";
 import { supabase } from "./supabase.js";
 import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS, rememberRef, useReferralPromo, rewardLabel, promoEndLabel } from "./shared.jsx";
 import {
-  SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill,
+  SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill, ArrowIcon,
   Reveal, KineticLine, HeroEnter, Marquee, TweenedNumber,
   ParallaxLayer, CursorRing, ScrollProgress, glowMove,
 } from "./LandingScreen.jsx";
@@ -71,6 +71,8 @@ function AtHead({ title, sub, tone = "bone" }) {
 // door Vellu in het beheer). De regel in de hero verschijnt pas vanaf drie
 // beoordelingen: met één of twee cijfers is een "gemiddelde" geen eerlijk
 // beeld. Citaten verschijnen zodra er één gepubliceerd is.
+// Het aantal zelf staat NIET in de regel (Faisals regel van 23-09: nooit
+// tonen hoeveel salons Vellu gebruiken); alleen het gemiddelde.
 const MIN_RATINGS = 3;
 function StarRow({ value, size = 16, on = EARTH, off = MUSHROOM }) {
   const pct = Math.max(0, Math.min(100, (Number(value) / 5) * 100));
@@ -93,9 +95,9 @@ function SalonRatingLine({ lang, sum }) {
   const avg = Number(sum?.avg_rating || 0);
   if (n < MIN_RATINGS || !avg) return null;
   const avgStr = lang === "en" ? avg.toFixed(1) : avg.toFixed(1).replace(".", ",");
-  const rest = lang === "nl" ? ` van 5 · beoordeeld door ${n} salons die Vellu gebruiken`
-    : lang === "es" ? ` de 5 · valorado por ${n} salones que usan Vellu`
-    : ` out of 5 · rated by ${n} salons using Vellu`;
+  const rest = lang === "nl" ? " van 5 · beoordeeld door salons die Vellu gebruiken"
+    : lang === "es" ? " de 5 · valorado por salones que usan Vellu"
+    : " out of 5 · rated by salons using Vellu";
   return (
     // flex-wrap: op de telefoon springen de sterren op een eigen regel boven
     // de tekst, allebei gecentreerd, i.p.v. sterren links naast twee regels.
@@ -170,7 +172,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     })();
     return () => { off = true; };
   }, []);
-  const ownerStart = (signup) => navigate(invite?.code ? `/owner?ref=${encodeURIComponent(invite.code)}` : signup ? "/owner?signup=1" : "/owner");
+  // Elke start-knop (trial, prijzen, finale, zwevende knop, "Maak je pagina")
+  // opent het REGISTRATIE-tabblad; alleen "Inloggen" in de balk gaat naar het
+  // inlogtabblad (L3-03: alle trialknoppen kwamen op Inloggen uit).
+  const ownerStart = () => navigate(invite?.code ? `/owner?ref=${encodeURIComponent(invite.code)}` : "/owner?signup=1");
   // Loopt er een referral-actie (bijv. 1 maand i.p.v. 2 weken), dan zegt de
   // balk dat, met de einddatum erbij.
   const refPromo = useReferralPromo();
@@ -249,26 +254,34 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
   // Zes vragen i.p.v. tien (Faisal 15-09: "te veel vragen, voeg samen"):
   // wat+voor wie, kosten+commissie+verschil met platformen, proberen, team,
-  // herinneringen+annuleren, klanten meenemen. Spaans valt terug op Engels.
-  const faqs = lang === "nl" ? [
+  // herinneringen+annuleren, klanten meenemen. In drie talen (Spaans viel
+  // eerst terug op Engels, L3-09).
+  const faqs = lang === "es" ? [
+    ["¿Qué es Vellu y para quién es?", "Vellu te da tu propia página de reservas en vellu.cc/tu-nombre. Los clientes reservan directamente contigo, sin intermediarios, y tú gestionas todo desde tu panel. Hecho para profesionales independientes de la belleza: manicuristas, artistas de pestañas, especialistas en cejas, peluquerías y salones, solos o con equipo."],
+    ["¿Cuánto cuesta y por qué sin comisión?", "Starter cuesta €19 al mes y Professional €35 al mes. Precio fijo, 0% de comisión, sin costes ocultos. La mayoría de las plataformas de reservas cobran un 5–10% por reserva: con 50 reservas de €45 eso suma enseguida €100–€225 al mes. Con Vellu tus ingresos son tuyos, y tienes tu propia página con tu marca en lugar de un perfil en un buscador: tus clientes siguen siendo tus clientes."],
+    ["¿Puedo probarlo primero?", "Sí. Cada salón nuevo empieza con 14 días de prueba gratis. Configura tu página, recibe reservas y después decide si sigues con Starter o Professional."],
+    ["¿Puede mi equipo gestionar su propia agenda?", "Sí. Con el plan Professional cada miembro del equipo tiene su propio acceso. Solo ve sus propias citas y gestiona sus propios servicios y horarios."],
+    ["¿Reciben recordatorios los clientes y cómo cancelan?", "Sí, automáticamente: una confirmación al reservar, un recordatorio 24 horas antes y, después de la visita, un seguimiento que pide una reseña. Cancelan con el enlace de su correo de confirmación; tú decides hasta cuándo se puede."],
+    ["¿Puedo traer mis clientes de otro sistema?", "Sí. ¿Tienes una exportación (CSV) de tu plataforma actual? Impórtala directamente en tu panel, en Clientes > Importar. Vellu reconoce automáticamente los nombres de columna habituales (nombre, correo, teléfono, notas). ¿No lo consigues? Envíalo por Contacto y te ayudamos gratis."],
+  ] : lang === "nl" ? [
     ["Wat is Vellu, en voor wie is het?", "Vellu geeft jou je eigen boekingspagina op vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij, en jij beheert alles vanuit je dashboard. Gemaakt voor onafhankelijke beauty professionals: nail techs, lash artists, brow specialists, kappers en salons — solo of met een team."],
     ["Wat kost het, en waarom geen commissie?", "Starter is €19 per maand, Professional €35 per maand. Vast tarief, 0% commissie, geen verborgen kosten. De meeste boekingsplatformen rekenen 5–10% per boeking — bij 50 boekingen à €45 is dat al snel €100–€225 per maand. Bij Vellu blijft je omzet van jou, en je krijgt je eigen merkpagina in plaats van een profiel in een zoekplatform: jouw klanten blijven jouw klanten."],
     ["Kan ik het eerst uitproberen?", "Ja. Elke nieuwe salon start met 14 dagen gratis proberen. Zet je pagina op, ontvang boekingen en kies daarna of je doorgaat met Starter of Professional."],
     ["Kunnen mijn medewerkers hun eigen agenda beheren?", "Ja. Met het Professional-plan krijgt elke medewerker een eigen login. Ze zien alleen hun eigen afspraken en beheren hun eigen diensten en werktijden."],
     ["Krijgen klanten herinneringen, en hoe annuleren ze?", "Ja, automatisch: een bevestiging bij het boeken, een herinnering 24 uur van tevoren en na het bezoek een follow-up voor een review. Annuleren gaat via de link in hun bevestigingsmail; jij bepaalt tot wanneer dat kan."],
-    ["Kan ik mijn klanten meenemen van een ander systeem?", "Ja. Heb je een export (CSV) van je huidige platform? Importeer die direct in je dashboard onder Klanten → Importeer. Vellu herkent de gangbare kolomnamen (naam, e-mail, telefoon, notities) automatisch. Lukt het niet? Stuur 'm naar Contact en wij helpen je gratis."],
+    ["Kan ik mijn klanten meenemen van een ander systeem?", "Ja. Heb je een export (CSV) van je huidige platform? Importeer die direct in je dashboard onder Klanten > Importeer. Vellu herkent de gangbare kolomnamen (naam, e-mail, telefoon, notities) automatisch. Lukt het niet? Stuur 'm naar Contact en wij helpen je gratis."],
   ] : [
     ["What is Vellu, and who is it for?", "Vellu gives you your own booking page at vellu.cc/your-name. Clients book directly with you, no middleman, and you manage everything from your dashboard. Built for independent beauty professionals: nail techs, lash artists, brow specialists, hairdressers and salons — solo or with a team."],
     ["What does it cost, and why no commission?", "Starter is €19 a month, Professional €35 a month. Fixed price, 0% commission, no hidden fees. Most booking platforms take 5–10% per booking — at 50 bookings of €45 that quickly adds up to €100–€225 a month. With Vellu your revenue stays yours, and you get your own branded page instead of a profile in a marketplace: your clients stay your clients."],
     ["Can I try it first?", "Yes. Every new salon starts with a 14-day free trial. Set up your page, take bookings and then decide whether to continue with Starter or Professional."],
     ["Can my staff manage their own agenda?", "Yes. With the Professional plan, each staff member gets their own login. They only see their own appointments and manage their own services and hours."],
     ["Do clients get reminders, and how do they cancel?", "Yes, automatically: a confirmation when they book, a reminder 24 hours before, and a follow-up after the visit asking for a review. Cancelling goes through the link in their confirmation email; you set the cancellation deadline."],
-    ["Can I bring my clients from another system?", "Yes. Got a CSV export from your current platform? Import it directly in your dashboard under Customers → Import. Vellu auto-detects common column names (name, email, phone, notes). Stuck? Send it to Contact and we'll help you for free."],
+    ["Can I bring my clients from another system?", "Yes. Got a CSV export from your current platform? Import it directly in your dashboard under Customers > Import. Vellu auto-detects common column names (name, email, phone, notes). Stuck? Send it to Contact and we'll help you for free."],
   ];
 
   const plans = [
-    { name: "Starter", price: 19, popular: false, features: { nl: ["Online boekingen", "Email bevestigingen", "24u herinneringen", "Reviews systeem", "Eigen branding & logo", "Tot 3 medewerkers"], en: ["Online bookings", "Email confirmations", "24h reminders", "Reviews system", "Custom branding & logo", "Up to 3 staff members"] } },
-    { name: "Professional", price: 35, popular: true, features: { nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Team accounts (eigen login)", "Producten verkopen", "Analytics dashboard", "Kortingscodes", "Nieuwsbrief & klant-export", "Meerdere locaties", "Prioriteit support"], en: ["Everything in Starter +", "Unlimited staff members", "Team accounts (own login)", "Sell products", "Analytics dashboard", "Discount codes", "Newsletter & client export", "Multiple locations", "Priority support"] } },
+    { name: "Starter", price: 19, popular: false, features: { nl: ["Online boekingen", "Email bevestigingen", "24u herinneringen", "Reviews systeem", "Eigen branding & logo", "Tot 3 medewerkers"], en: ["Online bookings", "Email confirmations", "24h reminders", "Reviews system", "Custom branding & logo", "Up to 3 staff members"], es: ["Reservas online", "Confirmaciones por correo", "Recordatorios 24 h antes", "Sistema de reseñas", "Tu propia marca y logo", "Hasta 3 miembros del equipo"] } },
+    { name: "Professional", price: 35, popular: true, features: { nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Team accounts (eigen login)", "Producten verkopen", "Analytics dashboard", "Kortingscodes", "Nieuwsbrief & klant-export", "Meerdere locaties", "Prioriteit support"], en: ["Everything in Starter +", "Unlimited staff members", "Team accounts (own login)", "Sell products", "Analytics dashboard", "Discount codes", "Newsletter & client export", "Multiple locations", "Priority support"], es: ["Todo lo de Starter +", "Miembros del equipo ilimitados", "Cuentas de equipo (acceso propio)", "Venta de productos", "Panel de analíticas", "Códigos de descuento", "Boletín y exportación de clientes", "Varias ubicaciones", "Soporte prioritario"] } },
   ];
 
   const maxW = 1080;
@@ -366,6 +379,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           @media (min-width: 720px) { .at-calc-grid { grid-template-columns: 1fr 1fr; gap: 18px; } }
           .at-nav-find { display: none; }
           @media (min-width: 768px) { .at-nav-find { display: inline; } }
+          .at-nav-signin-icon { display: none; }
+          @media (max-width: 359px) {
+            .at-nav-signin { padding: 8px 10px !important; }
+            .at-nav-signin-text { display: none; }
+            .at-nav-signin-icon { display: inline-flex; align-items: center; }
+          }
           .at-footer-inner { padding-bottom: calc(30px + env(safe-area-inset-bottom, 0px)); }
           @media (max-width: 768px) {
             .at-finale { min-height: calc(100dvh - 64px); display: flex; flex-direction: column; }
@@ -383,8 +402,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               : lang === "es" ? <>Invitación de <strong style={{ fontWeight: 600 }}>{invite.name}</strong>: ambos recibís {refReward} gratis{refUntil ? ` (promoción hasta el ${refUntil})` : ""}.</>
               : <>Invited by <strong style={{ fontWeight: 600 }}>{invite.name}</strong>: you both get {refReward} free{refUntil ? ` (offer until ${refUntil})` : ""}.</>}
             {" "}
-            <button onClick={() => ownerStart(true)} data-invite-start style={{ background: "none", border: "none", cursor: "pointer", color: BONE, fontFamily: "'Jost',sans-serif", fontSize: 12.5, fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3, padding: "0 2px" }}>
-              {lang === "nl" ? "Maak je pagina" : lang === "es" ? "Crea tu página" : "Create your page"} →
+            <button onClick={() => ownerStart()} data-invite-start style={{ background: "none", border: "none", cursor: "pointer", color: BONE, fontFamily: "'Jost',sans-serif", fontSize: 12.5, fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3, padding: "0 2px" }}>
+              {lang === "nl" ? "Maak je pagina" : lang === "es" ? "Crea tu página" : "Create your page"} <ArrowIcon size={12} />
             </button>
           </div>
         )}
@@ -405,9 +424,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 ))}
               </div>
               {/* Inloggen in dezelfde espresso-vulling als de trialknop
-                  (Faisal 15-09); width:auto omdat .btn-primary 100% breed is. */}
-              <button className="btn-primary" data-nav-signin style={{ width: "auto", fontSize: 10, padding: "9px 18px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner")}>
-                {t.signIn}
+                  (Faisal 15-09); width:auto omdat .btn-primary 100% breed is.
+                  Onder 360px alleen een persoon-icoon: in het Spaans
+                  ("INICIAR SESIÓN") liep de balk anders over de rand (L3-20). */}
+              <button className="btn-primary at-nav-signin" data-nav-signin aria-label={t.signIn} style={{ width: "auto", fontSize: 10, padding: "9px 18px", whiteSpace: "nowrap" }} onClick={() => navigate("/owner")}>
+                <span className="at-nav-signin-text">{t.signIn}</span>
+                <span className="at-nav-signin-icon" aria-hidden="true"><NavIcon name="user" size={14} color="currentColor" /></span>
               </button>
               {/* Géén "Maak je pagina"-knop in de balk: Faisal (15-09) wil die
                   onder "In 3 stappen live", zie sectie 03. */}
@@ -437,12 +459,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               </HeroEnter>
               <HeroEnter ready={heroReady} delay={700}>
                 <div className="at-ctas">
-                  <button className="btn-primary" style={{ padding: "17px 38px", fontSize: 11 }} onClick={() => ownerStart(false)}>
+                  <button className="btn-primary" style={{ padding: "17px 38px", fontSize: 11 }} onClick={() => ownerStart()}>
                     {t.startFree}
                   </button>
                   <button onClick={() => scrollToSection("how-it-works")} data-hero-how
                     style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: INK, borderBottom: `1px solid ${EARTH}`, paddingBottom: 4 }}>
-                    {t.howItWork} ↓
+                    {t.howItWork} <ArrowIcon dir="down" size={11} />
                   </button>
                 </div>
               </HeroEnter>
@@ -479,7 +501,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 <div style={{ textAlign: "center", marginTop: 2 }}>
                   <button onClick={() => navigate("/bloomstudio")}
                     style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: INK, borderBottom: `1px solid ${EARTH}`, padding: "6px 2px" }}>
-                    {lang === "nl" ? "Bekijk een live voorbeeldpagina →" : lang === "es" ? "Ver una página de ejemplo en vivo →" : "See a live example page →"}
+                    {lang === "nl" ? "Bekijk een live voorbeeldpagina" : lang === "es" ? "Ver una página de ejemplo en vivo" : "See a live example page"} <ArrowIcon size={11} />
                   </button>
                 </div>
               </ParallaxLayer>
@@ -547,8 +569,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               want .btn-primary is standaard 100% breed. */}
           <Reveal delay={steps.length * 110}>
             <div style={{ display: "flex", justifyContent: "center", marginTop: "clamp(28px, 4vw, 40px)" }}>
-              <button className="btn-primary" data-create-page style={{ width: "auto", padding: "17px 40px", fontSize: 11 }} onClick={() => ownerStart(true)}>
-                {t.createPageNav} →
+              <button className="btn-primary" data-create-page style={{ width: "auto", padding: "17px 40px", fontSize: 11 }} onClick={() => ownerStart()}>
+                {t.createPageNav} <ArrowIcon size={12} />
               </button>
             </div>
           </Reveal>
@@ -630,13 +652,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                     )}
                     <div style={{ height: 1, background: dark ? `${BONE}22` : PUTTY, margin: "22px 0" }} />
                     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 26 }}>
-                      {(lang === "nl" ? plan.features.nl : plan.features.en).map((f, j) => (
+                      {(lang === "nl" ? plan.features.nl : lang === "es" ? plan.features.es : plan.features.en).map((f, j) => (
                         <div key={j} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: dark ? `${BONE}dd` : P.textSub }}>
                           <NavIcon name="check" size={13} color={dark ? MUSHROOM : EARTH} />{f}
                         </div>
                       ))}
                     </div>
-                    <button onClick={() => ownerStart(false)}
+                    <button onClick={() => ownerStart()}
                       style={{ width: "100%", padding: "15px 20px", borderRadius: R, border: `1px solid ${dark ? PUTTY : INK}`, background: dark ? PUTTY : "transparent", color: INK, fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer" }}>
                       {t.getStarted}
                     </button>
@@ -648,6 +670,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ fontSize: 11.5, color: ESPRESSO_DEEP, marginTop: 16, lineHeight: 1.6, maxWidth: 560, marginLeft: "auto", marginRight: "auto", textAlign: "center" }}>
             {lang === "nl"
               ? "Alle prijzen in euro's, incl. btw. Betaal je van buiten de eurozone? Je kaart rekent automatisch om."
+              : lang === "es"
+              ? "Todos los precios en euros, IVA incluido. ¿Pagas desde fuera de la zona euro? Tu tarjeta hace la conversión automáticamente."
               : "All prices in euros, incl. VAT. Paying from outside the eurozone? Your card converts automatically."}
           </div>
         </div>
@@ -717,13 +741,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 pagina staan. */}
             <Reveal delay={200}>
               <div className="at-ctas" style={{ justifyContent: "center", gap: 22 }} data-finale-ctas>
-                <button onClick={() => ownerStart(false)}
+                <button onClick={() => ownerStart()}
                   style={{ padding: "18px 46px", borderRadius: R, border: "none", background: BONE, color: INK, fontFamily: "'Jost',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer", boxShadow: "0 18px 44px -18px rgba(0,0,0,0.55)" }}>
                   {t.startFree}
                 </button>
                 <button onClick={() => navigate("/bloomstudio")} data-finale-example
                   style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: PUTTY, borderBottom: `1px solid ${MUSHROOM}88`, padding: "6px 2px" }}>
-                  {lang === "nl" ? "Bekijk een live voorbeeldpagina →" : lang === "es" ? "Ver una página de ejemplo en vivo →" : "See a live example page →"}
+                  {lang === "nl" ? "Bekijk een live voorbeeldpagina" : lang === "es" ? "Ver una página de ejemplo en vivo" : "See a live example page"} <ArrowIcon size={11} />
                 </button>
               </div>
             </Reveal>
@@ -782,7 +806,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* Verdwijnt zodra de finale-CTA in beeld is: die heeft dezelfde knop,
             en anders hangt hij over de voetregels (Faisal 16-09). */}
-        <StickyStartPill onClick={() => ownerStart(false)} label={t.startFree} bg={INK} fg={BONE} radius={R} hideWhenInView="[data-finale-ctas]" />
+        <StickyStartPill onClick={() => ownerStart()} label={t.startFree} bg={INK} fg={BONE} radius={R} hideWhenInView="[data-finale-ctas]" />
         <SupportChat
           lang={lang}
           c={P}
@@ -792,6 +816,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           launcherBottom={20}
           greeting={lang === "nl"
             ? "Hoi! Vragen over Vellu? Ik help je graag — wat het kost, hoe het werkt, of het bij jouw salon past. Vraag maar raak. Kom je er met mij niet uit? Mail Mirah Ventures via mirahventures@vellu.cc."
+            : lang === "es"
+            ? "¡Hola! ¿Preguntas sobre Vellu? Te ayudo con gusto: cuánto cuesta, cómo funciona o si encaja con tu salón. Pregunta lo que quieras. ¿No encuentras la respuesta conmigo? Escribe a Mirah Ventures en mirahventures@vellu.cc."
             : "Hi! Questions about Vellu? Happy to help — pricing, how it works, or whether it fits your salon. Ask away. Can't get the answer from me? Email Mirah Ventures at mirahventures@vellu.cc."}
           subtitle={lang === "nl" ? "Vragen over Vellu?" : lang === "es" ? "¿Preguntas sobre Vellu?" : "Questions about Vellu?"}
         />

@@ -43,6 +43,9 @@ export default function PushSettingsCard({ userId, t, accent, c, toast, SL }) {
   const [busy, setBusy] = useState(false);
   const [count, setCount] = useState(null);
   const [endpoint, setEndpoint] = useState(null);
+  // Het abonnement in deze browser hoort (nog) bij een ánder account: dan
+  // staat de kaart op "uit", en zegt "Aanzetten" dat oude abonnement eerst op.
+  const [foreignSub, setForeignSub] = useState(false);
 
   const refreshCount = async () => {
     if (!userId) return;
@@ -61,13 +64,27 @@ export default function PushSettingsCard({ userId, t, accent, c, toast, SL }) {
         if (cancelled) return;
         if (sub) {
           const j = sub.toJSON();
-          setEndpoint(j.endpoint);
           // Rij zeker stellen (bijv. na een DB-opruiming) — onschuldig als hij al bestaat.
           await supabase.from("push_subscriptions").upsert(
             { user_id: userId, endpoint: j.endpoint, p256dh_key: j.keys?.p256dh, auth_key: j.keys?.auth, device_label: deviceLabel(), last_used_at: null },
             { onConflict: "endpoint", ignoreDuplicates: true },
           );
-          setState("on");
+          // Is het endpoint ook echt van DIT account? Een eerdere gebruiker op
+          // dit apparaat die niet netjes uitlogde, houdt de rij (de upsert
+          // hierboven slaat een bestaande rij over); dan gaan de pushes nog
+          // naar die ander en is "aan" voor deze gebruiker onwaar (O8-21).
+          // RLS laat alleen eigen rijen zien, dus geen rij = niet van ons.
+          // Lukt de controle zelf niet (netwerk), dan het oude gedrag: "aan".
+          const { data: mine, error: mineErr } = await supabase.from("push_subscriptions").select("id").eq("endpoint", j.endpoint).eq("user_id", userId).limit(1);
+          if (cancelled) return;
+          if (mineErr || (mine && mine.length > 0)) {
+            setEndpoint(j.endpoint);
+            setForeignSub(false);
+            setState("on");
+          } else {
+            setForeignSub(true);
+            setState("off");
+          }
         } else {
           setState("off");
         }
@@ -84,6 +101,14 @@ export default function PushSettingsCard({ userId, t, accent, c, toast, SL }) {
       const perm = await Notification.requestPermission();
       if (perm !== "granted") { setState(perm === "denied" ? "denied" : "off"); return; }
       const reg = await navigator.serviceWorker.ready;
+      // Abonnement van een ander account op dit apparaat eerst opzeggen:
+      // subscribe() gaf anders hetzelfde endpoint terug, en die rij kunnen we
+      // niet overnemen (RLS), dus de pushes bleven naar de ander gaan.
+      if (foreignSub) {
+        const old = await reg.pushManager.getSubscription();
+        if (old) await old.unsubscribe().catch(() => {});
+        setForeignSub(false);
+      }
       const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
       const j = sub.toJSON();
       const { error } = await supabase.from("push_subscriptions").upsert(

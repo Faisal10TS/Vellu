@@ -334,7 +334,7 @@ export default function AdminDashboard({ onLogout }) {
               <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "18px 20px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>Most recent signups</div>
-                  <button style={{ fontSize: 11, color: accent, background: "none", border: "none", cursor: "pointer" }} onClick={() => setTab("signups")}>See all →</button>
+                  <button style={{ fontSize: 11, color: accent, background: "none", border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => setTab("signups")}>See all <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg></button>
                 </div>
                 {recent.slice(0, 5).map(s => (
                   <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${c.border}`, fontSize: 13 }}>
@@ -465,7 +465,7 @@ export default function AdminDashboard({ onLogout }) {
                         <td style={{ padding: "12px 14px", color: accent, fontFamily: "'Cormorant Garamond',serif", fontSize: 15 }}>{fmtEur(s.total_revenue)}</td>
                         <td style={{ padding: "12px 14px", color: c.textMuted, fontSize: 11 }}>{relTime(s.last_activity)}</td>
                         <td style={{ padding: "12px 14px", color: c.textMuted, fontSize: 11 }}>{fmtDate(s.created_at)}</td>
-                        <td style={{ padding: "12px 14px", color: s.google_connected ? c.success : c.textMuted, fontSize: 14 }}>{s.google_connected ? "✓" : "—"}</td>
+                        <td style={{ padding: "12px 14px", color: s.google_connected ? c.success : c.textMuted, fontSize: 14 }}>{s.google_connected ? <span role="img" aria-label="connected" style={{ display: "inline-flex" }}><NavIcon name="check" size={14} color="currentColor" /></span> : "—"}</td>
                       </tr>
                     ))}
                     {visibleSalons.length === 0 && (
