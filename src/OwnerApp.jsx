@@ -12,7 +12,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
   Skeleton, DashboardSkeleton,
-  compressImage, sendEmails, sendSMS, createCancellationToken, ACCENT,
+  compressImage, uploadErrorText, sendEmails, sendSMS, createCancellationToken, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg,
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
@@ -6920,7 +6920,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const compressed = await compressImage(file, 800);
       const fileName = `${salonData.owner_id}/product_${Date.now()}.${compressed.name.split(".").pop()}`;
       const { error } = await supabase.storage.from("business-images").upload(fileName, compressed, { cacheControl: "31536000" });
-      if (error) { toast.show(t.somethingWrong, "error"); return; }
+      if (error) { console.error("product photo upload:", error); toast.show(uploadErrorText(lang, error), "error"); return; }
       const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
       await supabase.from("products").update({ photo_url: publicUrl }).eq("id", productId);
       update(d => { d.products = d.products.map(x => x.id === productId ? { ...x, photo_url: publicUrl } : x); return d; });
@@ -8023,10 +8023,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     
     if (uploadError) {
       console.error("Upload error:", uploadError);
+      // Tot 05-10-2026 zonder melding: de spinner verdween en er kwam geen foto.
+      toast.show(uploadErrorText(lang, uploadError), "error");
       setPhotoUploading(null);
       return;
     }
-    
+
     // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from("service-photos")
@@ -13969,7 +13971,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           // Zonder else-tak verdween een mislukte upload geruisloos:
                           // geen toast, geen console-regel, en de eigenaar zag
                           // gewoon zijn oude logo staan zonder te weten waarom.
-                          if (error) { console.error("logo upload:", error); toast.show(t.somethingWrong, "error"); return; }
+                          if (error) { console.error("logo upload:", error); toast.show(uploadErrorText(lang, error), "error"); return; }
                           const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
                           update(d => { d.logo_url = publicUrl; return d; });
                           // Pas na de grote Opslaan-knop staat het logo echt op de
@@ -14103,7 +14105,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         const { error } = await supabase.storage.from("business-images").upload(fileName, uploadFile, { cacheControl: "31536000" });
                         // Zelfde valkuil als bij het logo: zonder foutafhandeling
                         // verdween een mislukte upload geruisloos.
-                        if (error) { console.error("cover upload:", error); toast.show(t.somethingWrong, "error"); return; }
+                        if (error) { console.error("cover upload:", error); toast.show(uploadErrorText(lang, error), "error"); return; }
                         const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
                         update(d => { d.cover_image_url = publicUrl; return d; });
                         // Het beeld staat pas op de boekingspagina na de grote
@@ -16474,11 +16476,10 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                                 const uploadFile = await compressImage(file, 512);
                                 const fileName = `${salonData.owner_id}/staff_${m.id}_${Date.now()}.${uploadFile.name.split(".").pop()}`;
                                 const { error } = await supabase.storage.from("business-images").upload(fileName, uploadFile, { cacheControl: "31536000" });
-                                if (!error) {
-                                  const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
-                                  await supabase.from("staff_members").update({ avatar_url: publicUrl }).eq("id", m.id);
-                                  update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, avatar_url: publicUrl} : s); return d; });
-                                }
+                                if (error) { console.error("staff photo upload:", error); toast.show(uploadErrorText(lang, error), "error"); return; }
+                                const { data: { publicUrl } } = supabase.storage.from("business-images").getPublicUrl(fileName);
+                                await supabase.from("staff_members").update({ avatar_url: publicUrl }).eq("id", m.id);
+                                update(d => { d.staff = d.staff.map(s => s.id === m.id ? {...s, avatar_url: publicUrl} : s); return d; });
                               }} />
                             </label>
                           ) : (
@@ -17449,7 +17450,13 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 )}
               </div>
 
-              {/* Google Calendar Sync */}
+              {/* Google Calendar Sync. Koppelen staat sinds 05-10-2026 uit: de
+                  edge function google-auth hing een Google-account aan een salon
+                  zonder te controleren wie dat vroeg (zie die functie). Geen enkele
+                  salon had het aan, dus de kaart verschijnt alleen nog als een salon
+                  toch gekoppeld is; anders is "Agenda in je telefoon" hieronder de
+                  weg, en die werkt ook met Google Agenda. */}
+              {salonData.google_calendar_connected && (
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.googleCalendar}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.googleCalendarDesc}</div>
@@ -17466,20 +17473,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         update(d => { d.google_calendar_connected = false; return d; });
                       }}>{t.googleCalendarDisconnect}</button>
                   </div>
-                ) : (
-                  <button className="btn-ghost" style={{ width: "100%", fontSize: 12, borderColor: `${accent}33`, color: accent }}
-                    onClick={async () => {
-                      // Koppelen stuurt de eigenaar hard weg naar Google; alles
-                      // wat nog niet via de grote Opslaan-knop is bewaard, is
-                      // dan weg. Zelfde toon als bij "Link bijwerken".
-                      if (!(await confirmLeaveSettings("Google"))) return;
-                      const { data } = await supabase.functions.invoke("google-auth", { body: { action: "get_url", owner_id: salonData.owner_id } });
-                      if (data?.url) window.location.href = data.url;
-                    }}>
-                    <NavIcon name="calendar" size={14} color={accent} /> {t.googleCalendarConnect}
-                  </button>
-                )}
+                ) : null}
               </div>
+              )}
 
               {/* Phone-calendar subscription (iCal feed) — a read-only,
                   auto-refreshing subscription to the salon agenda that works

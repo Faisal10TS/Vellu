@@ -390,6 +390,23 @@ async function compressImage(file, maxDim = 1600, { quality = 0.8 } = {}) {
   }
 }
 
+// Melding bij een mislukte upload naar Storage. Sinds 05-10-2026 nemen de
+// buckets business-images en service-photos alleen foto's aan (jpeg, png, webp,
+// avif, gif, heic, heif) tot 10 MB. Een SVG-logo, of een HEIC zonder bestandstype
+// (Chrome op Windows), krijgt dan 415; "Er ging iets mis" zei niet wat wél kan.
+function uploadErrorText(lang, error) {
+  const code = String(error?.statusCode ?? error?.status ?? "");
+  const msg = String(error?.message || "").toLowerCase();
+  const pick = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  if (code === "415" || msg.includes("mime type")) {
+    return pick("Dit bestandstype kan niet. Kies een foto als JPG of PNG.", "This file type is not supported. Choose a JPG or PNG photo.", "Este tipo de archivo no es compatible. Elige una foto en JPG o PNG.");
+  }
+  if (code === "413" || msg.includes("maximum allowed size") || msg.includes("too large")) {
+    return pick("Deze foto is te groot (maximaal 10 MB).", "This photo is too large (10 MB at most).", "Esta foto es demasiado grande (máximo 10 MB).");
+  }
+  return pick("Uploaden mislukt. Probeer het opnieuw.", "Upload failed. Please try again.", "No se pudo subir. Inténtalo de nuevo.");
+}
+
 // Steekproef op het alpha-kanaal (elke ~7e pixel): alleen een PNG met échte
 // transparantie verdient het om PNG te blijven — een JPEG zou de doorzichtige
 // achtergrond zwart maken. Bij twijfel (getImageData faalt) niets kapotmaken.
@@ -3589,7 +3606,7 @@ export {
   useToast, ToastContainer,
   useConfirm, ConfirmModal,
   useFocusTrap, useSEO, useDashboardScrollbars,
-  compressImage, sendEmails, sendSMS, createCancellationToken, VAPID_PUBLIC_KEY,
+  compressImage, uploadErrorText, sendEmails, sendSMS, createCancellationToken, VAPID_PUBLIC_KEY,
   AT, AT_COLORS, AT_RADIUS, AtelierSkin,
   rememberRef, storedRef, useReferralPromo, rewardLabel, promoEndLabel,
   // Tijdzone-helpers: geëxporteerd zodat andere schermen die met salon-tijd

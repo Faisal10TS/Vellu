@@ -4,7 +4,7 @@ import { supabase, supabaseUrl } from "./supabase.js";
 import {
   useTheme, useToast, ToastContainer, useConfirm, ConfirmModal,
   Skeleton, DashboardSkeleton,
-  compressImage, sendEmails, createCancellationToken, ACCENT,
+  compressImage, uploadErrorText, sendEmails, createCancellationToken, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
@@ -742,7 +742,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     const uploadFile = await compressImage(file, 1400);
     const fileName = `${salonProfile.id}/${serviceId}/${Date.now()}_${uploadFile.name}`;
     const { error: uploadError } = await supabase.storage.from("service-photos").upload(fileName, uploadFile, { cacheControl: "31536000", upsert: false });
-    if (uploadError) { console.error("Upload error:", uploadError); setStaffPhotoUploading(null); return; }
+    if (uploadError) { console.error("Upload error:", uploadError); toast.show(uploadErrorText(lang, uploadError), "error"); setStaffPhotoUploading(null); return; }
     const { data: { publicUrl } } = supabase.storage.from("service-photos").getPublicUrl(fileName);
     const { data: photoData, error: dbError } = await supabase.from("service_photos").insert({
       service_id: serviceId, owner_id: salonProfile.id, storage_path: publicUrl
