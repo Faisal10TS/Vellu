@@ -8,10 +8,12 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { cashbookData, cashbookFilename, cashFlowOf } from "./reportData.js";
+import { cashbookData, cashbookFilename, cashFlowOf, pdfSafe, pdfSafeCells, companyNumberLabel } from "./reportData.js";
 
 const ACCENT = [201, 169, 110];
-const s = (v) => (v === null || v === undefined ? "" : String(v));
+// Door pdfSafe: een minteken (U+2212) in een kassaomschrijving of een naam met
+// Ş maakt anders de hele cel onleesbaar (jsPDF valt dan terug op 2-byte-tekst).
+const s = (v) => (v === null || v === undefined ? "" : pdfSafe(String(v)));
 const MONTHS = {
   nl: ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"],
   en: ["January","February","March","April","May","June","July","August","September","October","November","December"],
@@ -48,7 +50,7 @@ export function generateCashbookPDF({
   doc.setFont("helvetica", "bold"); doc.setFontSize(22); doc.setTextColor(26, 23, 20);
   doc.text(T("Kasboek", "Cash book", "Libro de caja"), margin, 60);
   doc.setFont("helvetica", "normal"); doc.setFontSize(11); doc.setTextColor(120, 120, 120);
-  doc.text(range.label || `${fmtDate(range.from, lang)} — ${fmtDate(range.to, lang)}`, margin, 78);
+  doc.text(s(range.label || `${fmtDate(range.from, lang)} — ${fmtDate(range.to, lang)}`), margin, 78);
   if (logo && logo.dataUrl) {
     try {
       const maxW = 120, maxH = 40;
@@ -66,7 +68,7 @@ export function generateCashbookPDF({
   doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(26, 23, 20);
   doc.text(s(salon.business_name || salon.name), pageW - margin, y, { align: "right" });
   doc.setFont("helvetica", "normal"); doc.setTextColor(100, 100, 100); doc.setFontSize(9);
-  for (const line of [s(salon.address), [s(salon.postcode), s(salon.city)].filter(Boolean).join(" "), salon.kvk_number ? `KVK: ${s(salon.kvk_number)}` : "", s(salon.salon_email)].filter(Boolean)) {
+  for (const line of [s(salon.address), [s(salon.postcode), s(salon.city)].filter(Boolean).join(" "), salon.kvk_number ? `${companyNumberLabel(salon, lang)}: ${s(salon.kvk_number)}` : "", s(salon.salon_email)].filter(Boolean)) {
     y += 12; doc.text(line, pageW - margin, y, { align: "right" });
   }
 
@@ -102,6 +104,7 @@ export function generateCashbookPDF({
     bodyStyles: { fontSize: 7.5, textColor: [60, 60, 60] },
     footStyles: { fillColor: [245, 243, 239], textColor: [26, 23, 20], fontStyle: "bold", fontSize: 8 },
     margin: { left: margin, right: margin, bottom: 46 },
+    didParseCell: pdfSafeCells,
   };
   const right = (n) => ({ halign: "right" });
 
@@ -146,6 +149,8 @@ export function generateCashbookPDF({
 
   // ── Voettekst op elke pagina ────────────────────────────────────────
   const pages = doc.internal.getNumberOfPages();
+  // "Bedragen in XCG." en niet "Bedragen in XCG ." (symbool met spatie).
+  const currencySymbolText = s(currencySymbol).trim();
   for (let p = 1; p <= pages; p++) {
     doc.setPage(p);
     doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(160, 160, 160);
@@ -153,9 +158,9 @@ export function generateCashbookPDF({
     // in de standaardfont, jsPDF schakelt dan naar 2-byte-tekst en de hele regel
     // wordt wijd gespatieerd met een verkeerd glyph. Twee regels hoog, boven
     // de regel "Gegenereerd op".
-    doc.text(T(`Bedragen in ${currencySymbol}. Verwacht in kas = beginsaldo + contant ontvangen - wisselgeld + stortingen - opnames; kasverschil = geteld - verwacht op het moment van tellen.`,
-      `Amounts in ${currencySymbol}. Expected = opening float + cash received - change + deposits - withdrawals; difference = counted - expected at the time of counting.`,
-      `Importes en ${currencySymbol}. Esperado = saldo inicial + efectivo recibido - cambio + depósitos - retiradas; diferencia = contado - esperado en el momento del recuento.`), margin, pageH - 44, { maxWidth: pageW - margin * 2 });
+    doc.text(T(`Bedragen in ${currencySymbolText}. Verwacht in kas = beginsaldo + contant ontvangen - wisselgeld + stortingen - opnames; kasverschil = geteld - verwacht op het moment van tellen.`,
+      `Amounts in ${currencySymbolText}. Expected = opening float + cash received - change + deposits - withdrawals; difference = counted - expected at the time of counting.`,
+      `Importes en ${currencySymbolText}. Esperado = saldo inicial + efectivo recibido - cambio + depósitos - retiradas; diferencia = contado - esperado en el momento del recuento.`), margin, pageH - 44, { maxWidth: pageW - margin * 2 });
     doc.text(`${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")} · vellu.cc`, margin, pageH - 20);
     doc.text(`${p} / ${pages}`, pageW - margin, pageH - 20, { align: "right" });
   }

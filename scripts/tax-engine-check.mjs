@@ -7,7 +7,8 @@
 // logica in src/taxEngine.js. Belastingtarieven wijzigen per 1 januari, en een
 // verkeerd bedrag op een bon is geen bug die je later even rechtzet.
 
-import { computeTax, linesFromSale, buildSnapshot, taxForSale } from "../src/taxEngine.js";
+import { computeTax, linesFromSale, buildSnapshot, taxForSale, cfgFromSnapshot } from "../src/taxEngine.js";
+import { revenueReportData, productReportData, cashFlowOf, cashbookData, paymentsAsCashRows, payLabel, pdfSafe, untaxedNote, revenueReportFilename, cashbookFilename, companyNumberLabel } from "../src/reportData.js";
 import { build } from "esbuild";
 import fs from "fs";
 
@@ -63,9 +64,10 @@ check("valuta CW is XCG (ISO-code, niet Cg)", currencyForCountry("CW").symbol.tr
 check("valuta CW code", currencyForCountry("CW").code, "XCG");
 // Bedragen: overal een komma als decimaalteken (Faisal 24-09-2026), elke munt.
 check("XCG bedrag in de app met komma", fmtAmt(currencyForCountry("CW").symbol, 45), "XCG 45,00");
-check("bedrag in de app zonder duizendtalpunt", fmtAmt("XCG ", 1234.5), "XCG 1234,50");
+// Duizendtallen met een punt sinds 28-09-2026 ("$80.458,53", shared.jsx fmtAmt).
+check("bedrag in de app met duizendtalpunt", fmtAmt("XCG ", 1234.5), "XCG 1.234,50");
 check("euro bedrag met komma", fmtAmt("€", 45), "€45,00");
-check("dollar bedrag met komma (Bonaire)", fmtAmt(currencyForCountry("BQ").symbol, 1234.5), "$1234,50");
+check("dollar bedrag met komma (Bonaire)", fmtAmt(currencyForCountry("BQ").symbol, 1234.5), "$1.234,50");
 check("florin bedrag met komma", fmtAmt(currencyForCountry("AW").symbol, 45), "Afl. 45,00");
 check("negatief bedrag", fmtAmt("€", -5), "€-5,00");
 check("XCG in WhatsApp-tekst/PDF: komma en duizendtalpunt", fmtMoney(1234.5, "CW"), "XCG 1.234,50");
@@ -168,6 +170,102 @@ console.log("\n== snapshot bevriest de berekening ==");
   check("nog steeds 6% -> 2.83", na.taxTotal, 2.83);
   const zonder = taxForSale({ service_price: 50, products: [] }, resolveTax({ ...salonBON, btw_rate: 21 }));
   check("zonder snapshot rekent met vandaag", zonder.taxTotal, 8.68);
+}
+
+console.log("\n== snapshot bewaart aantallen (bon: 2 x Nagelriemolie) ==");
+{
+  const items = [{ id: "p1", name: "Nagelriemolie", price: 4, qty: 2 }];
+  const sale = { service_price: 8, products: items };
+  const snap = buildSnapshot(computeTax(linesFromSale(sale), resolveTax(salonNL)), resolveTax(salonNL), {});
+  check("qty in snapshot", snap.lines[0].qty, 2);
+  check("qty terug via taxForSale", taxForSale({ ...sale, tax_snapshot: snap }, resolveTax(salonNL)).lines[0].qty, 2);
+  // Oude snapshot zonder qty: aantal uit de products-array.
+  const oud = { ...snap, lines: snap.lines.map(({ qty, ...l }) => l) };
+  check("oude snapshot: qty uit products", taxForSale({ ...sale, tax_snapshot: oud }, resolveTax(salonNL)).lines[0].qty, 2);
+}
+
+console.log("\n== rapporten rekenen met de bevroren instellingen per rij ==");
+{
+  // NL-salon zat tot 1 september in de KOR (niet plichtig) en is nu plichtig.
+  const kor = resolveTax({ ...salonNL, tax_registered: false });
+  const nu = resolveTax(salonNL);
+  const bevroren = (row, cfg) => ({ ...row, tax_snapshot: buildSnapshot(computeTax(linesFromSale(row), cfg), cfg, {}) });
+  const jan = bevroren({ date: "2026-01-10", time: "10:00", service_price: 121, products: [] }, kor);
+  const okt = bevroren({ date: "2026-10-01", time: "10:00", service_price: 121, products: [] }, nu);
+  const oudZonderSnap = { date: "2026-10-02", time: "10:00", service_price: 121, products: [] };
+  const R = revenueReportData({ appointments: [jan, okt, oudZonderSnap], cfg: nu });
+  check("KOR-rij telt geen BTW: alleen 2 x 121 belast", R.byRate[0].gross, 242);
+  check("BTW 42,00", R.totalBtw, 42);
+  check("omzet 363", R.totalGross, 363);
+  check("onbelast 121 (KOR-periode)", R.untaxedGross, 121);
+  check("regel KOR-rij zonder BTW", R.rows[0].tax, 0);
+  // Omgekeerd: salon nu KOR, oude rij was plichtig -> BTW blijft zichtbaar.
+  const R2 = revenueReportData({ appointments: [okt], cfg: kor });
+  check("oude plichtige rij toont BTW ook als salon nu KOR is", R2.showTaxRows, true);
+  check("BTW 21 uit de bevroren rij", R2.totalBtw, 21);
+  // Rapport van één stylist: haar aandeel (lager bedrag) met de bevroren cfg.
+  const deel = { ...jan, service_price: 60 };
+  check("aandeel stylist volgt bevroren KOR", revenueReportData({ appointments: [deel], cfg: nu }).totalBtw, 0);
+  check("cfgFromSnapshot zonder snapshot = cfg", cfgFromSnapshot(oudZonderSnap, nu).serviceRate, 21);
+  // Kassaverkopen apart geteld.
+  const R3 = revenueReportData({ appointments: [okt, { ...oudZonderSnap, is_sale: true }], cfg: nu });
+  check("afspraken 1", R3.apptCount, 1);
+  check("kassaverkopen 1", R3.saleCount, 1);
+}
+
+console.log("\n== productrapport: onbelast-toelichting en betaalwijze ==");
+{
+  const giftNL = [{ date: "2026-10-01", time: "10:00", service_price: 25, is_sale: true, payment_method: null, products: [{ id: "giftcard", kind: "voucher_sale", name: "Kadobon KB-1", price: 25, qty: 1 }, { id: "p1", name: "Shampoo", price: 0, qty: 1 }] },
+    { date: "2026-10-01", time: "11:00", service_price: 20, is_sale: true, payment_method: "prepaid", products: [{ id: "p2", name: "Wax", price: 20, qty: 1 }] }];
+  const P = productReportData({ appointments: giftNL, cfg: resolveTax(salonNL), lang: "nl" });
+  check("NL: onbelast is kadobonverkoop", P.untaxedWhy.giftCards && !P.untaxedWhy.resale, true);
+  check("NL: toelichting noemt kadobonnen", /kadobonnen/.test(untaxedNote(P, "nl")) && !/doorverkoop/.test(untaxedNote(P, "nl")), true);
+  check("open post heet Later / factuur", P.lines[0].pay, "Later / factuur");
+  check("vooruitbetaald heet niet 'In de salon'", P.lines[1].pay, "Vooruitbetaald");
+  const PB = productReportData({ appointments: [giftNL[1]], cfg: resolveTax(salonBON), lang: "en" });
+  check("BON: onbelast is doorverkoop", PB.untaxedWhy.resale, true);
+  check("payLabel null", payLabel(null, "es"), "Después / factura");
+  check("payLabel prepaid en", payLabel("prepaid", "en"), "Paid in advance");
+}
+
+console.log("\n== kasboek: alleen het contante deel ==");
+{
+  // Vooruitbetaald 45 online, rest 30 contant: afspraak blijft "prepaid",
+  // het restant is een client_payments-rij.
+  const appt = { id: "a1", date: "2026-10-05", time: "16:00", status: "completed", payment_method: "prepaid", service_price: 75, amount_paid: 75, paid_at: "2026-10-05T14:00:00Z" };
+  const pay = paymentsAsCashRows([{ id: "p1", appointment_id: "a1", method: "cash", amount: 30, paid_on: "2026-10-05", created_at: "2026-10-05T14:05:00Z" }]);
+  const sale = { id: "s1", date: "2026-10-05", time: "10:00", status: "completed", payment_method: "cash", service_price: 12, cash_received: 20, paid_at: "x", created_at: "2026-10-05T08:00:00Z" };
+  const booked = { id: "b1", date: "2026-10-05", time: "16:30", status: "completed", payment_method: "cash", service_price: 50, paid_at: "x", created_at: "2026-09-28T09:00:00Z" };
+  const D = cashbookData({ movements: [], cashRows: [appt, ...pay, sale, booked].filter((a) => a.payment_method === "cash"), from: "2026-10-01", to: "2026-10-31" });
+  check("netto contant = 30 + 12 + 50", D.totals.sales, 92);
+  check("wisselgeld 8", D.totals.change, 8);
+  check("3 contante betalingen (prepaid telt niet)", D.totals.salesCount, 3);
+  check("op tijd gesorteerd: 10:00 eerst", D.cashRows[0].id, "s1");
+  // Product na afrekenen erbij: 45 contant betaald, 15 nog open.
+  check("open restant zit niet in de la", cashFlowOf({ payment_method: "cash", service_price: 60, amount_paid: 45, paid_at: null }).net, 45);
+  check("oude contante rij zonder amount_paid telt volledig", cashFlowOf({ payment_method: "cash", service_price: 60 }).net, 60);
+  check("betaald (paid_at) telt volledig", cashFlowOf({ payment_method: "cash", service_price: 60, amount_paid: 45, paid_at: "x" }).net, 60);
+}
+
+console.log("\n== bestandsnamen per volledige periode ==");
+{
+  const salon = { business_name: "Bloom" };
+  const f = (from, to) => revenueReportFilename({ salon, range: { from, to }, lang: "nl" });
+  check("maand", f("2026-01-01", "2026-01-31"), "bloom-omzet-2026-01.pdf");
+  check("kwartaal", f("2026-01-01", "2026-03-31"), "bloom-omzet-2026-Q1.pdf");
+  check("jaar", f("2026-01-01", "2026-12-31"), "bloom-omzet-2026.pdf");
+  check("dag", f("2026-02-03", "2026-02-03"), "bloom-omzet-2026-02-03.pdf");
+  check("ingekort tot vandaag", cashbookFilename({ salon, range: { from: "2026-01-01", to: "2026-10-05" }, lang: "en" }), "bloom-cash-book-2026-01-01_2026-10-05.pdf");
+  check("februari schrikkeljaar", f("2028-02-01", "2028-02-29"), "bloom-omzet-2028-02.pdf");
+}
+
+console.log("\n== PDF-tekst (WinAnsi) en labels ==");
+{
+  check("minteken wordt -", pdfSafe("Verkoop · Shampoo (korting \u2212€5,00)"), "Verkoop · Shampoo (korting -€5,00)");
+  check("Ş en Ł worden kale letters", pdfSafe("Şule Łukasz ğ"), "Sule Lukasz g");
+  check("WinAnsi blijft staan", pdfSafe("José – ’t “x” … €"), "José – ’t “x” … €");
+  check("BE: ondernemingsnummer", companyNumberLabel({ country_code: "BE" }, "nl"), "Ondernemingsnr.");
+  check("NL: KVK", companyNumberLabel({ country_code: "NL" }, "nl"), "KVK");
 }
 
 fs.unlinkSync(new URL("./_tmp_shared.mjs", import.meta.url));

@@ -2,8 +2,11 @@
 // PDF generator so they can be eagerly imported without pulling jsPDF into
 // the main bundle.
 
-export function periodPreset(kind, lang = "nl") {
-  const now = new Date();
+// `now`: geef salonNow(country_code) mee (shared.jsx), zodat "deze maand" op
+// de klok van de SALON valt en niet op die van het apparaat — een Bonairiaanse
+// salon die om 20:30 op 31 oktober vanaf een NL-telefoon wordt bekeken, kreeg
+// anders november. Zonder `now` blijft het de apparaatklok (oud gedrag).
+export function periodPreset(kind, lang = "nl", now = new Date()) {
   const monthName = (d) => d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { month: "long", year: "numeric" });
   // LOCAL date components — toISOString() converts to UTC first, which for a
   // local-midnight Date in a UTC-positive timezone (NL) lands on the PREVIOUS
