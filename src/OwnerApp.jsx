@@ -12388,8 +12388,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             const openOf = (a) => {
               const o = outstandingOf(a);
               if (!invoiceStaffFilter) return o;
+              // Bij een gedeelde boeking tellen de delen samen op tot de prijs
+              // ZONDER de aangeslagen producten (partPricesOf); daardoor delen,
+              // anders bleef het productdeel van de open post bij niemand. Zonder
+              // deelprijzen geeft shareOf de hele prijs: dan telt de hele post.
+              const bd = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
+              const split = new Set(bd.map(p => p.staff_id).filter(Boolean)).size > 1;
+              const products = (Array.isArray(a.products) ? a.products : []).reduce((s, it) => s + (parseFloat(it?.price) || 0) * (parseInt(it?.qty) || 1), 0);
               const total = parseFloat(a.service_price || 0) || 0;
-              return total > 0 ? Math.round(o * (shareOf(a, invoiceStaffFilter) / total) * 100) / 100 : o;
+              const whole = split ? Math.max(0, total - products) : total;
+              return whole > 0 ? Math.round(o * Math.min(1, shareOf(a, invoiceStaffFilter) / whole) * 100) / 100 : o;
             };
             const openTotal = Math.round(openReceivables.reduce((s, a) => s + openOf(a), 0) * 100) / 100;
 
@@ -13748,6 +13756,35 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               ), document.body)}
 
+              {/* Dubbel factuurvoorvoegsel, gezien vanaf een ander tabblad: de
+                  grote Opslaan-knop stuurt de factuurprofielen altijd mee en de
+                  database weigert een opslag die een dubbel voorvoegsel toevoegt.
+                  De rode uitleg staat alleen op het tabblad Salon; zonder deze
+                  balk zag een eigenaar op Planning alleen "Opslaan mislukt". */}
+              {settingsTab !== "salon" && settingsTab !== "diensten" && settingsTab !== "billing" && (() => {
+                const seen = new Set();
+                let dup = null;
+                for (const v of [salonData.invoice_prefix, ...(salonData.invoice_profiles || []).map(p => p.invoice_prefix)]) {
+                  const k = String(v || "").trim().toUpperCase() || "INV";
+                  if (seen.has(k)) { dup = k; break; }
+                  seen.add(k);
+                }
+                if (!dup) return null;
+                return (
+                  <div role="alert" style={{ fontSize: 12, color: c.danger, background: `${c.danger}14`, border: `1px solid ${c.danger}33`, borderRadius: 10, padding: "10px 12px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ flex: "1 1 220px", lineHeight: 1.5 }}>
+                      {lang === "nl" ? `Twee factuurprofielen hebben hetzelfde voorvoegsel (${dup}). Dan krijgen twee facturen hetzelfde nummer en kan opslaan mislukken. Geef elk profiel een eigen voorvoegsel onder Salon.`
+                        : lang === "es" ? `Dos perfiles de factura tienen el mismo prefijo (${dup}). Así dos facturas recibirían el mismo número y puede que no se guarde. Da a cada perfil su propio prefijo en Salón.`
+                        : `Two invoice profiles share the prefix ${dup}. Two invoices would then get the same number and saving may fail. Give each profile its own prefix under Salon.`}
+                    </div>
+                    <button className="btn-ghost" style={{ fontSize: 11, padding: "8px 14px", color: c.danger, borderColor: `${c.danger}33` }}
+                      onClick={() => { setSettingsTab("salon"); setTimeout(() => { try { document.querySelector("[data-dup-prefix]")?.scrollIntoView({ behavior: "smooth", block: "center" }); } catch { /* older browsers */ } }, 150); }}>
+                      {lang === "nl" ? "Naar Salon" : lang === "es" ? "Ir a Salón" : "Go to Salon"}
+                    </button>
+                  </div>
+                );
+              })()}
+
               {/* ═══ SALON TAB ═══ */}
               {settingsTab === "salon" && (() => {
                 // Factuurvoorvoegsels: het hoofdprofiel en elk extra profiel
@@ -13763,17 +13800,43 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const prefixCount = [salonData.invoice_prefix, ...(salonData.invoice_profiles || []).map(p => p.invoice_prefix)]
                   .map(normPrefix).reduce((m, v) => m.set(v, (m.get(v) || 0) + 1), new Map());
                 const isDupPrefix = (v) => (prefixCount.get(normPrefix(v)) || 0) > 1;
-                const dupPrefixNote = (
+                // Het voorvoegsel waarmee een teamlid in haar eigen app
+                // factureert: het opgeslagen voorvoegsel, of, als dat leeg is of
+                // gelijk aan dat van de salon, de eerste drie letters van haar
+                // naam ("TM" zonder letters, met een 2 erachter als dat toevallig
+                // het salonvoorvoegsel is). Exact de regel van derivedPrefix /
+                // effectivePrefix in StaffApp.jsx: anders kreeg een extra profiel
+                // "Mel" hier MEL terwijl stylist Mel in haar app ook MEL gebruikt
+                // (zelfde reeks onder dezelfde salon, het tweede nummer geweigerd).
+                const staffPrefixOf = (s, mainPrefix) => {
+                  const salonPrefix = String(mainPrefix || "INV").trim().toUpperCase();
+                  const v = String(s?.invoice_prefix || "").trim();
+                  if (v && v.toUpperCase() !== salonPrefix) return v.toUpperCase();
+                  const p = String(s?.name || "").normalize("NFD").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 3) || "TM";
+                  return p === salonPrefix ? `${p}2` : p;
+                };
+                const staffPrefixes = (d) => (d.staff || []).map(s => staffPrefixOf(s, d.invoice_prefix));
+                const staffPrefixSet = new Set(staffPrefixes(salonData));
+                // Alleen bij extra profielen: het hoofdvoorvoegsel valt volgens
+                // dezelfde regel nooit samen met dat van een teamlid.
+                const isStaffPrefix = (v) => staffPrefixSet.has(normPrefix(v));
+                const prefixNote = (staff) => (
                   <div data-dup-prefix style={{ fontSize: 10, color: c.danger, marginTop: 5, lineHeight: 1.5 }}>
-                    {lang === "nl" ? "Dit voorvoegsel gebruikt een ander factuurprofiel al. Elk profiel heeft een eigen voorvoegsel nodig, anders krijgen twee facturen hetzelfde nummer. Opslaan lukt pas als ze verschillen."
-                      : lang === "es" ? "Otro perfil de factura ya usa este prefijo. Cada perfil necesita su propio prefijo; si no, dos facturas reciben el mismo número. Solo se puede guardar cuando sean distintos."
-                      : "Another invoice profile already uses this prefix. Each profile needs its own prefix, otherwise two invoices get the same number. Saving only works once they differ."}
+                    {staff
+                      ? (lang === "nl" ? "Een teamlid factureert al met dit voorvoegsel. Kies een ander, anders krijgen twee facturen hetzelfde nummer."
+                        : lang === "es" ? "Un miembro del equipo ya factura con este prefijo. Elige otro; si no, dos facturas reciben el mismo número."
+                        : "A team member already invoices with this prefix. Choose another one, otherwise two invoices get the same number.")
+                      : (lang === "nl" ? "Dit voorvoegsel gebruikt een ander factuurprofiel al. Elk profiel heeft een eigen voorvoegsel nodig, anders krijgen twee facturen hetzelfde nummer en kan opslaan mislukken."
+                        : lang === "es" ? "Otro perfil de factura ya usa este prefijo. Cada perfil necesita su propio prefijo; si no, dos facturas reciben el mismo número y puede que no se guarde."
+                        : "Another invoice profile already uses this prefix. Each profile needs its own prefix, otherwise two invoices get the same number and saving may fail.")}
                   </div>
                 );
+                const dupPrefixNote = prefixNote(false);
                 // Voorvoegsel voor een extra profiel: de eerste letters van het
                 // label ("Lady" wordt "LADY"), zonder label "INV2", "INV3"…, en
                 // nooit een voorvoegsel dat al in gebruik is (hoofdprofiel,
-                // andere extra's of een teamlid dat zelf factureert).
+                // andere extra's of het voorvoegsel waarmee een teamlid zelf
+                // factureert, zie staffPrefixOf).
                 const derivePrefix = (label, taken) => {
                   const base = String(label || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
                   const root = base || "INV";
@@ -13786,7 +13849,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const takenPrefixes = (d, skipIdx) => new Set([
                   normPrefix(d.invoice_prefix),
                   ...(d.invoice_profiles || []).filter((_, i) => i !== skipIdx).map(p => normPrefix(p.invoice_prefix)),
-                  ...(d.staff || []).map(s => normPrefix(s.invoice_prefix)),
+                  ...staffPrefixes(d),
                 ]);
                 // Een locatie met afspraken wordt gearchiveerd (active=false) in
                 // plaats van verwijderd; die staat niet meer op de
@@ -14942,8 +15005,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.invoicePrefix}</div>
                           {/* Hoofdletters ook in de opgeslagen waarde: de CSS liet
                               "ttnb" als TTNB zien terwijl de factuur ttnb-0012 kreeg. */}
-                          <input className="input-field" placeholder="INV" value={p.invoice_prefix || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, invoice_prefix: e.target.value.toUpperCase()} : x); return d; })} aria-invalid={isDupPrefix(p.invoice_prefix) || undefined} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase", ...(isDupPrefix(p.invoice_prefix) ? { borderColor: c.danger } : {}) }} />
-                          {isDupPrefix(p.invoice_prefix) && dupPrefixNote}
+                          <input className="input-field" placeholder="INV" value={p.invoice_prefix || ""} onChange={e => update(d => { d.invoice_profiles = (d.invoice_profiles || []).map((x, i) => i === idx ? {...x, invoice_prefix: e.target.value.toUpperCase()} : x); return d; })} aria-invalid={(isDupPrefix(p.invoice_prefix) || isStaffPrefix(p.invoice_prefix)) || undefined} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase", ...((isDupPrefix(p.invoice_prefix) || isStaffPrefix(p.invoice_prefix)) ? { borderColor: c.danger } : {}) }} />
+                          {isDupPrefix(p.invoice_prefix) ? dupPrefixNote : isStaffPrefix(p.invoice_prefix) ? prefixNote(true) : null}
                         </div>
                         <div>
                           <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Volgend nummer" : lang === "es" ? "Siguiente número" : "Next number"}</div>

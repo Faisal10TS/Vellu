@@ -28,6 +28,8 @@ declare
   cs  jsonb := '{"role":"service_role"}';
   p2  text := 'zz-o6-profile-2';
   p3  text := 'zz-o6-profile-3';
+  u1  text := gen_random_uuid()::text;
+  u2  text := gen_random_uuid()::text;
   nl  text := E'\n';
 begin
   -- Gewone opslag van de instellingen (hoofdprofiel INV, geen extra's)
@@ -72,7 +74,16 @@ begin
   r := r || pg_temp.t('X02 live data has no dup today', 'postgres', '{}', $q$select 1 from public.profiles where (select count(*) - count(distinct p) from unnest(public.invoice_prefixes_of(invoice_prefix, invoice_profiles)) p) > 0$q$, 'zero') || nl;
   r := r || pg_temp.t('X03 helper not callable by anon', 'anon', '{"role":"anon"}', $q$select public.invoice_prefixes_of('INV', '[]'::jsonb)$q$, 'err') || nl;
   r := r || pg_temp.t('X04 helper callable by owner', 'authenticated', cb, $q$select 1 where public.invoice_prefixes_of(' inv ', '[{"invoice_prefix":""},{"invoice_prefix":"tt-l"},{}]'::jsonb) = array['INV','INV','TT-L','INV']$q$, 'ok') || nl;
-  r := r || pg_temp.t('X05 trigger function not callable directly', 'authenticated', cb, $q$select public.profiles_invoice_prefix_unique()$q$, 'err') || nl;
+  -- INSERT-tak van de trigger: een aanmelding maakt via handle_new_user
+  -- (SECURITY DEFINER, postgres) een profiel aan; dat moet gewoon lukken.
+  r := r || pg_temp.t('I01 signup creates profile (handle_new_user)', 'postgres', '{}', format($q$insert into auth.users (instance_id, id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values ('00000000-0000-0000-0000-000000000000', %L, 'authenticated', 'authenticated', 'zz-o6-signup-1@example.invalid', '{}'::jsonb, jsonb_build_object('business_name', 'ZZ O6', 'slug', 'zz-o6-signup-1'), now(), now())$q$, u1), 'ok') || nl;
+  r := r || pg_temp.t('I01b profile of signup exists with INV', 'postgres', '{}', format($q$select 1 from public.profiles where id = %L and invoice_prefix = 'INV'$q$, u1), 'ok') || nl;
+  -- Een INSERT die meteen een dubbel meebrengt wordt geweigerd, een met
+  -- eigen voorvoegsels niet (gebruiker 2 zonder profiel: dat eerst weg).
+  r := r || pg_temp.t('I02 second signup', 'postgres', '{}', format($q$insert into auth.users (instance_id, id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values ('00000000-0000-0000-0000-000000000000', %L, 'authenticated', 'authenticated', 'zz-o6-signup-2@example.invalid', '{}'::jsonb, jsonb_build_object('business_name', 'ZZ O6 2', 'slug', 'zz-o6-signup-2'), now(), now())$q$, u2), 'ok') || nl;
+  r := r || pg_temp.t('I02b remove its profile', 'postgres', '{}', format($q$delete from public.profiles where id = %L$q$, u2), 'ok') || nl;
+  r := r || pg_temp.t('I03 insert profile with dup prefix refused', 'postgres', '{}', format($q$insert into public.profiles (id, email, business_name, slug, city, invoice_prefix, invoice_profiles) values (%L, 'zz-o6-signup-2@example.invalid', 'ZZ O6 2', 'zz-o6-signup-2', 'Nederland', 'INV', jsonb_build_array(jsonb_build_object('id', 'x', 'invoice_prefix', ' inv ')))$q$, u2), 'err') || nl;
+  r := r || pg_temp.t('I04 insert profile with own prefixes', 'postgres', '{}', format($q$insert into public.profiles (id, email, business_name, slug, city, invoice_prefix, invoice_profiles) values (%L, 'zz-o6-signup-2@example.invalid', 'ZZ O6 2', 'zz-o6-signup-2', 'Nederland', 'INV', jsonb_build_array(jsonb_build_object('id', 'x', 'invoice_prefix', 'INV2')))$q$, u2), 'ok') || nl;
 
   raise exception E'REPORT\n%', r;
 end $$;
