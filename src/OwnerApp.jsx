@@ -7813,8 +7813,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           }
           const nextNum = rpcNum;
           invoiceNumber = `${prefix}-${String(nextNum).padStart(4, "0")}`;
-          // De teller is al opgehoogd door de RPC (ook als de mail hieronder
-          // mislukt — dat nummer is dan verbruikt); hier alleen de lokale kopie
+          // De teller is al opgehoogd door de RPC; hier alleen de lokale kopie
           // bijtrekken zodat het scherm het volgende nummer klopt laat zien.
           if (isExtra) {
             update(d => {
@@ -7825,6 +7824,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           } else {
             update(d => { d.next_invoice_number = nextNum + 1; return d; });
           }
+          // Het nummer EERST bij de afspraak opslaan, pas daarna mailen. De
+          // unieke index (owner_id, invoice_number) weigert een nummer dat al
+          // bij een andere factuur hoort (bv. een stylist met hetzelfde
+          // voorvoegsel); dan gaat er niets naar de klant. Mislukt de mail
+          // hieronder, dan houdt de rij dit nummer en hergebruikt een nieuwe
+          // poging het (geen gat in de nummering). Alleen als de rij nog geen
+          // nummer heeft: een ander tabblad (of de stylist) kan er net een
+          // hebben gezet, en dat nummer mag nooit overschreven worden.
+          const { data: numHit, error: numSaveErr } = await supabase.from("appointments")
+            .update({ invoice_number: invoiceNumber }).eq("id", a.id).is("invoice_number", null).select("id");
+          if (numSaveErr || !numHit || numHit.length === 0) {
+            console.error("factuurnummer opslaan mislukt:", numSaveErr);
+            const dup = numSaveErr && numSaveErr.code === "23505";
+            toast.show(dup
+              ? (lang === "nl" ? `Factuurnummer ${invoiceNumber} is al gebruikt door een andere factuurreeks met hetzelfde voorvoegsel — pas het voorvoegsel aan. Factuur niet verstuurd`
+                : lang === "es" ? `El número de factura ${invoiceNumber} ya lo usa otra serie con el mismo prefijo — cambia el prefijo. Factura no enviada`
+                : `Invoice number ${invoiceNumber} is already used by another invoice series with the same prefix — change the prefix. Invoice not sent`)
+              : (lang === "nl" ? "Factuurnummer opslaan mislukt — ververs de pagina. Factuur niet verstuurd"
+                : lang === "es" ? "No se pudo guardar el número de factura — recarga la página. Factura no enviada"
+                : "Could not save the invoice number — refresh the page. Invoice not sent"), "error");
+            return;
+          }
+          patchApptLocal(a.id, { invoice_number: invoiceNumber });
         }
         // Regels op de factuur: bij een gedeelde boeking elke behandeling met
         // haar stylist en EIGEN prijs (plus eventuele producten), zodat één
@@ -7868,8 +7890,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // plaats van "Vooruitbetaald -€X / Voldaan €0,00".
         const paidNow = paidAmountOf(a);
         const openNow = outstandingOf(a);
+        // Geregistreerde betalingen op deze post (client_payments): bij een
+        // deels vooruitbetaalde afspraak het restant dat aan de balie of later
+        // binnenkwam (markComplete / betalingsvenster).
+        const cpRows = clientPayments.filter(cp => cp.appointment_id === a.id);
+        const cpSum = Math.round(cpRows.reduce((s, cp) => s + (parseFloat(cp.amount) || 0), 0) * 100) / 100;
+        // Helemaal voldaan en (deels) via geregistreerde betalingen: alleen het
+        // echt vooruitbetaalde deel als "Vooruitbetaald" meesturen, de rest
+        // via paid_in_full als "Betaald". Anders stond de hele prijs als
+        // vooruitbetaald op de factuur (€45 vooruit + €30 aan de balie gaf
+        // "Vooruitbetaald -€75").
+        const settledViaPayments = cpSum > 0.005 && Math.abs(openNow) <= 0.005;
+        const prepaidPart = settledViaPayments && a.payment_method === "prepaid"
+          ? Math.max(0, Math.round((paidNow - cpSum) * 100) / 100) : 0;
         const sendPaid = a.payment_method === "prepaid"
-          || clientPayments.some(cp => cp.appointment_id === a.id)
+          || cpRows.length > 0
           || (paidNow > 0 && Math.abs(openNow) > 0.005);
         const r = await sendEmails("invoice", {
           // Server (send-emails) koppelt ontvanger en betaalgegevens aan deze
@@ -7902,9 +7937,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // Al (vooruit)betaald bedrag: de factuur trekt het af ("Vooruitbetaald
           // -€45 / Te betalen €30") en het betaalblok vraagt alleen het restant.
           // Zie sendPaid hierboven: alleen bij een echte vooruitbetaling/deel-
-          // betaling; volledig aan de balie betaald → paid_in_full.
-          amount_paid: sendPaid ? paidNow : 0,
-          paid_in_full: !sendPaid && !OPEN_PAY_METHODS.has(a.payment_method ?? null) && openNow <= 0.005,
+          // betaling; volledig aan de balie betaald → paid_in_full. Voldaan via
+          // geregistreerde betalingen: alleen het vooruitbetaalde deel +
+          // paid_in_full (de mail zet het restant er als "Betaald" onder).
+          amount_paid: settledViaPayments ? prepaidPart : (sendPaid ? paidNow : 0),
+          paid_in_full: settledViaPayments || (!sendPaid && !OPEN_PAY_METHODS.has(a.payment_method ?? null) && openNow <= 0.005),
           iban_holder: p ? (p.iban_holder || p.label || "") : (pd.ibanHolder || ""),
           // bunq.me/PayPal.Me links get the exact OPEN amount appended, so the
           // client never has to type it (other providers pass through).
@@ -7939,22 +7976,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // Klantmail in de taal waarin de klant boekte (appointments.lang),
           // niet in de dashboardtaal van de eigenaar — zoals annuleren en
           // terugbetalen. Op Bonaire boekt een groot deel in het Engels.
-          lang: a.lang || ownerLangFor(salonData.country_code),
+          // Een kassaverkoop heeft geen boekingstaal: dan de taal van het
+          // scherm aan de balie (zoals de verkoopregel zelf), niet altijd NL.
+          lang: a.lang || (a.is_sale ? lang : ownerLangFor(salonData.country_code)),
         });
         // Mislukt de mail, dan is de factuur NIET verstuurd: niet als verzonden
         // markeren (anders verdween de verstuurknop en stond er "Verzonden"
-        // terwijl de klant niets kreeg). Het nummer blijft verbruikt.
+        // terwijl de klant niets kreeg). Het nummer staat al bij de rij en gaat
+        // bij de volgende poging opnieuw mee.
         if (!r || !r.success) {
           toast.show(lang === "nl" ? "Factuur niet verstuurd — probeer het opnieuw" : lang === "es" ? "Factura no enviada — inténtalo de nuevo" : "Invoice not sent — please try again", "error");
           return;
         }
-        // Het nummer wordt nu OPGESLAGEN bij de afspraak. Daarvoor bestond het
-        // alleen in de verstuurde mail, waardoor niet na te zoeken was welk
-        // nummer naar welke klant ging — en de database een duplicaat ook niet
-        // kon weigeren. Er ligt nu een unieke index op (owner_id,
-        // invoice_number).
+        // Het nummer is hierboven al OPGESLAGEN bij de afspraak (vóór de
+        // mail), zodat na te zoeken is welk nummer naar welke klant ging en de
+        // unieke index (owner_id, invoice_number) een duplicaat weigert vóórdat
+        // de klant het krijgt. Nu alleen nog als verzonden markeren.
         const { error: upErr } = await supabase.from("appointments")
-          .update({ invoice_sent: true, invoice_number: invoiceNumber }).eq("id", a.id);
+          .update({ invoice_sent: true }).eq("id", a.id);
         if (upErr) {
           console.error("factuur opslaan mislukt:", upErr);
           toast.show(lang === "nl" ? `Factuur ${invoiceNumber} is verstuurd, maar niet als verzonden opgeslagen — ververs de pagina` : lang === "es" ? `La factura ${invoiceNumber} se envió, pero no se guardó como enviada — recarga la página` : `Invoice ${invoiceNumber} was sent, but could not be saved as sent — refresh the page`, "error");
@@ -8739,9 +8778,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <button className="btn-ghost" data-appt-primary style={{ ...cel, gridColumn: isMobile ? "1 / -1" : "auto", color: accent, borderColor: completeFor === a.id ? accent : `${accent}55`, background: `${accent}12`, fontWeight: 600 }} disabled={dis} onClick={() => (paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005) ? markComplete(a.id, null) : setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
               <button className="btn-ghost" style={cel} disabled={dis} onClick={() => startReschedule(a)}>{lang === "nl" ? "Verplaats" : lang === "es" ? "Reprogramar" : "Reschedule"}</button>
               <button className="btn-ghost" style={cel} disabled={dis} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : lang === "es" ? "Editar fecha, hora o precio" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
-              <button className="btn-ghost" style={{ ...cel, color: c.danger, borderColor: `${c.danger}33`, ...(noShowOpen ? {} : { opacity: 0.4, cursor: "not-allowed" }) }} disabled={dis || !noShowOpen}
+              {/* Vóór de starttijd niet uitgeschakeld maar gedimd: een tik geeft
+                  de reden als melding (een title-tooltip verschijnt op een
+                  telefoon nooit). */}
+              <button className="btn-ghost" style={{ ...cel, color: c.danger, borderColor: `${c.danger}33`, ...(noShowOpen ? {} : { opacity: 0.4 }) }} disabled={dis} aria-disabled={!noShowOpen || undefined}
                 title={noShowOpen ? undefined : (lang === "nl" ? "No-show kan pas vanaf de starttijd" : lang === "es" ? "La ausencia se puede marcar desde la hora de inicio" : "No-show is available from the start time")}
-                onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
+                onClick={() => noShowOpen
+                  ? markNoShow(a.id)
+                  : toast.show(lang === "nl" ? "No-show kan pas vanaf de starttijd" : lang === "es" ? "La ausencia se puede marcar desde la hora de inicio" : "No-show is available from the start time", "info")}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
               {/* Annuleren: klant krijgt bericht, rij blijft uitgegrijsd staan.
                   Verwijderen (de X in de rij eronder) is voor foutieve invoer. */}
               <button className="btn-ghost" style={{ ...cel, color: c.danger, borderColor: `${c.danger}33` }} disabled={dis}
@@ -8873,7 +8917,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 : (lang === "nl" ? `Betaald ${fmtAmt(cur, paid)} · nog ${fmtAmt(cur, open)} open` : lang === "es" ? `Pagado ${fmtAmt(cur, paid)} · quedan ${fmtAmt(cur, open)}` : `Paid ${fmtAmt(cur, paid)} · ${fmtAmt(cur, open)} still open`)}
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-              <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 14px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markPrepaid(a)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Restbetaling ontvangen" : lang === "es" ? "Resto recibido" : "Remainder received")}</button>
+              {/* Het restant via het betalingsvenster: een eigen betaling in
+                  client_payments (bedrag, wijze, datum). Zo telt contant in het
+                  kasboek, en haalt "terugzetten" later alleen dát restant weg —
+                  de vooruitbetaling blijft staan (vroeger overschreef dit
+                  amount_paid met de volle prijs en wiste terugzetten alles). */}
+              <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 14px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => openPayModal(fullAppt(a))}>{lang === "nl" ? "Restbetaling ontvangen" : lang === "es" ? "Resto recibido" : "Remainder received"}</button>
               {a.client_phone && (payDetailsForAppt(a).paymentLink || payDetailsForAppt(a).iban) && (
                 <a
                   href={getWhatsAppUrl(a.client_phone, getWhatsAppPaymentMsg(lang, { kind: "remainder", visited: a.status === "completed", clientName: a.client_name, salonName: salonData.name, price: open, paid, date: a.date, time: a.time, ...payDetailsForAppt(a), countryCode: salonData.country_code }), salonData.country_code)}
@@ -8958,7 +9007,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             )}
             {fee > 0 && due > 0.005 && a.client_phone && (pd.paymentLink || pd.iban) && (
               <a
-                href={getWhatsAppUrl(a.client_phone, getWhatsAppNoShowFeeMsg(lang, { clientName: a.client_name, salonName: salonData.name, amount: due, pct, paymentLink: pd.paymentLink, iban: pd.iban, ibanHolder: pd.ibanHolder, countryCode: salonData.country_code }), salonData.country_code)}
+                href={getWhatsAppUrl(a.client_phone, paid > 0.005
+                  // Deels vooruitbetaald: de vergoedingstekst ("we rekenen
+                  // {pct}% van het afspraakbedrag: X") klopt dan niet met het
+                  // gevraagde verschil. De resttekst zegt "nog X open; je hebt
+                  // al Y betaald".
+                  ? getWhatsAppPaymentMsg(lang, { kind: "remainder", visited: false, clientName: a.client_name, salonName: salonData.name, price: due, paid, date: a.date, time: a.time, paymentLink: pd.paymentLink, iban: pd.iban, ibanHolder: pd.ibanHolder, countryCode: salonData.country_code })
+                  : getWhatsAppNoShowFeeMsg(lang, { clientName: a.client_name, salonName: salonData.name, amount: due, pct, paymentLink: pd.paymentLink, iban: pd.iban, ibanHolder: pd.ibanHolder, countryCode: salonData.country_code }), salonData.country_code)}
                 target="_blank" rel="noopener noreferrer" className="btn-ghost"
                 style={{ fontSize: 10, padding: "8px 12px", marginTop: 6, color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
                 title={lang === "nl" ? "Betaalverzoek voor de no-show-vergoeding via WhatsApp" : lang === "es" ? "Solicitud de pago de la tarifa por ausencia por WhatsApp" : "Payment request for the no-show fee via WhatsApp"}
