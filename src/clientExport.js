@@ -22,11 +22,15 @@ const SEP = ";";
 // RFC 4180: wrap in double quotes, escape embedded quotes by doubling.
 // Formule-injectie: een naam als =HYPERLINK(...) die via de openbare
 // boekingspagina binnenkomt, wordt in Excel/Sheets anders uitgevoerd. Een cel
-// die met = + - @ tab of CR begint krijgt een apostrof ervoor (OWASP).
-function csvCell(v) {
+// die met = + - @ tab of CR begint krijgt een apostrof ervoor (OWASP) —
+// behalve een kaal getal of telefoonnummer ("+599 717 1234", "-12,50"): dat
+// kan hooguit als rekensom gelezen worden, nooit een functie of een andere cel
+// aanroepen, en de apostrof bleef bij een import in Google Contacts of
+// Mailchimp in het nummer staan.
+export function csvCell(v) {
   if (v === null || v === undefined) return "";
   let s = String(v);
-  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  if (/^[=+\-@\t\r]/.test(s) && !/^[+-]?[\d\s().,/-]+$/.test(s)) s = "'" + s;
   if (/[;"\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
@@ -82,11 +86,26 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
     return n ? `naam:${n}|${digits(phone)}` : "";
   };
   const byEmail = new Map();
-  for (const a of appts) {
+  // Dezelfde persoon kan rijen mét en zonder e-mail hebben (eerst door de
+  // salon met alleen een telefoonnummer ingevoerd, later online geboekt, of
+  // andersom). Elk klantblok is daarom ook te vinden op naam +
+  // telefooncijfers, zodat zo'n rij bij het bestaande blok komt in plaats van
+  // als tweede regel. Alleen mét telefooncijfers: twee verschillende "Anna"s
+  // zonder nummer komen nooit bij een klant met e-mail terecht.
+  const byName = new Map();
+  const remember = (agg, name, phone) => {
+    const k = nameKey(name, phone);
+    if (k && digits(phone) && !byName.has(k)) byName.set(k, agg);
+  };
+  // Eerst de rijen mét e-mail, dan die zonder: anders hangt het van de
+  // volgorde af of een rij zonder e-mail het blok mét e-mail al kan vinden.
+  const hasEmail = (a) => !!(a.clients?.email || a.client_email);
+  for (const a of [...appts.filter(hasEmail), ...appts.filter((a) => !hasEmail(a))]) {
     const email = (a.clients?.email || a.client_email || "").toLowerCase();
-    const key = email || (a.is_sale ? "" : nameKey(a.client_name, a.client_phone));
+    const nk = (email || a.is_sale) ? "" : nameKey(a.client_name, a.client_phone);
+    const key = email || nk;
     if (!key) continue;
-    let agg = byEmail.get(key);
+    let agg = byEmail.get(key) || (nk && digits(a.client_phone) ? byName.get(nk) : null);
     if (!agg) {
       agg = {
         first_name: a.clients?.first_name || (a.client_name || "").split(" ")[0] || "",
@@ -106,6 +125,8 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
       };
       byEmail.set(key, agg);
     }
+    remember(agg, a.client_name, a.client_phone);
+    if (a.clients) remember(agg, `${a.clients.first_name || ""} ${a.clients.last_name || ""}`, a.clients.phone);
     agg.total_appointments++;
     if (a.status === "completed") { agg.completed_count++; agg.total_spent += parseFloat(a.service_price || 0); }
     if (a.status === "cancelled") agg.cancelled_count++;
@@ -123,22 +144,37 @@ export async function exportClientsCSV({ ownerId, salonName, lang = "nl", countr
   for (const m of manual) {
     if (m.hidden) continue;
     const email = String(m.email || "").trim().toLowerCase();
-    const key = email || nameKey(m.name, m.phone);
+    if (email && byEmail.has(email)) continue;
+    const nk = nameKey(m.name, m.phone);
+    // Zelfde naam + telefoon als een klant die er al in staat: geen tweede
+    // regel. Had dat blok nog geen e-mail (alleen afspraken zonder adres), dan
+    // krijgt het het adres uit de klantenlijst. Een ANDER e-mailadres bij
+    // dezelfde naam blijft een eigen regel, zoals altijd.
+    const known = nk && digits(m.phone) ? byName.get(nk) : null;
+    if (known && (!email || !known.email)) {
+      if (email) { known.email = email; byEmail.set(email, known); }
+      continue;
+    }
+    const key = email || nk;
     if (!key || byEmail.has(key)) continue;
     const nm = String(m.name || "").trim();
-    byEmail.set(key, {
+    const agg = {
       first_name: nm.split(" ")[0] || "",
       last_name: nm.split(" ").slice(1).join(" ") || "",
       email, phone: m.phone || "", allergies: "",
       first_visit: "", last_visit: "",
       total_appointments: 0, completed_count: 0, cancelled_count: 0, no_show_count: 0,
       total_spent: 0, services: {}, staff: {},
-    });
+    };
+    byEmail.set(key, agg);
+    remember(agg, m.name, m.phone);
   }
 
   if (byEmail.size === 0) return { count: 0, csv: null };
 
-  const rows = Array.from(byEmail.values()).map(r => ({
+  // Een blok kan onder twee sleutels staan (naam + telefoon én het e-mailadres
+  // uit de klantenlijst): elk blok één keer.
+  const rows = Array.from(new Set(byEmail.values())).map(r => ({
     ...r,
     favorite_service: Object.entries(r.services).sort((a, b) => b[1] - a[1])[0]?.[0] || "",
     favorite_staff: Object.entries(r.staff).sort((a, b) => b[1] - a[1])[0]?.[0] || "",

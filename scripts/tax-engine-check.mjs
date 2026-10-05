@@ -14,10 +14,15 @@ import fs from "fs";
 
 // shared.jsx bevat JSX; node kan dat niet lezen. Even door esbuild halen zodat
 // we de ECHTE resolveTax testen en niet een kopie die kan afdrijven.
-await build({
-  entryPoints: [new URL("../src/shared.jsx", import.meta.url).pathname.slice(1)], bundle: true, format: "esm", jsx: "automatic",
-  outfile: new URL("./_tmp_shared.mjs", import.meta.url).pathname.slice(1), external: ["react", "react-dom", "react/jsx-runtime", "@supabase/supabase-js", "react-router-dom", "@sentry/react", "qrcode"],
+const BUILD_OPTS = {
+  bundle: true, format: "esm", jsx: "automatic",
+  external: ["react", "react-dom", "react/jsx-runtime", "@supabase/supabase-js", "react-router-dom", "@sentry/react", "qrcode"],
   logLevel: "silent", define: { "import.meta.env.VITE_SUPABASE_URL": JSON.stringify("http://x"), "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify("x"), "import.meta.env.VITE_SENTRY_DSN": JSON.stringify(""), "import.meta.env.VITE_SUPABASE_KEY": JSON.stringify("k"), "import.meta.env.VITE_ANTHROPIC_KEY": JSON.stringify(""), "import.meta.env": "{}", "import.meta.env.MODE": JSON.stringify("test"), "import.meta.env.DEV": "false", "import.meta.env.PROD": "true" },
+};
+await build({
+  ...BUILD_OPTS,
+  entryPoints: [new URL("../src/shared.jsx", import.meta.url).pathname.slice(1)],
+  outfile: new URL("./_tmp_shared.mjs", import.meta.url).pathname.slice(1),
 });
 const { resolveTax, currencyForCountry, fmtAmt, fmtMoney } = await import(new URL("./_tmp_shared.mjs", import.meta.url).href);
 
@@ -245,6 +250,16 @@ console.log("\n== kasboek: alleen het contante deel ==");
   check("open restant zit niet in de la", cashFlowOf({ payment_method: "cash", service_price: 60, amount_paid: 45, paid_at: null }).net, 45);
   check("oude contante rij zonder amount_paid telt volledig", cashFlowOf({ payment_method: "cash", service_price: 60 }).net, 60);
   check("betaald (paid_at) telt volledig", cashFlowOf({ payment_method: "cash", service_price: 60, amount_paid: 45, paid_at: "x" }).net, 60);
+  // Betaling teruggezet naar open (togglePaid): amount_paid 0, paid_at leeg.
+  const reopened = { id: "r1", date: "2026-10-05", time: "11:00", status: "completed", payment_method: "cash", service_price: 40, amount_paid: 0, paid_at: null };
+  const D2 = cashbookData({ movements: [], cashRows: [sale, reopened], from: "2026-10-01", to: "2026-10-31" });
+  check("teruggezet naar open: geen kasregel", D2.cashRows.map((a) => a.id), ["s1"]);
+  check("teruggezet naar open: telt niet als betaling", D2.totals.salesCount, 1);
+  check("teruggezet naar open: netto onveranderd", D2.totals.sales, 12);
+  // Tijd van een contante betaling op de klok van de salon (Bonaire UTC-4).
+  const payT = (tz) => paymentsAsCashRows([{ id: "p2", method: "cash", amount: 10, paid_on: "2026-10-05", created_at: "2026-10-05T14:05:00Z" }], "nl", tz)[0].time;
+  check("betaaltijd op salonklok Bonaire", payT("America/Kralendijk"), "10:05");
+  check("betaaltijd op salonklok Amsterdam", payT("Europe/Amsterdam"), "16:05");
 }
 
 console.log("\n== bestandsnamen per volledige periode ==");
@@ -264,8 +279,79 @@ console.log("\n== PDF-tekst (WinAnsi) en labels ==");
   check("minteken wordt -", pdfSafe("Verkoop · Shampoo (korting \u2212€5,00)"), "Verkoop · Shampoo (korting -€5,00)");
   check("Ş en Ł worden kale letters", pdfSafe("Şule Łukasz ğ"), "Sule Lukasz g");
   check("WinAnsi blijft staan", pdfSafe("José – ’t “x” … €"), "José – ’t “x” … €");
+  check("los accentteken (NFD) blijft een é", pdfSafe("Angélique"), "Angélique");
   check("BE: ondernemingsnummer", companyNumberLabel({ country_code: "BE" }, "nl"), "Ondernemingsnr.");
   check("NL: KVK", companyNumberLabel({ country_code: "NL" }, "nl"), "KVK");
+}
+
+console.log("\n== klanten-CSV: formulecellen en dubbele klanten ==");
+{
+  // clientExport.js praat met supabase en de DOM. Met een nep-supabase (de
+  // tabellen hieronder) en een nep-download draait hier de ECHTE export.
+  const fakeSupabase = {
+    name: "fake-supabase",
+    setup(b) {
+      b.onResolve({ filter: /[\\/]supabase\.js$/ }, () => ({ path: "fake-supabase", namespace: "fake" }));
+      b.onLoad({ filter: /.*/, namespace: "fake" }, () => ({ loader: "js", contents: `
+        const q = (t) => { const self = { select: () => self, eq: () => self, order: () => self,
+          range: (a, z) => Promise.resolve({ data: ((globalThis.__csvTables || {})[t] || []).slice(a, z + 1), error: null }) }; return self; };
+        export const supabase = { from: q };
+        export const supabaseUrl = "http://x";` }));
+    },
+  };
+  await build({
+    ...BUILD_OPTS, plugins: [fakeSupabase],
+    entryPoints: [new URL("../src/clientExport.js", import.meta.url).pathname.slice(1)],
+    outfile: new URL("./_tmp_clientexport.mjs", import.meta.url).pathname.slice(1),
+  });
+  const { exportClientsCSV, csvCell } = await import(new URL("./_tmp_clientexport.mjs", import.meta.url).href);
+
+  check("telefoon met + blijft zonder apostrof", csvCell("+31 6 12345678"), "+31 6 12345678");
+  check("telefoon met haakjes blijft", csvCell("+1 (721) 555-0100"), "+1 (721) 555-0100");
+  check("negatief bedrag blijft", csvCell("-12,50"), "-12,50");
+  check("=HYPERLINK krijgt apostrof", csvCell("=HYPERLINK(\"http://x\",\"klik\")"), "\"'=HYPERLINK(\"\"http://x\"\",\"\"klik\"\")\"");
+  check("@SUM krijgt apostrof", csvCell("@SUM(A1)"), "'@SUM(A1)");
+  check("+ met tekst krijgt apostrof", csvCell("+1+cmd|' /C calc'!A0"), "'+1+cmd|' /C calc'!A0");
+  check("rekensom met + krijgt apostrof", csvCell("-2+3"), "'-2+3");
+
+  const appt = (id, client_name, client_email, client_phone, extra = {}) => ({ id, date: "2026-09-0" + id, time: "10:00", status: "completed", service_price: 10, service_name: "Knippen", staff_name: "Noor", client_name, client_email, client_phone, is_sale: false, clients: null, ...extra });
+  globalThis.__csvTables = {
+    appointments: [
+      // Eerst de boeking ZONDER e-mail: de volgorde mag niet uitmaken.
+      appt("1", "Lia Bos", null, "06 1234 5678"),
+      appt("2", "Lia Bos", "lia@example.com", "0612345678", { clients: { first_name: "Lia", last_name: "Bos", email: "lia@example.com", phone: "0612345678" } }),
+      appt("3", "Rosa Marte", "rosa@example.com", "+599 717 1234"),
+      appt("4", "Kim de Vries", null, "06 8765 4321"),
+      appt("5", "Anna", "anna@example.com", ""),
+      appt("6", "Anna", null, ""),
+      appt("7", "Losse verkoop", null, null, { is_sale: true }),
+      appt("8", "=HYPERLINK(\"http://x\",\"klik\") Evil", "evil@example.com", "+31 6 12345678"),
+    ],
+    manual_clients: [
+      // Alleen telefoon in de klantenlijst, later online geboekt mét e-mail.
+      { name: "Rosa Marte", email: null, phone: "+5997171234", hidden: false },
+      // In de klantenlijst mét e-mail, afspraak zonder e-mail.
+      { name: "Kim de Vries", email: "kim@example.com", phone: "0687654321", hidden: false },
+    ],
+  };
+  let blob = null;
+  globalThis.document = { createElement: () => ({ click() {} }), body: { appendChild() {}, removeChild() {} } };
+  const origCreate = URL.createObjectURL, origRevoke = URL.revokeObjectURL;
+  URL.createObjectURL = (b) => { blob = b; return "blob:x"; };
+  URL.revokeObjectURL = () => {};
+  const res = await exportClientsCSV({ ownerId: "o1", salonName: "Bloom", lang: "nl", countryCode: "NL" });
+  URL.createObjectURL = origCreate; URL.revokeObjectURL = origRevoke;
+  delete globalThis.document;
+  const lines = (await blob.text()).replace(/^﻿/, "").split("\r\n").slice(1).map((l) => l.split(";"));
+  const by = (email) => lines.filter((l) => l[2] === email);
+  check("CSV: 6 klanten (Lia, Rosa, Kim, 2x Anna, Evil; losse verkoop niet)", res.count, 6);
+  check("CSV: Lia één regel, beide afspraken", by("lia@example.com").map((l) => l[7]), ["2"]);
+  check("CSV: Rosa één regel (klantenlijst zonder e-mail overgeslagen)", lines.filter((l) => l[0] === "Rosa").length, 1);
+  check("CSV: Kim één regel met het adres uit de klantenlijst", by("kim@example.com").map((l) => l[7]), ["1"]);
+  check("CSV: Anna zonder telefoon niet bij Anna met e-mail", lines.filter((l) => l[0] === "Anna").length, 2);
+  check("CSV: telefoon met + ongewijzigd in de export", by("evil@example.com").map((l) => l[3]), ["+31 6 12345678"]);
+  check("CSV: formule in de naam geneutraliseerd", by("evil@example.com").map((l) => l[0]), ["\"'=HYPERLINK(\"\"http://x\"\",\"\"klik\"\")\""]);
+  fs.unlinkSync(new URL("./_tmp_clientexport.mjs", import.meta.url));
 }
 
 fs.unlinkSync(new URL("./_tmp_shared.mjs", import.meta.url));

@@ -163,7 +163,9 @@ export function buildRevenueReportXlsx({
   const sumOrValue = (col, first, last, v) => (last >= first ? sum(col, first, last)(v) : money(v, true));
   const totalRow = (first, last) => [null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, null, null, null, sumOrValue("H", first, last, R.totalGross),
     ...(showTaxRows ? [sumOrValue("I", first, last, R.totalNet), sumOrValue("J", first, last, R.totalBtw)] : [])];
-  sum1.push([{ v: T("Afspraken", "Appointments", "Citas"), s: "bold" }], head);
+  // Met kassaverkopen erbij is het geen lijst van alleen afspraken meer.
+  const rowsTitle = withSales ? T("Transacties", "Transactions", "Transacciones") : T("Afspraken", "Appointments", "Citas");
+  sum1.push([{ v: rowsTitle, s: "bold" }], head);
   const headRowS = sum1.length;
   const firstS = sum1.length + 1;
   for (const r of R.rows) sum1.push(rowOf(r, sum1.length + 1));
@@ -196,9 +198,13 @@ export function buildRevenueReportXlsx({
     T(`Bedragen in ${curText}${ratesNote}, belasting inbegrepen. Bij een regiowijziging worden eerdere bedragen niet omgerekend.`,
       `Amounts in ${curText}${ratesNote}, tax included. After a region change, earlier amounts are not converted.`,
       `Importes en ${curText}${ratesNote}, impuestos incluidos. Tras un cambio de región, los importes anteriores no se convierten.`),
-    showTaxRows ? T(`Netto en ${label} per afspraak zijn niet afgerond; opgeteld komen ze daardoor precies uit op de kerncijfers.`,
-      `Net and ${label} per appointment are not rounded, so their sums match the key figures exactly.`,
-      `El neto y el ${label} por cita no están redondeados; sumados coinciden exactamente con las cifras clave.`) : null,
+    showTaxRows ? (withSales
+      ? T(`Netto en ${label} per transactie zijn niet afgerond; opgeteld komen ze daardoor precies uit op de kerncijfers.`,
+        `Net and ${label} per transaction are not rounded, so their sums match the key figures exactly.`,
+        `El neto y el ${label} por transacción no están redondeados; sumados coinciden exactamente con las cifras clave.`)
+      : T(`Netto en ${label} per afspraak zijn niet afgerond; opgeteld komen ze daardoor precies uit op de kerncijfers.`,
+        `Net and ${label} per appointment are not rounded, so their sums match the key figures exactly.`,
+        `El neto y el ${label} por cita no están redondeados; sumados coinciden exactamente con las cifras clave.`)) : null,
     `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang))} · vellu.cc`,
   ]));
 
@@ -212,11 +218,13 @@ export function buildRevenueReportXlsx({
   const printFooter = `${T("Pagina", "Page", "Página")} &P / &N`;
   const sheets = [
     { name: T("Samenvatting", "Summary", "Resumen"), cols, rows: sum1, printTitleRow: headRowS, header: printHeader, footer: printFooter },
-    { name: T("Afspraken", "Appointments", "Citas"), cols, rows: [head, ...body, totalRow(2, lastRow)], freeze: true, filter: Math.max(1, lastRow), printTitleRow: 1, header: printHeader, footer: printFooter },
+    { name: rowsTitle, cols, rows: [head, ...body, totalRow(2, lastRow)], freeze: true, filter: Math.max(1, lastRow), printTitleRow: 1, header: printHeader, footer: printFooter },
   ];
   const bytes = buildXlsx({ sheets, currencySymbol });
   const filename = revenueReportFilename({ salon, staffName, range, lang, ext: "xlsx" });
-  return { filename, bytes, count: R.count, totalGross: R.totalGross, totalNet: R.totalNet, totalBtw: R.totalBtw, byRate: R.byRate, untaxedGross: R.untaxedGross, paidByVoucher: R.voucherPaid, taxLabel: label };
+  // apptCount/saleCount: zodat de melding na het downloaden "N afspraken,
+  // M kassaverkopen" kan zeggen in plaats van alles "afspraken" te noemen.
+  return { filename, bytes, count: R.count, apptCount: R.apptCount, saleCount: R.saleCount, totalGross: R.totalGross, totalNet: R.totalNet, totalBtw: R.totalBtw, byRate: R.byRate, untaxedGross: R.untaxedGross, paidByVoucher: R.voucherPaid, taxLabel: label };
 }
 
 export function downloadRevenueReportXlsx(opts) {

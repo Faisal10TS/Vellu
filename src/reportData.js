@@ -45,7 +45,9 @@ const winAnsi = (ch) => {
   return ch === "\n" || ch === "\r" || ch === "\t" || (c >= 0x20 && c <= 0x7e) || (c >= 0xa0 && c <= 0xff) || WINANSI_EXTRA.has(ch);
 };
 export const pdfSafe = (v) => {
-  const str = s(v);
+  // NFC eerst: een naam die als "e" + los accentteken (U+0301) is opgeslagen
+  // wordt zo één "é" (WinAnsi), in plaats van dat het accent wegvalt.
+  const str = s(v).normalize("NFC");
   let out = "";
   for (const ch of str) {
     if (winAnsi(ch)) { out += ch; continue; }
@@ -371,6 +373,9 @@ export function cashFlowOf(a) {
   const received = net > 0 ? Math.max(raw, net) : 0;
   return { price, received, change: round2(received - net), net };
 }
+// Heeft deze contante rij echt geld door de la laten gaan? Nee bij een rij die
+// na afrekenen weer op open is gezet (amount_paid 0, paid_at leeg).
+export const hasCashFlow = (a) => { const f = cashFlowOf(a); return f.received > 0 || f.change > 0; };
 
 // ── Kasboek ──────────────────────────────────────────────────────────────
 // movements: cash_movements-rijen (open/in/out/count) van de periode;
@@ -386,7 +391,10 @@ export function cashbookData({ movements, cashRows, from, to }) {
   const byCreated = (a, b) => (`${a.date} ${a.created_at || a.time || ""}`).localeCompare(`${b.date} ${b.created_at || b.time || ""}`);
   const byTime = (a, b) => (`${a.date} ${s(a.time).slice(0, 5)}`).localeCompare(`${b.date} ${s(b.time).slice(0, 5)}`);
   const mv = (Array.isArray(movements) ? movements : []).filter((m) => m.date >= from && m.date <= to).slice().sort(byCreated);
-  const cs = (Array.isArray(cashRows) ? cashRows : []).filter((a) => a.date >= from && a.date <= to && a.payment_method === "cash" && a.status === "completed").slice().sort(byTime);
+  // Een contante rij die weer op open is gezet (amount_paid 0, paid_at leeg)
+  // bracht niets in de la: geen regel "0,00 ontvangen" en niet meetellen in
+  // het aantal contante betalingen.
+  const cs = (Array.isArray(cashRows) ? cashRows : []).filter((a) => a.date >= from && a.date <= to && a.payment_method === "cash" && a.status === "completed" && hasCashFlow(a)).slice().sort(byTime);
   const dates = [...new Set([...mv.map((m) => m.date), ...cs.map((a) => a.date)])].sort();
   const days = dates.map((date) => {
     const dm = mv.filter((m) => m.date === date);
@@ -426,13 +434,22 @@ export function cashbookData({ movements, cashRows, from, to }) {
 // cashbookData en cashFlowOf er niets van hoeven te weten: bedrag = ontvangen,
 // geen wisselgeld. Naam en omschrijving staan op de betaling zelf (kopie van
 // de verkoop), dus de vaak maanden oudere verkooprij is niet nodig.
-export function paymentsAsCashRows(payments, lang = "nl") {
+// tz (optioneel, tzFor(country_code)): het tijdstip op de klok van de salon,
+// net als de tijden van afspraken en kassaverkopen waarmee het gesorteerd
+// wordt. Zonder tz de klok van het toestel (oud gedrag).
+export function paymentsAsCashRows(payments, lang = "nl", tz = null) {
   const L = (nl, en, es) => (lang === "es" ? es : lang === "en" ? en : nl);
+  const hhmm = (t) => {
+    if (tz) {
+      try { return t.toLocaleTimeString("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }); } catch { /* onbekende zone: toestelklok */ }
+    }
+    return `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
+  };
   return (Array.isArray(payments) ? payments : [])
     .filter((p) => p && p.method === "cash" && (parseFloat(p.amount) || 0) > 0)
     .map((p) => {
       const t = p.created_at ? new Date(p.created_at) : null;
-      const time = t && !Number.isNaN(t.getTime()) ? `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}` : "";
+      const time = t && !Number.isNaN(t.getTime()) ? hhmm(t) : "";
       const amount = round2(p.amount);
       return {
         id: `pay:${p.id}`, payment_id: p.id, appointment_id: p.appointment_id, is_payment: true,

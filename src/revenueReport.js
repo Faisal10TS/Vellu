@@ -408,6 +408,10 @@ export function generateRevenueReportPDF({
     totalNet,
     totalBtw,
     count: appointments.length,
+    // Afspraken en kassaverkopen apart, voor de melding na het downloaden
+    // ("N afspraken, M kassaverkopen" i.p.v. alles "afspraken").
+    apptCount: R.apptCount,
+    saleCount: R.saleCount,
     // Per tarief, zodat een aanroeper (of een test) kan controleren waar de
     // belasting vandaan komt in plaats van één samengeklapt bedrag te zien.
     byRate: computed.byRate,
