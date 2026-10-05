@@ -70,6 +70,14 @@ const TZ_BY_COUNTRY: Record<string, string> = {
 };
 const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
 
+// Teksten in de events in de taal van de salon (zelfde landen als owner_lang
+// in de andere functies); de feed is voor de eigenaar en haar team.
+const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
+const LABELS = {
+  nl: { appt: "Afspraak", staff: "Medewerker", phone: "Tel", done: "Status: voltooid", pending: "Status: wacht op vooruitbetaling" },
+  en: { appt: "Appointment", staff: "Staff", phone: "Phone", done: "Status: completed", pending: "Status: awaiting prepayment" },
+} as const;
+
 // Per tijdzone één VTIMEZONE-blok. Apple Agenda weigert de HELE feed als dit
 // blok niet klopt, dus liever een handvol handgeschreven, geverifieerde blokken
 // dan een generator die de regels probeert af te leiden.
@@ -188,19 +196,36 @@ serve(async (req) => {
   const from = new Date(now); from.setDate(from.getDate() - 30);
   const to = new Date(now); to.setDate(to.getDate() + 180);
 
-  let apptQuery = supabase
-    .from("appointments")
-    .select("id, date, time, service_name, service_duration, client_name, client_phone, staff_name, status, is_sale, service_id, products")
-    .eq("owner_id", salon.id)
-    .gte("date", fmt(from))
-    .lte("date", fmt(to))
-    .not("status", "in", '("cancelled","no_show")')
-    // Kassa-verkopen zijn geen afspraken: ze mogen niet in de telefoonagenda
-    // van de eigenaar verschijnen (oude rijen missen de vlag, vandaar de
-    // structurele check verderop).
-    .not("is_sale", "is", true);
-  if (staff) apptQuery = apptQuery.eq("staff_id", staff.id);
-  const { data: appts } = await apptQuery.order("date", { ascending: true });
+  // Per pagina van 1000 (de rijenlimiet van PostgREST), op date + id zodat er
+  // niets dubbel of tussen wal en schip valt. Een drukke salon verloor anders
+  // stil haar verste afspraken.
+  // Medewerker-feed: niet meer op staff_id filteren in de query, want bij een
+  // teamboeking staat zij vaak alleen in staff_assignments/service_breakdown
+  // (het tweede deel). Dat filter gebeurt hieronder in JS (isMine).
+  const PAGE = 1000;
+  const appts: any[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data: page, error: pageErr } = await supabase
+      .from("appointments")
+      .select("id, date, time, service_name, service_duration, client_name, client_phone, staff_name, status, is_sale, service_id, products, staff_id, staff_assignments, service_breakdown")
+      .eq("owner_id", salon.id)
+      .gte("date", fmt(from))
+      .lte("date", fmt(to))
+      .not("status", "in", '("cancelled","no_show")')
+      // Kassa-verkopen zijn geen afspraken: ze mogen niet in de telefoonagenda
+      // van de eigenaar verschijnen (oude rijen missen de vlag, vandaar de
+      // structurele check verderop).
+      .not("is_sale", "is", true)
+      .order("date", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    // Liever een foutcode dan een halve of lege agenda: bij een fout houdt de
+    // agenda-app haar vorige kopie, bij een leeg antwoord wist ze alles.
+    if (pageErr) return new Response("Temporarily unavailable", { status: 503 });
+    appts.push(...(page || []));
+    if (!page || page.length < PAGE) break;
+  }
+  const L = LABELS[DUTCH_COUNTRIES.has(salon.country_code || "NL") ? "nl" : "en"];
 
   // De tijdzone van de salon bepaalt zowel de TZID op elk event als het
   // VTIMEZONE-blok in de kop; die twee moeten per definitie hetzelfde zijn,
@@ -232,28 +257,66 @@ serve(async (req) => {
     // Oude verkoop-rijen (van vóór de is_sale-vlag) structureel herkennen.
     if (!a.service_id && (parseInt(a.service_duration) || 0) === 0 && Array.isArray(a.products) && a.products.length > 0) continue;
     const dur = parseInt(a.service_duration || 60) || 60;
-    const end = addMinutes(a.date, a.time, dur);
-    const summaryParts = [a.client_name || "Afspraak"];
-    if (a.service_name) summaryParts.push(a.service_name);
-    const summary = summaryParts.join(" — ");
-    const descParts: string[] = [];
-    if (a.service_name) descParts.push(a.service_name);
-    // In een medewerker-feed is elke afspraak per definitie van haarzelf; het
-    // telefoonnummer volgt dezelfde privacy-instelling als in haar app.
-    if (a.staff_name && !staff) descParts.push(`Medewerker: ${a.staff_name}`);
-    if (a.client_phone && (!staff || salon.staff_view_client_contact !== false)) descParts.push(`Tel: ${a.client_phone}`);
-    if (a.status === "completed") descParts.push("Status: voltooid");
-    lines.push(
-      "BEGIN:VEVENT",
-      fold(`UID:appt-${a.id}@vellu.cc`),
-      `DTSTAMP:${stamp}`,
-      `DTSTART;TZID=${tz}:${dtLocal(a.date, a.time)}`,
-      `DTEND;TZID=${tz}:${dtLocal(end.date, end.time)}`,
-      fold(`SUMMARY:${esc(summary)}`),
-      fold(`DESCRIPTION:${esc(descParts.join("\n"))}`),
-      `STATUS:${a.status === "completed" ? "CONFIRMED" : "CONFIRMED"}`,
-      "END:VEVENT",
-    );
+    const breakdown = Array.isArray(a.service_breakdown) ? a.service_breakdown.filter((p: any) => p && typeof p === "object") : [];
+
+    // Vensters om uit te zenden. Eigenaar: de hele afspraak. Medewerker: alleen
+    // afspraken waar zij op staat (primair, per dienst toegewezen of als deel
+    // van een teamboeking — zelfde isMine-regel als haar app), en bij een
+    // teamboeking alleen haar EIGEN deel(en): start + offset_min, duur van dat
+    // deel. Aansluitende delen worden één event.
+    let vensters: { start: { date: string; time: string }; minutes: number; label: string }[] = [];
+    if (staff) {
+      const isMine = a.staff_id === staff.id
+        || Object.values(a.staff_assignments || {}).includes(staff.id)
+        || breakdown.some((p: any) => p.staff_id === staff!.id);
+      if (!isMine) continue;
+      const eigen = breakdown.some((p: any) => p.staff_id)
+        ? breakdown.filter((p: any) => p.staff_id === staff!.id)
+        : [];
+      if (eigen.length > 0) {
+        const delen = eigen
+          .map((p: any) => ({ off: parseInt(p.offset_min) || 0, dur: parseInt(p.duration) || 0, label: String(p.label || "") }))
+          .filter((d: any) => d.dur > 0)
+          .sort((x: any, y: any) => x.off - y.off);
+        const samen: { off: number; dur: number; labels: string[] }[] = [];
+        for (const d of delen) {
+          const laatste = samen[samen.length - 1];
+          if (laatste && laatste.off + laatste.dur === d.off) { laatste.dur += d.dur; if (d.label) laatste.labels.push(d.label); }
+          else samen.push({ off: d.off, dur: d.dur, labels: d.label ? [d.label] : [] });
+        }
+        vensters = samen.map((s) => ({ start: addMinutes(a.date, a.time, s.off), minutes: s.dur, label: s.labels.join(" + ") }));
+      }
+    }
+    if (vensters.length === 0) vensters = [{ start: { date: a.date, time: String(a.time).slice(0, 5) }, minutes: dur, label: "" }];
+
+    vensters.forEach((v, i) => {
+      const end = addMinutes(v.start.date, v.start.time, v.minutes);
+      const wat = v.label || a.service_name || "";
+      const summaryParts = [a.client_name || L.appt];
+      if (wat) summaryParts.push(wat);
+      const summary = summaryParts.join(" — ");
+      const descParts: string[] = [];
+      if (wat) descParts.push(wat);
+      // In een medewerker-feed is elke afspraak per definitie van haarzelf; het
+      // telefoonnummer volgt dezelfde privacy-instelling als in haar app.
+      if (a.staff_name && !staff) descParts.push(`${L.staff}: ${a.staff_name}`);
+      if (a.client_phone && (!staff || salon.staff_view_client_contact !== false)) descParts.push(`${L.phone}: ${a.client_phone}`);
+      if (a.status === "completed") descParts.push(L.done);
+      if (a.status === "pending_payment") descParts.push(L.pending);
+      lines.push(
+        "BEGIN:VEVENT",
+        // Eerste (of enige) event houdt de oude UID, zodat bestaande
+        // abonnementen niets dubbel krijgen.
+        fold(`UID:appt-${a.id}${i > 0 ? `-${i}` : ""}@vellu.cc`),
+        `DTSTAMP:${stamp}`,
+        `DTSTART;TZID=${tz}:${dtLocal(v.start.date, v.start.time)}`,
+        `DTEND;TZID=${tz}:${dtLocal(end.date, end.time)}`,
+        fold(`SUMMARY:${esc(summary)}`),
+        fold(`DESCRIPTION:${esc(descParts.join("\n"))}`),
+        "STATUS:CONFIRMED",
+        "END:VEVENT",
+      );
+    });
   }
   lines.push("END:VCALENDAR");
 

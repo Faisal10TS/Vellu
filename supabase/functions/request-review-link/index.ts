@@ -8,14 +8,24 @@
 // blijft het bewijs van een écht bezoek.
 //
 // Drie regels:
-//  1. HET ANTWOORD VERRAADT NIETS. Onbekend adres, geen afgeronde afspraak,
+//  1. HET ANTWOORD VERRAADT NIETS. Onbekend adres, geen geweest bezoek,
 //     alles al beoordeeld of gethrottled: altijd dezelfde 200 { ok: true }.
 //     Anders kon iemand met deze functie uitvinden wie klant is bij een salon.
-//  2. ALLEEN AFGERONDE BEZOEKEN, geen kassaverkopen — zelfde selectie als
-//     send-followups. De jongste afspraak zonder review wint; een nog geldige,
-//     ongebruikte token voor die afspraak wordt hergebruikt.
-//  3. MAX 3 MAILS PER ADRES PER SALON PER 24 UUR, geteld op review_tokens.
-//     Wie de knop spamt, spamt alleen zijn eigen inbox — en ook dat begrensd.
+//     Sinds 05-10-2026 ook niet via de TIJD: het antwoord gaat meteen na de
+//     invoercontrole terug en het opzoeken + mailen loopt daarna op de
+//     achtergrond (EdgeRuntime.waitUntil).
+//  2. ALLEEN GEWEEST BEZOEKEN: datum vóór vandaag in de tijdzone van de salon
+//     en status completed of confirmed (zelfde regel als de uitnodiging van
+//     send-followups; veel salons zetten een geweest bezoek niet op afgerond),
+//     geen kassaverkopen. De jongste afspraak zonder review wint; een nog
+//     geldige, ongebruikte token voor die afspraak wordt hergebruikt.
+//  3. VERZENDINGEN TELLEN, NIET TOKENS (review_tokens.last_sent_at): dezelfde
+//     link gaat hooguit één keer per 8 uur de deur uit (dus hooguit 3 keer per
+//     24 uur), en per adres per salon zijn er hooguit 3 verschillende links per
+//     24 uur in omloop. Hiervoor telde de limiet alleen NIEUWE tokens, dus een
+//     hergebruikte token kon eindeloos gemaild worden; met een wachttijd van
+//     één uur kon dat nog 24 keer per dag. Plus een limiet per IP, zoals de
+//     andere publieke functies.
 //
 // Auth: publieke pagina zonder sessie → verify_jwt = false (zie config.toml).
 
@@ -52,6 +62,52 @@ function generateToken(): string {
 }
 const REVIEW_TOKEN_DAYS = 60;
 const MAX_PER_DAY = 3;
+// Dezelfde link hooguit 1x per 8 uur: zo blijft ook het opnieuw mailen van één
+// hergebruikte token binnen MAX_PER_DAY verzendingen per 24 uur.
+const RESEND_AFTER_MS = 8 * 60 * 60 * 1000;
+
+// Limiet per IP (in het geheugen, per isolate), zoals book-appointment en
+// waitlist-notify.
+const RATE_LIMIT: Map<string, { count: number; resetAt: number }> = new Map();
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX = 10;
+function rateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = RATE_LIMIT.get(ip);
+  if (!entry || entry.resetAt < now) {
+    RATE_LIMIT.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= RATE_MAX) return false;
+  entry.count++;
+  return true;
+}
+// IP: eerst de headers die de gateway zelf zet, pas daarna het eerste
+// x-forwarded-for-veld (zelfde helper als book-appointment).
+function clientIp(req: Request): string {
+  const h = req.headers;
+  const ip = h.get("cf-connecting-ip") || h.get("x-real-ip") || (h.get("x-forwarded-for") || "").split(",")[0];
+  return String(ip || "").trim() || "unknown";
+}
+
+// HTML-escape voor alles wat een boeker zelf intypte (naam) of wat de salon
+// invulde (dienst, salonnaam) — zelfde als esc() in send-emails. Zonder dit kon
+// een naam als <a href=...> als echte link in een Vellu-mail belanden.
+const esc = (s: unknown) => String(s ?? "")
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+// "Vandaag" in de tijdzone van de salon: op Bonaire is het om 21:00 lokaal in
+// UTC al morgen, en dan telde een afspraak van vanavond al als geweest.
+const TZ_BY_COUNTRY: Record<string, string> = {
+  NL: "Europe/Amsterdam", BE: "Europe/Brussels", GB: "Europe/London",
+  AW: "America/Curacao", CW: "America/Curacao", BQ: "America/Curacao", SX: "America/Curacao",
+};
+const salonToday = (country: string | null) => {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: TZ_BY_COUNTRY[country || ""] || "Europe/Amsterdam", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  } catch { return new Date().toISOString().slice(0, 10); }
+};
 
 // Kassaverkoop herkennen, ook zonder is_sale-vlag (zelfde als send-followups).
 const isSaleRow = (a: any) =>
@@ -105,6 +161,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" }, origin);
   if (!RESEND_API_KEY) return json(500, { error: "email_not_configured" }, origin);
+  if (!rateLimit(clientIp(req))) return json(429, { error: "rate_limited" }, origin);
 
   let body: any = {};
   try { body = await req.json(); } catch { return json(400, { error: "invalid_json" }, origin); }
@@ -113,42 +170,56 @@ serve(async (req) => {
   if (!/^[a-z0-9-]{1,80}$/.test(slug)) return json(400, { error: "invalid_salon" }, origin);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 254) return json(400, { error: "invalid_email" }, origin);
 
-  // Vanaf hier is elk antwoord hetzelfde (regel 1).
-  const generic = () => json(200, { ok: true }, origin);
+  // Vanaf hier is elk antwoord hetzelfde (regel 1), en het komt meteen: het
+  // opzoeken en mailen gebeurt op de achtergrond, zodat ook de responstijd
+  // niet verraadt of het adres klant is. Zonder EdgeRuntime.waitUntil (lokaal)
+  // wachten we gewoon, zoals vroeger.
+  const taak = verwerk(slug, email, body?.lang).catch((e) => console.error("review link task failed:", e));
+  const rt = (globalThis as any).EdgeRuntime;
+  if (rt && typeof rt.waitUntil === "function") rt.waitUntil(taak);
+  else await taak;
+  return json(200, { ok: true }, origin);
+});
 
+async function verwerk(slug: string, email: string, reqLang: unknown) {
   const { data: salon } = await supabase
     .from("profiles")
     .select("id, business_name, slug, accent_color, country_code")
     .eq("slug", slug)
     .maybeSingle();
-  if (!salon) return generic();
+  if (!salon) return;
 
+  // Regel 3: verzendingen tellen. Hooguit MAX_PER_DAY verschillende links per
+  // adres per salon in 24 uur, geteld op last_sent_at (niet op created_at: een
+  // hergebruikte token telde daar nooit mee). Hoe vaak één en dezelfde link
+  // opnieuw mag, regelt RESEND_AFTER_MS hieronder.
   const pattern = likeEscape(email);
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const now = Date.now();
+  const since = new Date(now - 24 * 60 * 60 * 1000).toISOString();
   const { count: recent } = await supabase
     .from("review_tokens")
     .select("token", { count: "exact", head: true })
     .eq("owner_id", salon.id)
     .ilike("client_email", pattern)
-    .gte("created_at", since);
-  if ((recent || 0) >= MAX_PER_DAY) { console.log("throttled", salon.id); return generic(); }
+    .gte("last_sent_at", since);
+  if ((recent || 0) >= MAX_PER_DAY) { console.log("throttled", salon.id); return; }
 
-  // Afgeronde bezoeken: datum vóór vandaag (zelfde grens als send-followups),
-  // niet geannuleerd/no-show. Jongste eerst.
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Geweest bezoeken: datum vóór vandaag in de tijdzone van de salon, status
+  // completed of confirmed (zoals send-followups). Jongste eerst.
+  const todayStr = salonToday(salon.country_code);
   const { data: appts, error: apptErr } = await supabase
     .from("appointments")
     .select("id, date, time, service_name, client_name, client_email, lang, status, is_sale, service_id, service_duration, products")
     .eq("owner_id", salon.id)
     .ilike("client_email", pattern)
     .lt("date", todayStr)
-    .not("status", "in", '("cancelled","no_show")')
+    .in("status", ["completed", "confirmed"])
     .order("date", { ascending: false })
     .order("time", { ascending: false })
     .limit(25);
-  if (apptErr) { console.error("appointments lookup:", apptErr); return generic(); }
+  if (apptErr) { console.error("appointments lookup:", apptErr); return; }
   const candidates = (appts || []).filter((a) => !isSaleRow(a));
-  if (candidates.length === 0) return generic();
+  if (candidates.length === 0) return;
 
   // Al beoordeeld = er staat een review, óf de token van die afspraak is ooit
   // ingewisseld (used_at). Dat tweede vangt een review die de eigenaar daarna
@@ -156,41 +227,57 @@ serve(async (req) => {
   const ids = candidates.map((a) => a.id);
   const [{ data: done }, { data: toks }] = await Promise.all([
     supabase.from("reviews").select("appointment_id").in("appointment_id", ids),
-    supabase.from("review_tokens").select("appointment_id, token, used_at, expires_at").in("appointment_id", ids),
+    supabase.from("review_tokens").select("appointment_id, token, used_at, expires_at, last_sent_at").in("appointment_id", ids),
   ]);
   const reviewed = new Set((done || []).map((r: any) => r.appointment_id));
   const tokenByAppt = new Map((toks || []).map((t: any) => [t.appointment_id, t]));
   const appt = candidates.find((a) => !reviewed.has(a.id) && !tokenByAppt.get(a.id)?.used_at);
-  if (!appt) return generic();
+  if (!appt) return;
 
   // Eén token per afspraak (unique index review_tokens_appointment_uniq):
   // geldig → hergebruiken; verlopen → dezelfde rij verversen met een nieuwe
-  // token en einddatum; nog geen rij → aanmaken.
-  const expiresAt = new Date(Date.now() + REVIEW_TOKEN_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  // token en einddatum; nog geen rij → aanmaken. Elke verzending stempelt
+  // last_sent_at; dezelfde link gaat hooguit één keer per 8 uur weg. Het
+  // stempel bij hergebruik is voorwaardelijk (claim), zodat twee gelijktijdige
+  // aanvragen niet allebei mailen.
+  const nowIso = new Date(now).toISOString();
+  const resendCutoff = new Date(now - RESEND_AFTER_MS).toISOString();
+  const expiresAt = new Date(now + REVIEW_TOKEN_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const existing = tokenByAppt.get(appt.id);
   let token: string;
-  if (existing && new Date(existing.expires_at).getTime() > Date.now()) {
+  if (existing && new Date(existing.expires_at).getTime() > now) {
     token = String(existing.token);
+    const { data: claimed, error: claimErr } = await supabase.from("review_tokens")
+      .update({ last_sent_at: nowIso })
+      .eq("token", existing.token)
+      .or(`last_sent_at.is.null,last_sent_at.lt."${resendCutoff}"`)
+      .select("token");
+    if (claimErr) { console.error("review token claim:", claimErr); return; }
+    if (!claimed || claimed.length === 0) { console.log("resend too soon", salon.id); return; }
   } else if (existing) {
+    if (existing.last_sent_at && new Date(existing.last_sent_at).getTime() > now - RESEND_AFTER_MS) return;
     token = generateToken();
-    const { error: updErr } = await supabase.from("review_tokens")
-      .update({ token, expires_at: expiresAt, created_at: new Date().toISOString() })
-      .eq("token", existing.token);
-    if (updErr) { console.error("review token refresh:", updErr); return generic(); }
+    const { data: refreshed, error: updErr } = await supabase.from("review_tokens")
+      .update({ token, expires_at: expiresAt, created_at: nowIso, last_sent_at: nowIso })
+      .eq("token", existing.token)
+      .select("token");
+    if (updErr) { console.error("review token refresh:", updErr); return; }
+    if (!refreshed || refreshed.length === 0) return; // een parallelle aanvraag was ons voor
   } else {
     token = generateToken();
     const { error: tokErr } = await supabase.from("review_tokens").insert({
-      token, appointment_id: appt.id, owner_id: salon.id, client_email: appt.client_email, expires_at: expiresAt,
+      token, appointment_id: appt.id, owner_id: salon.id, client_email: appt.client_email, expires_at: expiresAt, last_sent_at: nowIso,
     });
-    if (tokErr) { console.error("review token insert:", tokErr); return generic(); }
+    if (tokErr) { console.error("review token insert:", tokErr); return; }
   }
 
   const salonName = String(salon.business_name || "de salon");
+  const eSalon = esc(salonName);
   const accent = /^#[0-9a-f]{6}$/i.test(String(salon.accent_color || "")) ? String(salon.accent_color) : "#c9a96e";
-  const lang = langFor(body?.lang, appt.lang, salon.country_code) as keyof typeof T;
+  const lang = langFor(reqLang, appt.lang, salon.country_code) as keyof typeof T;
   const t = T[lang];
-  const reviewUrl = `https://vellu.cc/${salon.slug}?review=${token}`;
-  const firstName = String(appt.client_name || "").split(/\s+/)[0] || "";
+  const reviewUrl = `https://vellu.cc/${encodeURIComponent(String(salon.slug || ""))}?review=${token}`;
+  const firstName = esc(String(appt.client_name || "").split(/\s+/)[0] || "");
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -199,26 +286,26 @@ serve(async (req) => {
       body: JSON.stringify({
         from: "Vellu <noreply@vellu.cc>",
         to: [appt.client_email],
-        subject: t.subject(salonName),
+        subject: t.subject(salonName.replace(/[\r\n]+/g, " ")),
         html: `
           <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px 24px; color: #1a1714;">
             <div style="text-align: center; margin-bottom: 32px;">
               <div style="font-size: 24px; font-weight: 300; letter-spacing: 0.18em; color: ${accent};">vellu</div>
             </div>
             <p style="font-size: 16px; margin-bottom: 8px;">${t.hi(firstName)}</p>
-            <p style="font-size: 14px; color: #555; line-height: 1.6;">${t.intro(salonName)}</p>
+            <p style="font-size: 14px; color: #555; line-height: 1.6;">${t.intro(eSalon)}</p>
             <div style="background: #f8f7f5; border-radius: 12px; padding: 16px; margin: 16px 0;">
-              <div style="font-weight: 500;">${appt.service_name || ""}</div>
-              <div style="font-size: 13px; color: #888; margin-top: 4px;">${appt.date} ${t.at} ${appt.time || ""}</div>
+              <div style="font-weight: 500;">${esc(appt.service_name || "")}</div>
+              <div style="font-size: 13px; color: #888; margin-top: 4px;">${esc(appt.date)} ${t.at} ${esc(appt.time || "")}</div>
             </div>
             <p style="font-size: 14px; color: #555; line-height: 1.6;">${t.ask}</p>
             <div style="text-align: center; margin: 24px 0;">
-              <a href="${reviewUrl}" style="display: inline-block; background: ${accent}; color: #0d0b0a; padding: 14px 32px; border-radius: 100px; text-decoration: none; font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase;">${t.cta}</a>
+              <a href="${esc(reviewUrl)}" style="display: inline-block; background: ${accent}; color: #0d0b0a; padding: 14px 32px; border-radius: 100px; text-decoration: none; font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase;">${t.cta}</a>
             </div>
             <p style="font-size: 12px; color: #999; line-height: 1.6;">${t.note}</p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
             <p style="font-size: 11px; color: #bbb; text-align: center;">
-              ${salonName} via Vellu · <a href="https://vellu.cc" style="color: ${accent}; text-decoration: none;">vellu.cc</a>
+              ${eSalon} via Vellu · <a href="https://vellu.cc" style="color: ${accent}; text-decoration: none;">vellu.cc</a>
             </p>
           </div>`,
       }),
@@ -227,5 +314,4 @@ serve(async (req) => {
   } catch (e) {
     console.error("Email send error:", e);
   }
-  return generic();
-});
+}

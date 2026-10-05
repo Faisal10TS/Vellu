@@ -39,6 +39,24 @@ const TZ_BY_COUNTRY: Record<string, string> = {
   AW: "America/Curacao", CW: "America/Curacao", BQ: "America/Curacao", SX: "America/Curacao",
 };
 const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+// Salontijd → UTC, letterlijk dezelfde helpers als book-/cancel-appointment.
+function tzOffsetMs(at: Date, tz: string) {
+  try {
+    const p: Record<string, string> = {};
+    for (const part of new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }).formatToParts(at)) p[part.type] = part.value;
+    const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+    return asUtc - at.getTime();
+  } catch { return 0; } // onbekende zone: liever de oude UTC-aanname dan crashen
+}
+function localToUtc(dateStr: string, timeStr: string, tz: string) {
+  const naive = new Date(`${dateStr}T${timeStr}:00Z`);
+  if (isNaN(naive.getTime())) return null;
+  return new Date(naive.getTime() - tzOffsetMs(naive, tz));
+}
 // Spiegelt shared.jsx CURRENCIES. CW/SX = Caribische gulden; Vellu toont de
 // ISO-code "XCG", niet het CBCS-symbool "Cg" (Faisal, 24-09-2026).
 const CUR: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£" };
@@ -71,7 +89,7 @@ const sendMail = (type: string, booking: Record<string, unknown>) =>
     .then(async (r) => { if (!r.ok) console.error(`send-emails ${type} → ${r.status}`, await r.text().catch(() => "")); })
     .catch((e) => console.error(`send-emails ${type} failed:`, e));
 
-const SELECT = "id, owner_id, date, time, service_name, service_price, client_name, client_email, client_phone, lang, payment_due_at, created_at, staff_id, staff_assignments, profiles(business_name, slug, accent_color, logo_url, salon_email, email, country_code, iban, iban_holder, payment_link, staff_view_client_contact, waitlist_enabled)";
+const SELECT = "id, owner_id, date, time, service_name, service_price, service_duration, client_name, client_email, client_phone, lang, payment_due_at, created_at, staff_id, staff_assignments, service_breakdown, profiles(business_name, slug, accent_color, logo_url, salon_email, email, country_code, iban, iban_holder, payment_link, staff_view_client_contact, waitlist_enabled)";
 
 // Betaalgegevens van een reservering (Esther/TTNB 25-09-2026): staat er precies
 // één teamlid op en heeft zij eigen IBAN/betaallink, dan haar rekening — anders
@@ -121,31 +139,69 @@ function baseOf(a: any) {
   };
 }
 
-async function staffEmailsFor(ownerId: string, staffId: string | null) {
-  if (!staffId) return [];
-  const { data } = await supabase.from("staff_members").select("email").eq("id", staffId).eq("owner_id", ownerId).maybeSingle();
-  return data?.email ? [data.email] : [];
+// Alle stylisten op een reservering: de primaire, de toewijzingen per dienst en
+// de delen van een teamboeking (zelfde als cancel-appointment).
+function stylistenVan(a: any): string[] {
+  const ids = [
+    a?.staff_id,
+    ...Object.values(a?.staff_assignments || {}),
+    ...(Array.isArray(a?.service_breakdown) ? a.service_breakdown.map((p: any) => p?.staff_id) : []),
+  ].filter((x) => typeof x === "string" && x);
+  return [...new Set(ids as string[])];
 }
 
-// Eerste wachtende voor die dag: eerst claimen (status → notified), dan mailen.
+// Elke (actieve) stylist op de boeking krijgt de salonkopie, niet alleen de
+// primaire.
+async function staffEmailsFor(a: any) {
+  const ids = stylistenVan(a);
+  if (ids.length === 0) return [];
+  const { data } = await supabase.from("staff_members").select("email, active").in("id", ids).eq("owner_id", a.owner_id);
+  return [...new Set((data || [])
+    .filter((s: any) => s.active !== false && String(s.email || "").trim())
+    .map((s: any) => String(s.email).trim()))];
+}
+
+// Eerste wachtende voor die dag die in het vrijgekomen gat PAST (geen stylist
+// of een stylist van deze reservering, en haar behandelingen niet langer dan
+// de vervallen afspraak): eerst claimen (status → notified), dan mailen. Past
+// niemand, dan mailt niemand. Zelfde regel als cancel-appointment en
+// OwnerApp.notifyWaitlistSpot.
 async function notifyWaitlist(a: any, b: ReturnType<typeof baseOf>) {
   try {
     if (!b.waitlistOn) return;
-    const { data: entries } = await supabase.from("waitlist").select("id, client_name, client_email")
+    const { data: entries } = await supabase.from("waitlist").select("id, client_name, client_email, staff_id, service_ids, lang, created_at")
       .eq("owner_id", a.owner_id).eq("date", a.date).eq("status", "waiting")
-      .order("created_at", { ascending: true }).limit(1);
-    const entry = entries?.[0];
-    if (!entry?.client_email) return;
-    const { data: claimed } = await supabase.from("waitlist")
-      .update({ status: "notified", notified_at: new Date().toISOString() })
-      .eq("id", entry.id).eq("status", "waiting").select("id");
-    if (!claimed || claimed.length === 0) return;
-    // De wachtlijst slaat geen klanttaal op; de markttaal van de salon is het
-    // beste signaal (zelfde keuze als cancel-appointment.notifyWaitlist).
+      .order("created_at", { ascending: true }).limit(50);
+    if (!entries || entries.length === 0) return;
+    const svcIds = [...new Set(entries.flatMap((e: any) => Array.isArray(e.service_ids) ? e.service_ids : []))];
+    const duurVan = new Map<string, number>();
+    if (svcIds.length > 0) {
+      const { data: svcs } = await supabase.from("services").select("id, duration").eq("owner_id", a.owner_id).in("id", svcIds);
+      for (const s of svcs || []) duurVan.set(s.id, parseInt(s.duration) || 0);
+    }
+    const vrij = parseInt(a.service_duration) || 60;
+    const stylisten = stylistenVan(a);
+    const passend = entries.filter((e: any) => {
+      if (!e.client_email) return false;
+      if (e.staff_id && !stylisten.includes(e.staff_id)) return false;
+      const nodig = (Array.isArray(e.service_ids) ? e.service_ids : []).reduce((s: number, id: string) => s + (duurVan.get(id) || 0), 0);
+      return nodig <= vrij;
+    });
+    let entry: any = null;
+    for (const kandidaat of passend) {
+      const { data: claimed } = await supabase.from("waitlist")
+        .update({ status: "notified", notified_at: new Date().toISOString() })
+        .eq("id", kandidaat.id).eq("status", "waiting").select("id");
+      if (claimed && claimed.length > 0) { entry = kandidaat; break; }
+    }
+    if (!entry) return;
+    // De taal waarin de klant zich aanmeldde (waitlist.lang); oude rijen zonder
+    // taal: de markttaal van de salon.
     await sendMail("waitlist_spot_open", {
       ...b.booking,
+      waitlist_id: entry.id,
       client_name: entry.client_name, client_email: entry.client_email, client_phone: null,
-      lang: b.oLang,
+      lang: ["nl", "en", "es"].includes(entry.lang) ? entry.lang : b.oLang,
     });
   } catch (e) { console.error("waitlist notify failed:", e); }
 }
@@ -157,11 +213,21 @@ serve(async () => {
     const nowIso = new Date().toISOString();
 
     // ── 2. Vervallen ────────────────────────────────────────────────────────
-    const { data: expired, error: e1 } = await supabase.from("appointments").select(SELECT)
+    // Ruimer ophalen dan we verwerken: rijen die we hieronder bewust overslaan
+    // (termijn niet vóór de start) mogen de echte vervallers niet verdringen.
+    const { data: expiredRaw, error: e1 } = await supabase.from("appointments").select(SELECT)
       .eq("status", "pending_payment").lte("payment_due_at", nowIso)
-      .order("payment_due_at", { ascending: true }).limit(MAX_PER_RUN);
+      .order("payment_due_at", { ascending: true }).limit(MAX_PER_RUN * 4);
     if (e1) throw e1;
-    for (const a of expired || []) {
+    // Nooit een reservering laten vervallen waarvan de termijn pas op of na de
+    // start viel (zo kort voor de afspraak geboekt of verplaatst): die klant
+    // kon niet op tijd betalen en zit misschien al in de stoel. De salon rondt
+    // hem zelf af (betaald, afgerond of no-show).
+    const expired = (expiredRaw || []).filter((a: any) => {
+      const start = a.date && a.time ? localToUtc(String(a.date), String(a.time).slice(0, 5), tzFor(a.profiles?.country_code)) : null;
+      return !(start && new Date(a.payment_due_at).getTime() >= start.getTime());
+    }).slice(0, MAX_PER_RUN);
+    for (const a of expired) {
       const { data: hit, error } = await supabase.from("appointments")
         .update({ status: "cancelled", cancelled_at: nowIso, cancellation_reason: "prepay_expired" })
         .eq("id", a.id).eq("status", "pending_payment").select("id");
@@ -169,7 +235,7 @@ serve(async () => {
       processed++;
       await supabase.from("cancellation_tokens").update({ used: true }).eq("appointment_id", a.id).not("used", "is", true);
       const b = baseOf(a);
-      const staffEmails = await staffEmailsFor(a.owner_id, a.staff_id);
+      const staffEmails = await staffEmailsFor(a);
       if (a.client_email) {
         await sendMail("prepay_expired", {
           ...b.booking,
@@ -218,7 +284,7 @@ serve(async () => {
     }
 
     await recordHealth("success", Date.now() - t0, processed, null);
-    return new Response(JSON.stringify({ ok: true, expired: (expired || []).length, reminders: (due || []).length, processed }),
+    return new Response(JSON.stringify({ ok: true, expired: expired.length, reminders: (due || []).length, processed }),
       { headers: { "Content-Type": "application/json" } });
   } catch (e) {
     console.error("prepay-watch failed:", e);

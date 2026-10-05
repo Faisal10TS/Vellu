@@ -58,6 +58,14 @@ function rateLimit(ip: string): boolean {
   return true;
 }
 
+// IP voor de rate limit: eerst de headers die de gateway zelf zet, pas daarna
+// het eerste x-forwarded-for-veld (zelfde helper als book-appointment).
+function clientIp(req: Request): string {
+  const h = req.headers;
+  const ip = h.get("cf-connecting-ip") || h.get("x-real-ip") || (h.get("x-forwarded-for") || "").split(",")[0];
+  return String(ip || "").trim() || "unknown";
+}
+
 // ── Salontijd → UTC, voor de annuleringstermijn ─────────────────────────────
 // Zelfde helpers als in send-reminders: de grens "48 uur voor aanvang" moet in
 // de tijdzone van de SALON liggen — een afspraak "morgen 10:00" op Bonaire is
@@ -94,27 +102,64 @@ function localToUtc(dateStr: string, timeStr: string, tz: string) {
   return new Date(naive.getTime() - tzOffsetMs(naive, tz));
 }
 
+// Alle stylisten op een afspraak: de primaire, de toewijzingen per dienst en
+// de delen van een teamboeking.
+function stylistenVan(a: any): string[] {
+  const ids = [
+    a?.staff_id,
+    ...Object.values(a?.staff_assignments || {}),
+    ...(Array.isArray(a?.service_breakdown) ? a.service_breakdown.map((p: any) => p?.staff_id) : []),
+  ].filter((x) => typeof x === "string" && x);
+  return [...new Set(ids as string[])];
+}
+
 // Notify the first waiting waitlist entry for this owner+date. Best-effort:
 // runs after the cancel succeeded, and swallows its own errors so a failure
 // here never makes the cancel appear to fail to the client.
-async function notifyWaitlist(ownerId: string, date: string, salonMeta: { name?: string; accent?: string; logo?: string; slug?: string; lang?: string }) {
+// Alleen een wachtende die in het vrijgekomen gat PAST: geen stylist of een
+// stylist van deze afspraak, en haar behandelingen (duur uit de catalogus van
+// de salon) niet langer dan de geannuleerde afspraak. Past niemand, dan krijgt
+// niemand een mail — "er is een plek vrij" voor iets wat er niet in past, of
+// bij een andere stylist, stuurt de klant voor niets naar de boekingspagina.
+// Zelfde regel als OwnerApp.notifyWaitlistSpot en prepay-watch.
+async function notifyWaitlist(appt: any, salonMeta: { name?: string; accent?: string; logo?: string; slug?: string; lang?: string }) {
   try {
+    const ownerId = appt.owner_id;
+    const date = appt.date;
     const { data: entries } = await supabase
       .from("waitlist")
-      .select("id, client_name, client_email")
+      .select("id, client_name, client_email, staff_id, service_ids, lang, created_at")
       .eq("owner_id", ownerId)
       .eq("date", date)
       .eq("status", "waiting")
       .order("created_at", { ascending: true })
-      .limit(1);
-    const entry = entries?.[0];
+      .limit(50);
+    if (!entries || entries.length === 0) return;
+    const svcIds = [...new Set(entries.flatMap((e: any) => Array.isArray(e.service_ids) ? e.service_ids : []))];
+    const duurVan = new Map<string, number>();
+    if (svcIds.length > 0) {
+      const { data: svcs } = await supabase.from("services").select("id, duration").eq("owner_id", ownerId).in("id", svcIds);
+      for (const s of svcs || []) duurVan.set(s.id, parseInt(s.duration) || 0);
+    }
+    const vrij = parseInt(appt.service_duration) || 60;
+    const stylisten = stylistenVan(appt);
+    const passend = entries.filter((e: any) => {
+      if (!e.client_email) return false;
+      if (e.staff_id && !stylisten.includes(e.staff_id)) return false;
+      const nodig = (Array.isArray(e.service_ids) ? e.service_ids : []).reduce((s: number, id: string) => s + (duurVan.get(id) || 0), 0);
+      return nodig <= vrij;
+    });
+    let entry: any = null;
+    for (const kandidaat of passend) {
+      const { data: claimed, error: updErr } = await supabase
+        .from("waitlist")
+        .update({ status: "notified", notified_at: new Date().toISOString() })
+        .eq("id", kandidaat.id)
+        .eq("status", "waiting")
+        .select("id");
+      if (!updErr && claimed && claimed.length > 0) { entry = kandidaat; break; }
+    }
     if (!entry) return;
-    const { error: updErr } = await supabase
-      .from("waitlist")
-      .update({ status: "notified", notified_at: new Date().toISOString() })
-      .eq("id", entry.id)
-      .eq("status", "waiting");
-    if (updErr) return;
     await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
       method: "POST",
       headers: {
@@ -124,6 +169,7 @@ async function notifyWaitlist(ownerId: string, date: string, salonMeta: { name?:
       body: JSON.stringify({
         type: "waitlist_spot_open",
         booking: {
+          waitlist_id: entry.id,
           client_name: entry.client_name,
           client_email: entry.client_email,
           salon_name: salonMeta.name || "",
@@ -131,10 +177,9 @@ async function notifyWaitlist(ownerId: string, date: string, salonMeta: { name?:
           salon_logo: salonMeta.logo || "",
           salon_slug: salonMeta.slug || "",
           date,
-          // Waitlist rows don't store the client's language (yet), so the
-          // salon's market language is the best signal we have — better than
-          // the old hardcoded Dutch for e.g. a Sint Maarten salon.
-          lang: salonMeta.lang || "nl",
+          // De taal waarin de klant zich aanmeldde (waitlist.lang, sinds
+          // 05-10-2026); oude rijen zonder taal: de markttaal van de salon.
+          lang: ["nl", "en", "es"].includes(entry.lang) ? entry.lang : (salonMeta.lang || "nl"),
         },
       }),
     }).catch((e) => console.error("waitlist notify email failed:", e));
@@ -148,7 +193,7 @@ async function notifyWaitlist(ownerId: string, date: string, salonMeta: { name?:
 // closes the tab immediately after confirming the cancellation. Best-effort:
 // swallows its own errors so it never makes the cancel appear to fail.
 async function notifyOwnerCancellation(b: {
-  owner_email?: string; staff_email?: string; salon_name?: string;
+  owner_email?: string; staff_emails?: string[]; salon_name?: string;
   salon_accent?: string; salon_logo?: string; lang?: string;
   client_name?: string; client_phone?: string | null; service_name?: string;
   client_email?: string | null;
@@ -186,7 +231,7 @@ async function notifyOwnerCancellation(b: {
         type: "owner_cancellation",
         booking: {
           owner_email: b.owner_email,
-          staff_emails: b.staff_email ? [b.staff_email] : [],
+          staff_emails: b.staff_emails || [],
           staff_view_revenue: b.staff_view_revenue,
           staff_view_client_contact: b.staff_view_client_contact,
           client_name: b.client_name,
@@ -275,7 +320,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" }, origin);
 
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = clientIp(req);
   if (!rateLimit(ip)) return json(429, { error: "rate_limited" }, origin);
 
   let payload: any;
@@ -307,26 +352,41 @@ serve(async (req) => {
   let deadlineHours = 0;
   let salonPhone: string | null = null;
   let salonNaam = "";
+  let salonSlugPub = "";
   if (appt.owner_id) {
     const { data: o } = await supabase.from("profiles")
-      .select("country_code, cancel_deadline_hours, salon_phone, business_name")
+      .select("country_code, cancel_deadline_hours, salon_phone, business_name, slug")
       .eq("id", appt.owner_id).maybeSingle();
     cc = o?.country_code || "NL";
     deadlineHours = parseInt(String(o?.cancel_deadline_hours ?? 0)) || 0;
     salonPhone = o?.salon_phone || null;
     salonNaam = o?.business_name || "";
+    salonSlugPub = o?.slug || "";
   }
+  // Naam en slug van de salon (publiek, geen e-mailadressen) zodat de
+  // annuleerpagina de salon kan noemen en terug kan linken.
+  const salonBits = { salon_name: salonNaam, salon_slug: salonSlugPub };
 
   if (tokenRow.used === true || appt.status === "cancelled") {
+    // Ook op het annuleerpad een gewoon "al geannuleerd" in plaats van een
+    // foutcode: een tweede tik of een pagina die nog openstond is geen fout.
+    // Er gaat dan niets meer de deur uit.
+    return json(200, { status: "already_cancelled", appointment: sanitize(appt), country_code: cc, ...salonBits }, origin);
+  }
+
+  // Afgerond of no-show: de afspraak is geweest. Annuleren zou hem uit de omzet
+  // en de no-show-telling halen. De pagina toont dan hetzelfde als een
+  // verlopen link ("de afspraak is inmiddels geweest").
+  if (appt.status !== "confirmed" && appt.status !== "pending_payment") {
     if (action === "check") {
-      return json(200, { status: "already_cancelled", appointment: sanitize(appt), country_code: cc }, origin);
+      return json(200, { status: "expired", appointment: sanitize(appt), country_code: cc, ...salonBits }, origin);
     }
-    return json(410, { error: "already_used" }, origin);
+    return json(410, { error: "not_cancellable" }, origin);
   }
 
   if (new Date(tokenRow.expires_at) < new Date()) {
     if (action === "check") {
-      return json(200, { status: "expired", appointment: sanitize(appt), country_code: cc }, origin);
+      return json(200, { status: "expired", appointment: sanitize(appt), country_code: cc, ...salonBits }, origin);
     }
     return json(410, { error: "expired" }, origin);
   }
@@ -343,32 +403,47 @@ serve(async (req) => {
       if (action === "check") {
         return json(200, {
           status: "too_late", appointment: sanitize(appt), country_code: cc,
-          deadline_hours: deadlineHours, salon_phone: salonPhone, salon_name: salonNaam,
+          deadline_hours: deadlineHours, salon_phone: salonPhone, ...salonBits,
         }, origin);
       }
-      return json(403, { error: "too_late_to_cancel", deadline_hours: deadlineHours, salon_phone: salonPhone, salon_name: salonNaam }, origin);
+      return json(403, { error: "too_late_to_cancel", deadline_hours: deadlineHours, salon_phone: salonPhone, ...salonBits }, origin);
     }
   }
 
   if (action === "check") {
-    return json(200, { status: "valid", appointment: sanitize(appt), country_code: cc }, origin);
+    return json(200, { status: "valid", appointment: sanitize(appt), country_code: cc, ...salonBits }, origin);
   }
 
   const cleanReason = reason ? String(reason).trim().slice(0, 500) : null;
 
-  const { error: upErr } = await supabase
+  // Atomisch claimen: alleen een afspraak die NU nog bevestigd of gereserveerd
+  // is, gaat naar 'cancelled'. Twee keer snel op de knop (of de salon die
+  // tegelijk annuleert) gaf eerst twee keer alle mails, SMS en push; nu raakt
+  // alleen de eerste update een rij en meldt alleen die iets.
+  const { data: hit, error: upErr } = await supabase
     .from("appointments")
     .update({
       status: "cancelled",
       cancelled_at: new Date().toISOString(),
       cancellation_reason: cleanReason,
     })
-    .eq("id", appt.id);
+    .eq("id", appt.id)
+    .in("status", ["confirmed", "pending_payment"])
+    .select("id");
   if (upErr) return json(500, { error: "cancel_failed" }, origin);
 
+  // Token in dezelfde stap dicht, ook als een ander ons voor was.
   await supabase.from("cancellation_tokens").update({ used: true }).eq("token", token);
 
-  const notify: { owner_email?: string; staff_email?: string; salon_name?: string; salon_accent?: string; salon_logo?: string; owner_id?: string; lang?: string; staff_view_revenue?: boolean; staff_view_client_contact?: boolean } = {};
+  if (!hit || hit.length === 0) {
+    const { data: nu } = await supabase.from("appointments").select("status").eq("id", appt.id).maybeSingle();
+    if (nu?.status === "cancelled") {
+      return json(200, { status: "already_cancelled", appointment: sanitize({ ...appt, status: "cancelled" }), country_code: cc, ...salonBits }, origin);
+    }
+    return json(410, { error: "not_cancellable" }, origin);
+  }
+
+  const notify: { owner_email?: string; staff_emails?: string[]; salon_name?: string; salon_accent?: string; salon_logo?: string; owner_id?: string; lang?: string; staff_view_revenue?: boolean; staff_view_client_contact?: boolean } = {};
   let salonSlug = "";
   let waitlistEnabled = true;
   if (appt.owner_id) {
@@ -392,13 +467,18 @@ serve(async (req) => {
       waitlistEnabled = owner.waitlist_enabled !== false;
     }
   }
-  if (appt.staff_id) {
-    const { data: staff } = await supabase
+  // Elke stylist op de afspraak krijgt de melding, niet alleen de primaire: bij
+  // een teamboeking hoorde de tweede stylist anders nooit dat haar deel vrijkwam.
+  const stylisten = stylistenVan(appt);
+  if (stylisten.length > 0 && appt.owner_id) {
+    const { data: staffRows } = await supabase
       .from("staff_members")
-      .select("email")
-      .eq("id", appt.staff_id)
-      .maybeSingle();
-    if (staff?.email) notify.staff_email = staff.email;
+      .select("email, active")
+      .eq("owner_id", appt.owner_id)
+      .in("id", stylisten);
+    notify.staff_emails = [...new Set((staffRows || [])
+      .filter((s: any) => s.active !== false && String(s.email || "").trim())
+      .map((s: any) => String(s.email).trim()))];
   }
 
   // Fire all cancellation notifications and AWAIT them before returning.
@@ -416,7 +496,7 @@ serve(async (req) => {
     notifyOwnerCancellation({
       owner_id: appt.owner_id,
       owner_email: notify.owner_email,
-      staff_email: notify.staff_email,
+      staff_emails: notify.staff_emails,
       staff_view_revenue: notify.staff_view_revenue,
       staff_view_client_contact: notify.staff_view_client_contact,
       salon_name: notify.salon_name,
@@ -449,7 +529,7 @@ serve(async (req) => {
     }),
     // Waitlist notify — skipped when the salon disabled the feature.
     (waitlistEnabled && appt.owner_id && appt.date)
-      ? notifyWaitlist(appt.owner_id, appt.date, {
+      ? notifyWaitlist(appt, {
           name: notify.salon_name,
           accent: notify.salon_accent,
           logo: notify.salon_logo,
@@ -459,10 +539,14 @@ serve(async (req) => {
       : Promise.resolve(),
   ]);
 
+  // Geen `notify` meer in het antwoord: dat bevatte het adres van de eigenaar
+  // en de stylist, en deze pagina is anoniem. Alle meldingen gingen hierboven
+  // al server-side.
   return json(200, {
     status: "cancelled",
     appointment: sanitize(appt),
-    notify,
+    country_code: cc,
+    ...salonBits,
   }, origin);
 });
 
