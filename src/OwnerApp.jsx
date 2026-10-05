@@ -7932,8 +7932,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // al betaald → kale factuur. send-emails vraagt alleen het nog
           // openstaande bedrag (amount_paid hieronder). Elk factuurprofiel
           // heeft z'n EIGEN tenaamstelling + betaallink, zodat het verzoek van
-          // een tweede medewerker naar haar eigen rekening loopt.
-          payment_request: OPEN_PAY_METHODS.has(a.payment_method ?? null),
+          // een tweede medewerker naar haar eigen rekening loopt. Een post op
+          // rekening die inmiddels via betalingen is voldaan vraagt niets meer.
+          payment_request: !settledViaPayments && OPEN_PAY_METHODS.has(a.payment_method ?? null),
           // Al (vooruit)betaald bedrag: de factuur trekt het af ("Vooruitbetaald
           // -€45 / Te betalen €30") en het betaalblok vraagt alleen het restant.
           // Zie sendPaid hierboven: alleen bij een echte vooruitbetaling/deel-
