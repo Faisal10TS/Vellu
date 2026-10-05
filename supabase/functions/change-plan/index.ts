@@ -18,6 +18,10 @@
 //     for the remaining PAID days is charged AFTER the upgrade is applied
 //     (never before — we don't take money for a tier we haven't delivered).
 //
+// Foutcodes voor de app: 400 no_change; 409 not_active, no_mollie_customer,
+// no_valid_mandate, yearly_oneoff (eenmalig betaald jaarabonnement, sinds
+// 05-10-2026) en busy (er loopt al een wissel, sinds 05-10-2026).
+//
 // Auth: requires a valid Supabase JWT.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -123,14 +127,46 @@ serve(async (req) => {
   if (!PLAN_PRICES[newPlan]) return err(400, "invalid_plan", origin);
   if (newInterval !== "monthly" && newInterval !== "yearly") return err(400, "invalid_billing_interval", origin);
 
-  // Profile
+  // Profile + korte vergrendeling (sinds 05-10-2026). Twee wissel-verzoeken
+  // tegelijk (twee tabbladen, of een herhaling tijdens een trage reactie) lazen
+  // allebei het oude plan en maakten allebei een nieuw Mollie-abonnement plus
+  // een pro-rata-afschrijving; alleen het laatste id werd bewaard en het andere
+  // schreef ongemerkt door. Nu zet het verzoek eerst plan_change_started_at
+  // (alleen als die leeg is of ouder dan 2 minuten) en leest het profiel in
+  // dezelfde stap. Lukt dat niet, dan is er al een wissel bezig: 409 busy. De
+  // vergrendeling wordt aan het eind altijd weer vrijgegeven (finally).
+  const lockIso = new Date().toISOString();
+  const staleIso = new Date(Date.now() - 2 * 60 * 1000).toISOString();
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, plan, billing_interval, subscription_status, mollie_customer_id, mollie_subscription_id, mollie_mandate_id, plan_expires_at, current_period_start")
+    .update({ plan_change_started_at: lockIso })
     .eq("id", userId)
+    .or(`plan_change_started_at.is.null,plan_change_started_at.lt."${staleIso}"`)
+    .select("id, business_name, email, plan, billing_interval, subscription_status, mollie_customer_id, mollie_subscription_id, mollie_mandate_id, plan_expires_at, current_period_start")
     .maybeSingle();
-  if (profileErr || !profile) return err(404, "no_profile", origin);
+  if (profileErr) {
+    console.error("change-plan: lock/profile lookup failed", profileErr);
+    return err(500, "lock_failed", origin);
+  }
+  if (!profile) {
+    const { data: exists } = await supabase.from("profiles").select("id").eq("id", userId).maybeSingle();
+    return exists ? err(409, "busy", origin) : err(404, "no_profile", origin);
+  }
 
+  try {
+    return await changePlan(profile, userId, newPlan, newInterval, origin);
+  } finally {
+    const { error: unlockErr } = await supabase
+      .from("profiles")
+      .update({ plan_change_started_at: null })
+      .eq("id", userId)
+      .eq("plan_change_started_at", lockIso);
+    if (unlockErr) console.error("change-plan: unlock failed", unlockErr);
+  }
+});
+
+// deno-lint-ignore no-explicit-any
+async function changePlan(profile: any, userId: string, newPlan: string, newInterval: string, origin: string | null): Promise<Response> {
   // Need an established subscription to change. Trials should go through the
   // normal subscribe flow (which sets up the first mandate via checkout).
   if (profile.subscription_status !== "active") {
@@ -143,6 +179,17 @@ serve(async (req) => {
   // Same plan + same interval = nothing to do.
   if (profile.plan === newPlan && (profile.billing_interval || "monthly") === newInterval) {
     return err(400, "no_change", origin);
+  }
+
+  // Jaarabonnement als EENMALIGE betaling (geen Mollie-abonnement, geen
+  // doorlopende machtiging): hier niets wisselen. Er is geen machtiging (dan gaf
+  // dit een kale no_valid_mandate), en met een oude machtiging van vroeger
+  // maandbetalen zou hieronder ongevraagd een automatisch verlengend
+  // jaarabonnement plus een incasso ontstaan, terwijl de salon juist koos voor
+  // "wordt niet automatisch verlengd". De app verwijst zo'n salon naar support
+  // of naar Verlengen.
+  if ((profile.billing_interval || "monthly") === "yearly" && !profile.mollie_subscription_id) {
+    return err(409, "yearly_oneoff", origin);
   }
 
   // Resolve a usable mandate. Prefer the one we cached during first-payment;
@@ -343,4 +390,4 @@ serve(async (req) => {
     prorated_charge: proratedCharged,
     new_subscription_id: newSubId,
   }, origin);
-});
+}

@@ -5,7 +5,10 @@
 //
 //   • OWNER mode (logged-in salon owner, from the dashboard) — answers "how do
 //     I…" / "why isn't X working" from the Vellu knowledge base, personalised
-//     with a little non-sensitive context about their own account.
+//     with a little non-sensitive context about their own account. Since
+//     05-10-2026 only for a salon with a running plan or trial (owner or team
+//     member), with DB-backed daily caps per user and for all salons together;
+//     any other logged-in account gets public mode.
 //   • PUBLIC mode (anonymous visitor, from the landing page) — answers sales /
 //     orientation questions from prospects. NO account context is ever fetched,
 //     so no salon data can reach an anonymous caller. Tighter per-message caps,
@@ -97,6 +100,81 @@ function rateLimit(id: string, max: number): boolean {
 // Owner (authenticated) chats are NOT subject to these caps. Both configurable.
 const DAILY_PUBLIC_CAP = Number(Deno.env.get("PUBLIC_CHAT_DAILY_CAP") || "300");   // per UTC day
 const MINUTE_PUBLIC_CAP = Number(Deno.env.get("PUBLIC_CHAT_MINUTE_CAP") || "20");  // global burst/min
+// Sinds 05-10-2026 ook per IP per dag in de database (bumpIpUsage): anders kon
+// één script in een kwartier het hele dagbudget opmaken en zag elke bezoeker
+// daarna "Het is nu erg druk".
+const IP_DAILY_PUBLIC_CAP = Number(Deno.env.get("PUBLIC_CHAT_IP_DAILY_CAP") || "30");
+// Eigenaarsmodus (sinds 05-10-2026): alleen voor een salon met een lopend plan of
+// proef (eigenaar of teamlid), met een daglimiet per gebruiker en voor alle
+// salons samen. Daarvoor kreeg elk willekeurig account onbeperkt eigenaarsmodus.
+const OWNER_USER_DAILY_CAP = Number(Deno.env.get("SUPPORT_CHAT_USER_DAILY_CAP") || "60");
+const OWNER_GLOBAL_DAILY_CAP = Number(Deno.env.get("SUPPORT_CHAT_OWNER_DAILY_CAP") || "2000");
+
+// IP van de bezoeker zoals het platform het doorgeeft. Niet de rechtse hop uit
+// X-Forwarded-For raden: dan kan iedereen in dezelfde emmer belanden.
+function clientIp(req: Request): string {
+  const h = req.headers;
+  const ip = (h.get("cf-connecting-ip") || h.get("x-real-ip") || (h.get("x-forwarded-for") || "").split(",")[0] || "").trim();
+  return ip ? ip.slice(0, 64) : "unknown";
+}
+
+// Zelfde regel als planIsActive in src/App.jsx.
+function planActive(p: Record<string, unknown> | null): boolean {
+  if (!p?.plan) return false;
+  const raw = p.plan_expires_at as string | null;
+  if (!raw) return true;
+  const exp = new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(raw)) ? `${raw}T23:59:59` : String(raw));
+  const now = Date.now();
+  if (exp.getTime() > now) return true;
+  const renewing = p.subscription_status === "active" && !!p.mollie_subscription_id;
+  return renewing && now - exp.getTime() < 3 * 24 * 60 * 60 * 1000;
+}
+
+// Hoort deze gebruiker bij een salon met een lopend plan of proef? Eigen
+// salonprofiel, anders een actieve teamrij (dan telt het plan van die salon).
+// Bij twijfel (fout) gewoon publieke modus.
+async function hasActiveSalon(userId: string): Promise<boolean> {
+  try {
+    const cols = "plan, plan_expires_at, subscription_status, mollie_subscription_id";
+    const { data: own } = await supabase.from("profiles").select(cols).eq("id", userId).maybeSingle();
+    if (own) return planActive(own as Record<string, unknown>);
+    const { data: st } = await supabase.from("staff_members")
+      .select("owner_id")
+      .eq("user_id", userId)
+      .or("active.is.null,active.eq.true")
+      .limit(1)
+      .maybeSingle();
+    if (!st?.owner_id) return false;
+    const { data: salon } = await supabase.from("profiles").select(cols).eq("id", st.owner_id).maybeSingle();
+    return planActive(salon as Record<string, unknown> | null);
+  } catch { return false; }
+}
+
+// Dagteller per gebruiker plus het dagtotaal van alle eigenaarsgesprekken.
+// null = onbekend (fout); dan niet betalen voor een antwoord.
+async function bumpOwnerUsage(userId: string): Promise<{ user: number; total: number } | null> {
+  try {
+    const { data, error } = await supabase.rpc("bump_support_chat_user_usage", { p_user_id: userId });
+    if (error) return null;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || typeof row.user_count !== "number" || typeof row.day_total !== "number") return null;
+    return { user: row.user_count, total: row.day_total };
+  } catch { return null; }
+}
+
+// Dagteller per IP voor de publieke chat. null = onbekend; dan beslist alleen
+// het globale budget (dat blijft wel dicht bij twijfel).
+async function bumpIpUsage(ip: string): Promise<number | null> {
+  try {
+    const { data, error } = await supabase.rpc("bump_public_chat_ip_usage", { p_ip: ip });
+    if (error) { console.error("bump_public_chat_ip_usage error:", error); return null; }
+    return typeof data === "number" ? data : null;
+  } catch { return null; }
+}
+
+function pickLang(lang: unknown, nl: string, en: string, es: string): string {
+  return lang === "en" ? en : lang === "es" ? es : nl;
+}
 
 // Atomically bump the global day + minute counters and return both. Returns null
 // on ANY error; callers treat null as "budget unknown" and FAIL CLOSED (refuse
@@ -118,7 +196,8 @@ const KNOWLEDGE = `Je bent de Vellu-assistent: de ingebouwde helpassistent voor 
 
 # Toon en aanpak
 - Vriendelijk, kort en praktisch. Geef concrete stappen met de navigatie erbij (bijv. "Ga naar Instellingen → Diensten & producten"). Op de telefoon zitten Analytics, Facturen en Instellingen onder de knop "Meer" in de balk onderaan; zeg dan "tik onderaan op Meer → Instellingen".
-- Antwoord in de taal van de gebruiker (standaard Nederlands; schakel naar Engels als de gebruiker Engels schrijft).
+- Antwoord in de taal van de gebruiker (standaard Nederlands; schakel naar Engels of Spaans als de gebruiker Engels of Spaans schrijft).
+- Antwoord in gewone tekst, zonder Markdown (geen **vet**, geen # koppen, geen tabellen) en zonder emoji. Korte alinea's of genummerde stappen (1., 2., 3.) mogen wel; het chatvenster toont alleen platte tekst.
 - Verzin nooit functies. Weet je niet zeker of Vellu iets kan, zeg dat eerlijk en verwijs naar support (mirahventures@vellu.cc of via de contactknop). Beloof geen dingen die je niet zeker weet.
 - Alleen Vellu-onderwerpen. Bij niet-Vellu-vragen (algemene ondernemersadvies, belasting, juridisch) verwijs je vriendelijk terug; voor belasting/BTW-vragen verwijs je naar hun eigen boekhouder.
 - Geef geen persoonlijk financieel of juridisch advies. Feitelijke uitleg over Vellu (bv. hoe de belastingregel op de factuur werkt, of welke munt bij welke regio hoort) mag wel.
@@ -156,7 +235,7 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 
 # Team (Instellingen → Team)
 - Voeg medewerkers toe. De eigenaar staat altijd bovenaan in het team en in de medewerkerskeuze op de boekingspagina.
-- Medewerkers een eigen login geven (team-account, eigen inlog) is een Professional-functie. Je koppelt hun e-mail; ze loggen in op vellu.cc/owner met dat adres.
+- Medewerkers een eigen login geven (team-account, eigen inlog), sinds 05-10-2026 via een uitnodigingsmail: voeg je een medewerker toe met haar e-mailadres, dan stuurt Vellu haar een mail met een persoonlijke link (7 dagen geldig). Via die link maakt ze met dat e-mailadres een account aan, of logt ze in als ze er al een heeft; daarna is ze gekoppeld en logt ze voortaan in op vellu.cc/owner. Niet ontvangen, verlopen of een ander adres ingevuld? Ga naar Instellingen, tab Team, en tik bij de medewerker op "Uitnodiging mailen" (of "Opnieuw mailen"); kijk ook in de spam. Een account dat al een eigen salon met behandelingen of afspraken heeft kan geen teamlid worden: gebruik dan een ander e-mailadres. Een account wordt niet meer automatisch gekoppeld alleen omdat het e-mailadres klopt; het gaat altijd via de link uit de mail. Wat ook blijft werken (Professional): bij de medewerker onder "Maak een login aan voor deze medewerker" zelf een e-mailadres en wachtwoord invullen en op "Uitnodigen" tikken; geef dat wachtwoord dan zelf aan de medewerker.
 - Per medewerker stel je in welke diensten ze doen. Er is een instelling "Team ziet elkaars agenda" (standaard uit): staat die aan, dan zien medewerkers de hele salonagenda (maar hun omzet, facturen en klantenlijst blijven persoonlijk).
 - Prijs per medewerker: elke medewerker kan een eigen prijs per dienst (en per variant) hebben. Instellen via Instellingen → Diensten & producten → klap de dienst uit → tabje TEAM. Ook welke extra's ze doet regel je daar.
 - Medewerkers met eigen login beheren zelf hun werktijden, extra werkdagen en blokkades (ook "elke vrijdag geen <behandeling>") in hun eigen omgeving, en kunnen daar hun eigen telefoon-agenda koppelen (Instellingen → Werktijden → "Agenda in je telefoon" — alleen hun eigen afspraken).
@@ -201,7 +280,7 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 
 # Wachtlijst
 - Als er geen tijd vrij is, kan een klant zich op de wachtlijst zetten (per gewenste dag). De eigenaar ziet de wachtlijst gegroepeerd per klant, met dienst en gewenste medewerker.
-- De klant krijgt een bevestigingsmail en de salon een melding zodra iemand zich aanmeldt. Komt er een plek vrij (bijv. door een annulering), dan kan de eerste op de wachtlijst automatisch een mail krijgen.
+- De klant krijgt een bevestigingsmail en de salon een melding zodra iemand zich aanmeldt. Komt er een plek vrij (bijv. door een annulering of een vervallen reservering), dan krijgt sinds 05-10-2026 de eerste klant op de wachtlijst voor die dag automatisch een mail, maar alleen als haar behandeling(en) in de vrijgekomen tijd passen en ze geen andere medewerker wilde dan die van de vrijgekomen afspraak. Past niemand, dan gaat er geen mail uit. De mail is in de taal waarin de klant zich aanmeldde.
 - Is de dag waarvoor iemand wachtte voorbij, dan verdwijnt die aanmelding vanzelf uit de wachtlijst (sinds 16-09-2026; 's nachts definitief opgeruimd). De eigenaar hoeft verlopen aanmeldingen niet zelf weg te halen.
 - Je markeert per aanmelding "benaderd" of verwijdert 'm.
 
@@ -215,7 +294,7 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 - Waarom staat er "XCG" en niet "NAf", "ANG", "ƒ" of "Cg"? Sinds 31 maart 2025 is de Caribische gulden de munt van Curaçao en Sint Maarten (ISO-code XCG; de Centrale Bank van Curaçao en Sint Maarten, CBCS, schrijft het symbool als "Cg"). Die verving de Nederlands-Antilliaanse gulden (NAf, ISO-code ANG) één op één, dus prijzen veranderden niet. De oude gulden is sinds 1 juli 2025 geen wettig betaalmiddel meer; oude biljetten zijn tot 2055 in te wisselen bij de CBCS. De koers is vast gebleven: 1,79 gulden per US-dollar. Vellu toont bewust de ISO-code "XCG" (bijvoorbeeld "XCG 45,00") op de boekingspagina, in het dashboard, op bonnen, facturen, rapporten en in e-mails, omdat die eenduidig is voor klanten, banken en boekhouders. In de spreektaal blijft het gewoon "gulden" of "florin". Het valutasymbool is niet los instelbaar; het volgt uit de regio. Wees precies: "XCG" is de ISO-code (zo staat de munt ook op bankafschriften en in het betaalverkeer), "Cg" is het symbool dat de CBCS zelf gebruikt. Zeg dus nooit dat de CBCS "XCG" voorschrijft: de keuze voor de ISO-code is van Vellu.
 - Regio wijzigen: Instellingen → Salon → "Regio & valuta". Verhuisd, of bij het aanmelden het verkeerde land gekozen? Verander het daar en klik Opslaan; álle prijzen, facturen, e-mails en het dashboard schuiven meteen mee. Bestaande bedragen worden in het nieuwe symbool getoond (niet omgerekend).
 - Het belasting-label past automatisch aan bij je regio: Nederland/België tonen BTW, Bonaire toont ABB (het tarief stel je zelf in bij de factuurgegevens).
-- Vellu's eigen abonnement wordt altijd in euro's gefactureerd; een salon buiten de eurozone betaalt met creditcard of Apple Pay en de kaart rekent automatisch om.
+- Vellu's eigen abonnement wordt altijd in euro's gefactureerd (Starter €19 of Professional €35 per maand, of €190 / €350 per jaar), ook voor salons buiten de eurozone. Maandelijks betaal je met iDEAL (Nederlandse bankrekening) of creditcard; de kaart rekent automatisch om. Bij een jaarabonnement (eenmalige betaling) kun je kiezen uit de betaalmethodes die op de betaalpagina van Mollie staan.
 - Zie je nog euro's terwijl je regio al goed staat? Ververs de app volledig — op je telefoon: trek de pagina bovenaan omlaag (pull-to-refresh), of sluit het tabblad/app-icoon en open opnieuw. Je draait waarschijnlijk nog een oude, gecachte versie.
 
 # Betalingen
@@ -276,15 +355,18 @@ Je link is vellu.cc/<jouw-salonnaam>. Deel 'm in je Instagram-bio, via WhatsApp,
 
 # Abonnement (Instellingen → Abonnement & account)
 - Twee plannen: Starter €19/maand en Professional €35/maand (incl. BTW). Jaarlijks = 10× maand (2 maanden gratis).
-- Proefperiode: 14 dagen gratis. Drie dagen voor het einde krijg je een mail, op het dashboard staat dan een gele balk "Je proefperiode eindigt over X dagen" met de knop Plan kiezen, en op de dag dat de proef afloopt nog een mail (en een push-melding als je die aan hebt). Na afloop blijft je boekingspagina gewoon online en kunnen klanten blijven boeken; alleen je dashboard staat op pauze tot je een plan kiest. Alle gegevens blijven bewaard. Er is geen verlenging van de proef: inloggen na afloop geeft het plan-scherm, kies daar Starter of Professional en betaal, dan is je dashboard direct weer open.
-- Betalen lukt niet (kaart geweigerd, "3-D Secure authentication failed", betaling verlopen)? Dat strandt bij de bank, niet bij Vellu, en er is dan niets afgeschreven; je krijgt automatisch een mail. Wat te doen: kaartnummer en vervaldatum nog eens goed overnemen; je bank vragen om online/internationale betalingen en 3-D Secure (Mastercard Identity Check / Visa Secure) op de kaart te activeren — bij Caribische banken zoals MCB staat dat vaak uit; of een andere kaart, iDEAL (Nederland) of Apple Pay proberen. Het abonnement wordt altijd in euro's afgeschreven. Kom je er niet uit, antwoord op de mail over de mislukte betaling of mail mirahventures@vellu.cc.
+- Proefperiode: 14 dagen gratis. Drie dagen voor het einde krijg je een mail, op het dashboard staat dan een gele balk "Je proefperiode eindigt over X dagen" met de knop Plan kiezen, en op de dag dat de proef afloopt nog een mail (en een push-melding als je die aan hebt). Na afloop blijft je boekingspagina gewoon online en kunnen klanten blijven boeken; alleen je dashboard staat op pauze tot je een plan kiest. Alle gegevens blijven bewaard. Er is geen verlenging van de proef: inloggen na afloop geeft het plan-scherm, kies daar Starter of Professional en betaal, dan is je dashboard direct weer open. Kies je al tijdens de proef een plan en betaal je, dan gaat je betaalde periode pas in als de proef afloopt (sinds 05-10-2026): je houdt je resterende proefdagen.
+- Betalen lukt niet (kaart geweigerd, "3-D Secure authentication failed", betaling verlopen)? Dat strandt bij de bank, niet bij Vellu, en er is dan niets afgeschreven; je krijgt automatisch een mail. Wat te doen: kaartnummer en vervaldatum nog eens goed overnemen; je bank vragen om online/internationale betalingen en 3-D Secure (Mastercard Identity Check / Visa Secure) op de kaart te activeren — bij Caribische banken zoals MCB staat dat vaak uit; of een andere kaart of iDEAL (Nederland) proberen; bij een jaarabonnement staan op de betaalpagina ook de andere methodes die Mollie aanbiedt. Het abonnement wordt altijd in euro's afgeschreven. Kom je er niet uit, antwoord op de mail over de mislukte betaling of mail mirahventures@vellu.cc.
+- Mislukt een automatische maandelijkse afschrijving (bijv. te weinig saldo), dan krijg je daar sinds 05-10-2026 ook een mail over, en staat je dashboard op pauze tot je opnieuw betaalt; je boekingspagina blijft werken. Log in, kies op het plan-scherm je plan en betaal: het oude abonnement wordt dan automatisch gestopt, dus er wordt niet dubbel afgeschreven.
+- Kom je na het betalen terug in Vellu en staat er dat de betaling nog in behandeling is (bijv. een bankoverschrijving bij een jaarabonnement), dan kan dat 1 tot 3 werkdagen duren; je dashboard gaat open zodra de betaling binnen is. Betaal dan niet nog een keer.
 - Professional voegt toe: onbeperkt medewerkers met eigen login, analytics-dashboard, kortingscodes, nieuwsbrief & klant-export, meerdere locaties, eigen lettertype en prioriteit-support.
-- Upgraden naar Professional: je krijgt direct alle functies; het prijsverschil voor de rest van je huidige periode wordt eenmalig afgeschreven, daarna geldt €35/maand.
-- Opzeggen: je toegang loopt door tot het einde van de betaalde periode; je gegevens blijven altijd bewaard. Tijdens die periode kun je opnieuw abonneren (ook als Professional), eventueel met een andere bankrekening — handig als iemand anders de betaling overneemt. Er verandert niks aan je data.
+- Upgraden naar Professional (bij een maand- of jaarabonnement met automatische afschrijving): je krijgt direct alle functies; het prijsverschil voor de rest van je huidige periode wordt eenmalig afgeschreven, daarna betaal je het Professional-tarief van je termijn (€35 per maand, of €350 per jaar bij een jaarabonnement). Heb je een jaarabonnement dat je in één keer hebt betaald (zonder automatische verlenging), dan kun je niet zelf in de app upgraden of wisselen; mail mirahventures@vellu.cc, dan regelen we het.
+- Jaarabonnement in één keer betaald: dat wordt niet automatisch verlengd. Onder Abonnement & account staat tot wanneer je toegang hebt, en een week van tevoren krijg je een herinneringsmail; verlengen kan via de knop Verlengen. Het nieuwe jaar gaat in op de einddatum van het lopende jaar (sinds 05-10-2026), dus vroeg verlengen kost je geen dagen.
+- Opzeggen: je toegang loopt door tot het einde van de betaalde periode; je gegevens blijven altijd bewaard. Tijdens die periode kun je opnieuw abonneren (ook als Professional), eventueel met een andere bankrekening — handig als iemand anders de betaling overneemt. Je betaalt dan meteen, maar de nieuwe periode gaat pas in als de lopende afloopt (sinds 05-10-2026; daarvoor begon hij direct en verloor je de resterende dagen). Er verandert niks aan je data.
 - Facturen van Vellu (voor je eigen boekhouding) staan ook bij Abonnement & account, met een downloadlink per factuur.
 - Beoordeel Vellu (vanaf 16-09-2026): elke salon krijgt van Vellu (afzender "Vellu", ondertekend Team Vellu, in het Engels: "How is Vellu working for you? Rate it in one minute") een mail met een persoonlijke link (vellu.cc/beoordeel/…) naar een korte pagina (Engels, met NL-knop): een cijfer van 1 tot 5, wat vind je van Vellu, wat mis je of zou je veranderen, en een vinkje of je salonnaam met je woorden op vellu.cc mag staan. De antwoorden zijn privé: alleen Vellu leest ze. Er komt niets op vellu.cc tenzij Vellu dat zelf aanzet, en dan alleen een gemiddelde (vanaf 3 beoordelingen) en citaten waarvoor de salon het vinkje zette én die Vellu plaatst. Dezelfde link blijft werken om het antwoord later te wijzigen. Dit staat NIET in de app zelf. Mail niet ontvangen of link kwijt? Mail mirahventures@vellu.cc, dan sturen we hem opnieuw.
-- ACTIE 21 september t/m 5 oktober 2026: meldt iemand zich in die periode aan met een uitnodigingscode, dan krijgen de uitnodigende salon én de nieuwe salon 1 MAAND gratis in plaats van 2 weken. De uitnodigende salon krijgt 30 dagen tegoed, bijgeschreven bij het aanmelden en verrekend bij haar eerstvolgende afschrijving. De NIEUWE salon krijgt een proefperiode van 30 dagen in plaats van 14 (niet 14 dagen plus een maand): haar eerste betaling komt dus na één maand. Zonder uitnodigingscode blijft de proef gewoon 14 dagen. Het mag zo vaak als je iemand uitnodigt. Bovenaan het dashboard staat tijdens de actie een kaart "Actie" met de resterende dagen, een WhatsApp-knop en "Kopieer bericht"; wegklikken kan met het kruisje. Na 5 oktober geldt weer 2 weken. Aanmeldingen van vóór de actie houden hun 2 weken.
-- Referral: nodig je een andere salon uit met je persoonlijke link, dan krijgen jullie allebei 2 weken gratis (tijdens een actie meer, zie hierboven). De kopieerknop kopieert een kant-en-klaar aanbevelingsbericht met je link erin; delen kan ook direct via de deelknop. Ook de regel "Powered by Vellu" met "Zelf een salon? Maak je eigen boekingspagina" helemaal onderaan je boekingspagina draagt jouw uitnodigingscode: meldt iemand zich via die link aan, dan telt dat als jouw uitnodiging en krijgen jullie allebei die 2 weken. De link opent in een nieuw tabblad, dus je eigen bezoeker blijft op je pagina.
+- ACTIE 21 september t/m 5 oktober 2026: meldt iemand zich in die periode aan met een uitnodigingscode, dan krijgen de uitnodigende salon én de nieuwe salon 1 MAAND gratis in plaats van 2 weken. De uitnodigende salon krijgt 30 dagen tegoed, verrekend bij haar eerstvolgende afschrijving; sinds 05-10-2026 wordt dat tegoed bijgeschreven zodra de nieuwe salon haar eerste betaling heeft gedaan (aanmeldingen van daarvóór kregen het al bij het aanmelden). De NIEUWE salon krijgt een proefperiode van 30 dagen in plaats van 14 (niet 14 dagen plus een maand): haar eerste betaling komt dus na één maand. Zonder uitnodigingscode blijft de proef gewoon 14 dagen. Het mag zo vaak als je iemand uitnodigt. Bovenaan het dashboard staat tijdens de actie een kaart "Actie" met de resterende dagen, een WhatsApp-knop en "Kopieer bericht"; wegklikken kan met het kruisje. Na 5 oktober geldt weer 2 weken. Aanmeldingen van vóór de actie houden hun 2 weken.
+- Referral: nodig je een andere salon uit met je persoonlijke link, dan krijgen jullie allebei 2 weken gratis (tijdens een actie meer, zie hierboven). De nieuwe salon krijgt haar 2 weken bij het aanmelden; jij krijgt je 2 weken tegoed zodra zij haar eerste betaling heeft gedaan (sinds 05-10-2026; daarvoor al bij haar aanmelding). Het tegoed wordt verrekend bij je eerstvolgende afschrijving: je toegang loopt dan zoveel dagen langer door. Een uitnodiging telt alleen voor een salon die zich net nieuw aanmeldt (niet voor een bestaand account), en per nieuwe salon één keer. De kopieerknop kopieert een kant-en-klaar aanbevelingsbericht met je link erin; delen kan ook direct via de deelknop. Ook de regel "Powered by Vellu" met "Zelf een salon? Maak je eigen boekingspagina" helemaal onderaan je boekingspagina draagt jouw uitnodigingscode: meldt iemand zich via die link aan, dan telt dat als jouw uitnodiging, met dezelfde beloning. De link opent in een nieuw tabblad, dus je eigen bezoeker blijft op je pagina.
 
 # Analytics (Professional)
 - Omzet over tijd, populairste behandelingen, drukste dagen; te filteren per medewerker.
@@ -319,9 +401,15 @@ Vellu is een product van Mirah Ventures. Kom je er samen niet uit, of vraagt de 
 const PUBLIC_FRAMING = `CONTEXT: De persoon die nu chat is een GEÏNTERESSEERDE BEZOEKER op de Vellu-landingspagina — nog geen klant, waarschijnlijk een saloneigenaar of beauty-professional die overweegt Vellu te gaan gebruiken.
 - Beantwoord oriëntatie- en verkoopvragen: wat is Vellu, wat kost het, welke functies zijn er, hoe begin ik, past het bij mijn type salon, hoe verschilt het van andere platformen.
 - Wees warm, kort en enthousiast, maar blijf eerlijk en verzin niks. Weet je iets niet zeker, verwijs naar mirahventures@vellu.cc.
-- Vellu heeft een gratis proefperiode van 14 dagen: je kunt je pagina gratis opzetten en betaalt pas als je live wilt. Moedig ze aan de proef te starten via de knop bovenaan de pagina ("Start 14-dagen gratis proef" / "Start 14-day free trial").
+- Vellu heeft een gratis proefperiode van 14 dagen: je boekingspagina staat meteen online en klanten kunnen direct boeken; je betaalt pas als je na de proef een plan kiest. Moedig ze aan de proef te starten via de knop bovenaan de pagina ("Start 14-daagse trial" / "Start 14-day free trial" / "Comienza tu prueba gratis de 14 días").
 - Wil iemand juist zélf een afspraak boeken bij een salon? Verwijs ze dan vriendelijk naar de zoekbalk "Vind je salon" op de pagina, waar ze de naam van hun salon typen.
-- Vraag NIET om in te loggen en beloof geen account-specifieke hulp — je hebt in deze modus geen toegang tot account-, boekings- of klantgegevens. Vraag ook nooit om wachtwoorden of betaalgegevens.`;
+- Vraag NIET om in te loggen en beloof geen account-specifieke hulp — je hebt in deze modus geen toegang tot account-, boekings- of klantgegevens. Vraag ook nooit om wachtwoorden of betaalgegevens.
+- Vaste feiten voor bezoekers (wijk hier nooit van af, ook niet in het Engels of Spaans):
+  1. Het abonnement van Vellu kost altijd Starter €19 of Professional €35 per maand (of €190 / €350 per jaar), in EURO's, ook voor salons op Bonaire, Curaçao, Aruba of Sint Maarten. Noem nooit een prijs in dollars of gulden voor het abonnement.
+  2. Vellu verwerkt zelf geen betalingen van klanten en heeft geen kaartbetaling of pinautomaat. Wil een salon geld vooraf, dan betaalt de klant het HELE bedrag vooruit via de eigen betaallink (bijv. bunq.me of PayPal.me) of het IBAN van de salon; het geld gaat rechtstreeks naar de salon. Een aanbetaling (alleen een deel vooraf) bestaat niet.
+  3. Belasting (btw, ABB, BBO enz.) komt alleen op bonnen en facturen als de salon dat zelf aanzet in de instellingen; Vellu rekent niets automatisch.
+  4. Een SEPA-QR-code voor betalen staat alleen bij salons in de eurozone; buiten de eurozone staan er gewone bankgegevens.
+- Antwoord in gewone tekst zonder Markdown (geen **vet**, geen kopjes, geen tabellen) en zonder emoji. Gebruik in een Engels of Spaans antwoord geen Nederlandse knop- of menunamen zonder vertaling.`;
 
 interface InMsg { role: string; content: unknown }
 
@@ -347,18 +435,20 @@ serve(async (req) => {
       if (userData?.user) userId = userData.user.id;
     } catch { /* not a user token → public mode */ }
   }
-  const isOwner = !!userId;
+  // Eigenaarsmodus alleen voor een salon met een lopend plan of proef (eigenaar
+  // of teamlid). Een los account zonder salon, of een verlopen proef, krijgt de
+  // publieke modus met de publieke limieten.
+  const isOwner = !!userId && await hasActiveSalon(userId);
+  const ip = clientIp(req);
 
   // Rate limiting. Owners: generous per-user. Public: a best-effort per-IP
-  // throttle only — X-Forwarded-For is spoofable on a verify_jwt=false endpoint,
-  // so the REAL burst/spend protection is the DB-backed global caps below, not
+  // throttle; the REAL burst/spend protection is the DB-backed caps below, not
   // this. Cap the key length so a rotating/oversized header can't bloat the map.
   // Return 200 (not 429) so supabase-js delivers the body and the client shows
   // the friendly "slow down" message instead of throwing on a non-2xx status.
   if (isOwner) {
     if (!rateLimit("u:" + userId, 20)) return json(200, { error: "rate_limited" }, origin);
   } else {
-    const ip = ((req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown").slice(0, 64);
     if (!rateLimit("ip:" + ip, 6)) return json(200, { error: "rate_limited" }, origin);
   }
 
@@ -384,9 +474,27 @@ serve(async (req) => {
   // FAIL CLOSED: if the counter can't be confirmed (null) or either cap is
   // exceeded, refuse — never spend when the budget is unknown.
   if (!isOwner) {
+    // Eerst het dagbudget van dit IP; wie daar overheen gaat telt niet mee in
+    // het globale budget. Zonder bruikbaar IP ("unknown") slaan we deze stap
+    // over, anders zouden alle bezoekers samen één IP-budget delen.
+    if (ip !== "unknown") {
+      const ipCount = await bumpIpUsage(ip);
+      if (ipCount !== null && ipCount > IP_DAILY_PUBLIC_CAP) return json(200, { error: "busy" }, origin);
+    }
     const usage = await bumpPublicUsage();
     if (!usage || usage.day > DAILY_PUBLIC_CAP || usage.minute > MINUTE_PUBLIC_CAP) {
       return json(200, { error: "busy" }, origin);
+    }
+  } else {
+    // Eigenaarsmodus: daglimiet per gebruiker en voor alle salons samen (DB).
+    // Onbekend = niet betalen; boven de limiet een vriendelijk antwoord.
+    const usage = await bumpOwnerUsage(userId as string);
+    if (!usage) return json(200, { error: "busy" }, origin);
+    if (usage.user > OWNER_USER_DAILY_CAP || usage.total > OWNER_GLOBAL_DAILY_CAP) {
+      return json(200, { reply: pickLang(body.lang,
+        "De assistent heeft voor vandaag zijn limiet bereikt. Morgen kun je weer vragen stellen; heb je nu hulp nodig, mail dan mirahventures@vellu.cc.",
+        "The assistant has reached its limit for today. You can ask again tomorrow; if you need help now, email mirahventures@vellu.cc.",
+        "El asistente ha alcanzado su límite de hoy. Mañana puedes volver a preguntar; si necesitas ayuda ahora, escribe a mirahventures@vellu.cc.") }, origin);
     }
   }
 
@@ -423,11 +531,11 @@ Als de eigenaar naar een Professional-functie vraagt en op Starter zit, leg dan 
     // and it overrides the KB's "default Dutch". The UI-language hint (body.lang,
     // from the language toggle) is only a tiebreaker for messages too short to
     // detect. Kept as its own high-salience system block placed LAST.
-    const uiLang = body.lang === "en" ? "Engels (English)" : "Nederlands";
+    const uiLang = body.lang === "en" ? "Engels (English)" : body.lang === "es" ? "Spaans (Español)" : "Nederlands";
     const langDirective =
       `TAALREGEL — deze gaat vóór alle andere taalinstructies hierboven, inclusief "standaard Nederlands":\n` +
       `Antwoord ALTIJD volledig in dezelfde taal als het LAATSTE bericht van de gebruiker. ` +
-      `Schrijft de gebruiker in het Engels, antwoord dan volledig in het Engels; schrijft die in het Nederlands, antwoord in het Nederlands. Meng nooit talen binnen één antwoord.\n` +
+      `Schrijft de gebruiker in het Engels, antwoord dan volledig in het Engels; in het Spaans, antwoord volledig in het Spaans; in het Nederlands, antwoord in het Nederlands. Meng nooit talen binnen één antwoord (ook geen Nederlandse knopnamen in een Engels of Spaans antwoord zonder vertaling erbij).\n` +
       `(Ter info: de interface van deze gebruiker staat op ${uiLang}. Gebruik dit alleen als het laatste bericht te kort is om de taal met zekerheid te bepalen.)`;
 
     // Second system block: owner context (owner mode) or the sales framing
@@ -455,20 +563,21 @@ Als de eigenaar naar een Professional-functie vraagt en op Starter zit, leg dan 
     }
     const msg: any = await anthropic.messages.create(params);
 
-    const isEn = body.lang === "en";
     if (msg.stop_reason === "refusal") {
-      return json(200, { reply: isEn
-        ? "Sorry, I can't help with that. I'm here for anything else about Vellu — or email mirahventures@vellu.cc."
-        : "Sorry, daar kan ik niet mee helpen. Voor iets anders over Vellu sta ik klaar — of mail mirahventures@vellu.cc." }, origin);
+      return json(200, { reply: pickLang(body.lang,
+        "Sorry, daar kan ik niet mee helpen. Voor iets anders over Vellu sta ik klaar — of mail mirahventures@vellu.cc.",
+        "Sorry, I can't help with that. I'm here for anything else about Vellu — or email mirahventures@vellu.cc.",
+        "Lo siento, no puedo ayudarte con eso. Para cualquier otra cosa sobre Vellu estoy aquí, o escribe a mirahventures@vellu.cc.") }, origin);
     }
     const reply = (msg.content || [])
       .filter((b: any) => b.type === "text")
       .map((b: any) => b.text)
       .join("\n")
       .trim();
-    return json(200, { reply: reply || (isEn
-      ? "Sorry, I don't have an answer right now. Please try again, or email mirahventures@vellu.cc."
-      : "Sorry, ik heb even geen antwoord. Probeer het opnieuw of mail mirahventures@vellu.cc.") }, origin);
+    return json(200, { reply: reply || pickLang(body.lang,
+      "Sorry, ik heb even geen antwoord. Probeer het opnieuw of mail mirahventures@vellu.cc.",
+      "Sorry, I don't have an answer right now. Please try again, or email mirahventures@vellu.cc.",
+      "Lo siento, ahora no tengo respuesta. Inténtalo de nuevo o escribe a mirahventures@vellu.cc.") }, origin);
   } catch (e) {
     console.error("support-chat error:", e);
     return json(500, { error: "assistant_failed" }, origin);

@@ -20,7 +20,12 @@
 // conflict = al gemaild. Vensters i.p.v. exacte dagen zodat een gemiste run
 // niet betekent dat er nooit meer een herinnering komt.
 //
-// TOEGANG: verify_jwt=false (cron), geen geheim nodig.
+// TOEGANG: verify_jwt=false (cron, geen gebruikers-JWT). Sinds 05-10-2026 wel
+// een geheim: x-internal-secret = service-role-sleutel, of x-cron-secret =
+// CRON_SECRET (Vercel) of het vault-geheim cron_secret (pg_cron-job
+// send-renewal-reminder-daily, gecontroleerd via rpc cron_secret_ok). Zonder
+// geheim 401, zodat niemand van buiten mails, pushes en beheerdersmeldingen
+// kan laten afgaan.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -29,7 +34,21 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
 const ADMIN_ALERT_EMAIL = Deno.env.get("ADMIN_ALERT_EMAIL") || "mirahventures@vellu.cc";
+const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+// Zelfde controle als de cron-functies van send-reminders c.s.
+async function cronAuthorized(req: Request): Promise<boolean> {
+  const internal = req.headers.get("x-internal-secret") || "";
+  if (internal && internal === SUPABASE_SERVICE_KEY) return true;
+  const cron = req.headers.get("x-cron-secret") || "";
+  if (!cron) return false;
+  if (CRON_SECRET && cron === CRON_SECRET) return true;
+  try {
+    const { data, error } = await supabase.rpc("cron_secret_ok", { p_secret: cron });
+    return !error && data === true;
+  } catch { return false; }
+}
 
 const DAGEN_VOORAF = 7;          // jaarabonnement
 const PROEF_DAGEN_VOORAF = 3;    // proef: eerste mail
@@ -65,7 +84,10 @@ async function mail(type: string, booking: Record<string, unknown>) {
   if (!r.ok) console.error(`send-emails ${type} → ${r.status}`, await r.text().catch(() => ""));
 }
 
-serve(async () => {
+serve(async (req) => {
+  if (!(await cronAuthorized(req))) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
+  }
   const t0 = Date.now();
   let verstuurd = 0;
   try {
@@ -88,7 +110,7 @@ serve(async () => {
       if (!(await claim(s.id, s.plan_expires_at, "renewal"))) continue;
       try {
         await mail("renewal_reminder", {
-          owner_email: s.email, owner_id: s.id, owner_lang: langOf(s.country_code),
+          owner_email: s.email, owner_id: s.id, owner_lang: langOf(s.country_code), country_code: s.country_code || "NL",
           business_name: s.business_name, salon_name: s.business_name,
           plan: s.plan || "professional", plan_expires_at: s.plan_expires_at,
         });
@@ -113,7 +135,7 @@ serve(async () => {
       const daysLeft = Math.max(1, Math.ceil((new Date(s.trial_ends_at).getTime() - nu.getTime()) / DAY_MS));
       try {
         await mail("trial_ending", {
-          owner_email: s.email, owner_id: s.id, owner_lang: langOf(s.country_code),
+          owner_email: s.email, owner_id: s.id, owner_lang: langOf(s.country_code), country_code: s.country_code || "NL",
           business_name: s.business_name, salon_name: s.business_name,
           plan: s.plan || "starter", trial_ends_at: s.trial_ends_at, days_left: daysLeft,
         });
@@ -138,7 +160,7 @@ serve(async () => {
       const lang = langOf(s.country_code);
       try {
         await mail("trial_expired", {
-          owner_email: s.email, owner_id: s.id, owner_lang: lang,
+          owner_email: s.email, owner_id: s.id, owner_lang: lang, country_code: s.country_code || "NL",
           business_name: s.business_name, salon_name: s.business_name,
           plan: s.plan || "starter", trial_ends_at: s.trial_ends_at, days_left: 0,
         });

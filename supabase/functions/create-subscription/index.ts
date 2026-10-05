@@ -120,9 +120,41 @@ serve(async (req) => {
   const userEmail = userData.user.email || "";
 
   // Parse + validate body
-  let body: { plan?: string; billing_interval?: string };
+  let body: { plan?: string; billing_interval?: string; action?: string };
   try { body = await req.json(); }
   catch { return err(400, "invalid_json", origin); }
+
+  // Terugkeer van de Mollie-betaalpagina (sinds 05-10-2026). Mollie stuurt de
+  // salon bij ELKE uitkomst terug naar /owner?subscription=success, ook als ze
+  // annuleerde, de kaart werd geweigerd of ze een bankoverschrijving koos. Met
+  // deze vraag ziet het scherm de echte stand van de laatst gestarte betaling.
+  // Alleen lezen, verder geen bijwerkingen.
+  if (body.action === "last_payment_status") {
+    const KNOWN = ["paid", "open", "pending", "authorized", "failed", "canceled", "expired"];
+    let status: string | null = null;
+    // Bij voorkeur de betaling die deze functie het laatst voor deze eigenaar startte.
+    const { data: lastEvt } = await supabase
+      .from("payment_events")
+      .select("mollie_payment_id")
+      .eq("owner_id", userId)
+      .eq("event_type", "first_payment.created")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (lastEvt?.mollie_payment_id) {
+      const r = await mollieFetch(`/payments/${lastEvt.mollie_payment_id}`);
+      if (r.ok && r.data && typeof r.data === "object") status = String((r.data as { status?: string }).status || "") || null;
+    } else {
+      // Anders de laatste betaling van de Mollie-klant.
+      const { data: prof } = await supabase.from("profiles").select("mollie_customer_id").eq("id", userId).maybeSingle();
+      if (prof?.mollie_customer_id) {
+        const r = await mollieFetch(`/customers/${prof.mollie_customer_id}/payments?limit=1`);
+        type PayList = { _embedded?: { payments?: Array<{ status?: string }> } };
+        if (r.ok && r.data && typeof r.data === "object") status = (r.data as PayList)._embedded?.payments?.[0]?.status || null;
+      }
+    }
+    return ok({ status: status && KNOWN.includes(status) ? status : null }, origin);
+  }
 
   const plan = body.plan || "";
   const interval = body.billing_interval || "";
@@ -141,6 +173,9 @@ serve(async (req) => {
 
   // If they already have an active subscription, refuse — they should hit
   // change-plan or cancel-then-resubscribe instead.
+  // Een salon in past_due (mislukte incasso) of na opzeggen mag wel opnieuw
+  // betalen: mollie-webhook stopt bij first.paid / de jaarbetaling het oude
+  // Mollie-abonnement, en de nieuwe periode begint pas na de lopende toegang.
   if (profile.subscription_status === "active" && profile.mollie_subscription_id) {
     return err(409, "already_subscribed", origin);
   }

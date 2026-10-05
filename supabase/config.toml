@@ -235,8 +235,76 @@ entrypoint = "./functions/google-auth/index.ts"
 
 [functions.google-calendar]
 enabled = true
-# Live v16, op 05-10-2026 ongewijzigd in de repo gezet. Vertrouwt owner_id uit de
-# body zonder controle; doet niets zolang geen salon een Google-token heeft
-# (google-auth staat uit). Niet opnieuw deployen voordat dat is herzien.
+# Sinds 05-10-2026 alleen voor interne aanroepen: de functie weigert alles
+# zonder x-internal-secret (= service-role-sleutel), zoals reschedule-appointment
+# die stuurt. Er zijn geen aanroepen meer vanuit de browser. verify_jwt blijft
+# false omdat die interne aanroepen geen gebruikers-JWT meesturen. Doet niets
+# zolang geen salon een Google-token heeft (google-auth staat uit).
 verify_jwt = false
 entrypoint = "./functions/google-calendar/index.ts"
+
+# Hieronder de functies die live al draaiden maar geen blok in dit bestand
+# hadden (toegevoegd 05-10-2026, waarden gelijk aan productie). Zonder blok valt
+# de CLI terug op verify_jwt=true en zet een deploy de "false"-functies
+# stilzwijgend om: de gateway 401't ze dan voordat ze draaien.
+
+[functions.send-rebook-nudge]
+enabled = true
+# Cron (pg_cron) zonder gebruikers-JWT; de functie controleert zelf het
+# cron-geheim. Live verify_jwt=false.
+verify_jwt = false
+entrypoint = "./functions/send-rebook-nudge/index.ts"
+
+[functions.create-subscription]
+enabled = true
+# Afrekenen vanuit het dashboard; de functie controleert de gebruiker zelf
+# (auth.getUser). Live verify_jwt=false.
+verify_jwt = false
+entrypoint = "./functions/create-subscription/index.ts"
+
+[functions.create-staff-account]
+enabled = true
+# Login of uitnodiging voor een teamlid; de functie controleert de gebruiker en
+# het eigenaarschap zelf. Live verify_jwt=false.
+verify_jwt = false
+entrypoint = "./functions/create-staff-account/index.ts"
+
+[functions.mirah-contact]
+enabled = true
+# Contactformulier van mirahventures.com: een anonieme bezoeker zonder sessie,
+# en de CORS staat alleen content-type toe (geen Authorization-header). Live
+# verify_jwt=false.
+verify_jwt = false
+entrypoint = "./functions/mirah-contact/index.ts"
+
+[functions.ttnb-complaint]
+enabled = true
+# Klachtenformulier van tammytaylorbonairebes.com: anonieme bezoeker, CORS
+# alleen content-type. Live verify_jwt=false.
+verify_jwt = false
+entrypoint = "./functions/ttnb-complaint/index.ts"
+
+[functions.cancel-subscription]
+enabled = true
+# Opzeggen door de ingelogde eigenaar (gebruikers-JWT). Live verify_jwt=true.
+verify_jwt = true
+entrypoint = "./functions/cancel-subscription/index.ts"
+
+[functions.change-plan]
+enabled = true
+# Plan wisselen door de ingelogde eigenaar (gebruikers-JWT). Live verify_jwt=true.
+verify_jwt = true
+entrypoint = "./functions/change-plan/index.ts"
+
+[functions.check-translations]
+enabled = true
+# Alleen vanuit het ingelogde dashboard. Live verify_jwt=true.
+verify_jwt = true
+entrypoint = "./functions/check-translations/index.ts"
+
+[functions.send-newsletter]
+enabled = true
+# Nieuwsbrief versturen door de ingelogde eigenaar (gebruikers-JWT). Live
+# verify_jwt=true.
+verify_jwt = true
+entrypoint = "./functions/send-newsletter/index.ts"
