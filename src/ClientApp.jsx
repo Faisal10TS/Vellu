@@ -7,7 +7,7 @@ import { supabase } from "./supabase.js";
 import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
   compressImage, sendEmails, sendSMS, ACCENT,
-  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
+  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppClientBookedMsg, getWhatsAppReminderMsg,
   getToday as deviceNow, fmt, parseDate, getDays, salonNow,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
@@ -3670,12 +3670,15 @@ function ClientApp({ salon: initialSalon, onBack, lang, setLang, reviewMode = fa
       a.href = url; a.download = `vellu-${initialSalon.id}-${date}.ics`;
       a.click(); URL.revokeObjectURL(url);
     };
+    // De chat gaat NAAR de salon, dus de tekst is van de klant aan de salon
+    // (getWhatsAppClientBookedMsg) — niet de salontekst "Hoi <klant>! Je
+    // afspraak is bevestigd", die hier tot 05-10-2026 stond (TTNB).
     const openWhatsApp = () => {
-      const msg = getWhatsAppBookingMsg(lang, {
-        clientName: form.firstName, salonName: initialSalon.name, date: dateLabel, time,
+      const msg = getWhatsAppClientBookedMsg(lang, {
+        clientName: [form.firstName, form.lastName].map(v => String(v || "").trim()).filter(Boolean).join(" "), salonName: initialSalon.name, date: dateLabel, time,
         serviceName: getServiceLabel(), price: getPrice().toFixed(2), countryCode: initialSalon.country_code,
       });
-      window.open(getWhatsAppUrl(initialSalon.whatsapp_number, msg), "_blank");
+      window.open(getWhatsAppUrl(initialSalon.whatsapp_number, msg, initialSalon.country_code), "_blank");
     };
     const products = chosenProducts();
     return (

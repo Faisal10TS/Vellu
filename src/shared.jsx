@@ -586,6 +586,20 @@ function getWhatsAppBookingMsg(lang, { clientName, salonName, date, time, servic
   return `Hi ${clientName}! ✨\n\nYour appointment at ${salonName} is confirmed:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 ${fmtMoney(price, countryCode)}\n\nSee you then! 🙏`;
 }
 
+// Bericht van de KLANT aan de salon, voor de WhatsApp-knop op het scherm na het
+// boeken. Die knop gebruikte tot 05-10-2026 de salontekst hierboven ("Hoi
+// Firdaouss! Je afspraak bij TTNB is bevestigd") maar opent de chat náár het
+// salonnummer: de klant stuurde de salon dus een bericht dat aan haarzelf
+// gericht was, en bij TTNB leek het alsof zíj de bevestiging kregen in plaats
+// van verstuurden. getWhatsAppBookingMsg blijft voor salon → klant (OwnerApp).
+function getWhatsAppClientBookedMsg(lang, { clientName, salonName, date, time, serviceName, price, countryCode }) {
+  const lines = `📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 ${fmtMoney(price, countryCode)}`;
+  const who = String(clientName || "").trim();
+  if (lang === "nl") return `Hoi ${salonName}! Ik heb zojuist online een afspraak geboekt:\n${lines}${who ? `\n\nGroetjes, ${who}` : ""}`;
+  if (lang === "es") return `¡Hola ${salonName}! Acabo de reservar una cita en línea:\n${lines}${who ? `\n\nSaludos, ${who}` : ""}`;
+  return `Hi ${salonName}! I just booked an appointment online:\n${lines}${who ? `\n\nBest, ${who}` : ""}`;
+}
+
 // bunq.me and PayPal.Me accept the amount as a path segment
 // (bunq.me/name/48.50, paypal.me/name/48.50), so a salon's static link can
 // still request the EXACT amount of each invoice. Unknown providers get the
@@ -1164,7 +1178,7 @@ const _T_RAW = {
     // WhatsApp
     whatsappNumber:"WhatsApp nummer salon", whatsappEnabled:"WhatsApp notificaties",
     whatsappEnabledDesc:"Toon WhatsApp knoppen voor klanten en in het dashboard",
-    sendWhatsApp:"WhatsApp sturen", whatsappBookingConfirm:"Bevestig via WhatsApp",
+    sendWhatsApp:"WhatsApp sturen", whatsappBookingConfirm:"Stuur de salon een WhatsApp",
     whatsappReminder:"Herinnering sturen via WhatsApp",
     // Auto-translate
     autoTranslateBtn:"Vertalen", translating:"Vertalen...", translateFailed:"Vertaling mislukt",
@@ -1457,7 +1471,7 @@ const _T_RAW = {
     // WhatsApp
     whatsappNumber:"Salon WhatsApp number", whatsappEnabled:"WhatsApp notifications",
     whatsappEnabledDesc:"Show WhatsApp buttons for clients and in the dashboard",
-    sendWhatsApp:"Send WhatsApp", whatsappBookingConfirm:"Confirm via WhatsApp",
+    sendWhatsApp:"Send WhatsApp", whatsappBookingConfirm:"Message the salon on WhatsApp",
     whatsappReminder:"Send reminder via WhatsApp",
     // Auto-translate
     autoTranslateBtn:"Translate", translating:"Translating...", translateFailed:"Translation failed",
@@ -1750,7 +1764,7 @@ const _T_RAW = {
     // WhatsApp
     whatsappNumber:"Número de WhatsApp del salón", whatsappEnabled:"Notificaciones por WhatsApp",
     whatsappEnabledDesc:"Mostrar botones de WhatsApp para clientes y en el panel",
-    sendWhatsApp:"Enviar WhatsApp", whatsappBookingConfirm:"Confirmar por WhatsApp",
+    sendWhatsApp:"Enviar WhatsApp", whatsappBookingConfirm:"Escribir al salón por WhatsApp",
     whatsappReminder:"Enviar recordatorio por WhatsApp",
     // Auto-translate
     autoTranslateBtn:"Traducir", translating:"Traduciendo...", translateFailed:"Error de traducción",
@@ -3497,7 +3511,7 @@ export {
   // moeten rekenen dezelfde tabel gebruiken als de edge-functies.
   TZ_BY_COUNTRY, tzFor, localToUtc,
   ACCENT,
-  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg,
+  getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppClientBookedMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg,
   getPaymentLinkWithAmount,
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,

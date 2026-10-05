@@ -14,6 +14,24 @@
 
 export const RELEASES = [
   {
+    // TTNB 05-10-2026: de WhatsApp-knop na het boeken liet de KLANT de
+    // salontekst ("Hoi Firdaouss! Je afspraak is bevestigd") naar de salon
+    // sturen; het leek alsof de salon haar eigen bevestiging kreeg.
+    id: "2026-10-05",
+    date: "2026-10-05",
+    title: { nl: "WhatsApp-bericht na het boeken", en: "WhatsApp message after booking", es: "Mensaje de WhatsApp tras reservar" },
+    items: [
+      {
+        kind: "fix", audience: ["owner", "staff"],
+        text: {
+          nl: "Boekingspagina: de WhatsApp-knop na het boeken stuurde jou een bericht dat klonk alsof jij het zelf had verstuurd (Hoi klant, je afspraak is bevestigd). De klant stuurt nu een bericht vanuit haar kant: Hoi salon, ik heb zojuist online een afspraak geboekt, met datum, tijd, behandeling, bedrag en haar naam. De knop heet nu Stuur de salon een WhatsApp. Jouw eigen WhatsApp-knop op de afspraakkaart is niet veranderd.",
+          en: "Booking page: the WhatsApp button after booking sent you a message that read as if you had sent it yourself (Hi client, your appointment is confirmed). The client now sends a message from her side: Hi salon, I just booked an appointment online, with date, time, treatment, amount and her name. The button is now called Message the salon on WhatsApp. Your own WhatsApp button on the appointment card has not changed.",
+          es: "Página de reservas: el botón de WhatsApp tras reservar te enviaba un mensaje que parecía escrito por ti (Hola cliente, tu cita está confirmada). Ahora la clienta envía un mensaje desde su lado: Hola salón, acabo de reservar una cita en línea, con fecha, hora, tratamiento, importe y su nombre. El botón se llama ahora Escribir al salón por WhatsApp. Tu propio botón de WhatsApp en la tarjeta de la cita no ha cambiado.",
+        },
+      },
+    ],
+  },
+  {
     // Esther (TTNB) 30-09-2026: gedeelde boeking van €125 (€67 bij haar, €58
     // bij Lady) telde in de omzettegel bij allebei voor €125 mee, terwijl de
     // kaart wél het juiste deel toonde.
