@@ -12,15 +12,18 @@ export default async function handler(req, res) {
     // Alleen salons die in de zoeker mogen staan, met een lopend abonnement,
     // en nooit de demo-salon. (public/sitemap.xml is weg: dat statische
     // bestand ging vóór deze functie en had geen enkele salon.)
-    const url = `${SUPABASE_URL}/rest/v1/public_salons?select=slug&directory_visible=eq.true&subscription_status=in.(active,trialing)&is_demo=eq.false`;
+    const url = `${SUPABASE_URL}/rest/v1/public_salons?select=slug&directory_visible=eq.true&subscription_status=in.(active,trialing)`;
+    const headers = {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+    };
 
-    const response = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        "Content-Type": "application/json",
-      },
-    });
+    let response = await fetch(`${url}&is_demo=eq.false`, { headers });
+    // Uitrolvangnet: zolang de migratie die is_demo aan de view toevoegt nog
+    // niet live is, geeft dat filter een 400. Dan zonder: liever de demo-salon
+    // even in de sitemap dan helemaal geen salons.
+    if (response.status === 400) response = await fetch(url, { headers });
 
     if (response.ok) {
       const data = await response.json();

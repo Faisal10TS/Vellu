@@ -5,7 +5,7 @@ import SupportChat from "./SupportChat.jsx";
 import {
   useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable,
   AT, AT_COLORS, AT_RADIUS, AtelierSkin, readableAccent, accentEdge, storedRef, useReferralPromo, rewardLabel, promoEndLabel,
-  fetchAllRows, fmtAmt
+  fetchAllRows, fmtAmt, RESERVED_SLUGS
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
@@ -688,14 +688,22 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
       const catsByOwner = {};
       if (rows.length) {
         const ids = rows.map(r => r.id);
+        // Per 100 salons: .in() zet alle id's in de URL (zo'n 37 tekens per
+        // salon). Met een paar honderd salons wordt die te lang voor proxies
+        // en verloor het zoeken stil zijn diensten. Een stuk bevat steeds hele
+        // salons, dus de volgorde per salon blijft gelijk.
+        const idChunks = [];
+        for (let i = 0; i < ids.length; i += 100) idChunks.push(ids.slice(i, i + 100));
+        const inChunks = (build) => Promise.all(idChunks.map(part => fetchAllRows(() => build(part))))
+          .then(results => ({ data: results.flatMap(r => r.data || []) }));
         const [{ data: svcs }, { data: cats }] = await Promise.all([
           // visible=true: een verborgen dienst ("on hold") mag een salon niet in
           // de zoekresultaten trekken — de bezoeker klikt dan door en vindt hem
           // nergens op de boekingspagina terug. fetchAllRows: met meer salons
           // passeren de diensten samen de 1000 rijen, en dan miste het zoeken
           // stilletjes salons.
-          fetchAllRows(() => supabase.from("services").select("owner_id,name,name_nl,name_en,name_es").in("owner_id", ids).eq("visible", true).order("id", { ascending: true })),
-          fetchAllRows(() => supabase.from("service_categories").select("owner_id,name_nl,name_en,name_es,position").in("owner_id", ids).order("position", { ascending: true }).order("id", { ascending: true })),
+          inChunks(part => supabase.from("services").select("owner_id,name,name_nl,name_en,name_es").in("owner_id", part).eq("visible", true).order("id", { ascending: true })),
+          inChunks(part => supabase.from("service_categories").select("owner_id,name_nl,name_en,name_es,position").in("owner_id", part).order("position", { ascending: true }).order("id", { ascending: true })),
         ]);
         for (const s of (svcs || [])) {
           svcByOwner[s.owner_id] = (svcByOwner[s.owner_id] || "") + " " +
@@ -1490,18 +1498,6 @@ function Row({ label, value, c, negative }) {
 }
 
 // ─── OWNER AUTH ───────────────────────────────────────────────
-// Namen die Vellu zelf als route gebruikt. Zelfde lijst als de slug-editor in
-// de app (RESERVED_SLUGS) en de database-controle op profiles.slug; houd ze
-// gelijk. Hier een eigen kopie zodat het aanmeldscherm niet van de rest
-// afhangt (de punt-namen kunnen uit een bedrijfsnaam niet ontstaan, maar wel
-// in de lijst blijven voor de gelijkheid).
-const RESERVED_SIGNUP_SLUGS = new Set([
-  "owner", "staff", "admin", "cancel", "privacy", "terms", "dpa",
-  "voorwaarden", "contact", "api", "assets", "public", "static",
-  "auth", "login", "signup", "signin", "logout", "reset", "review",
-  "_", "app", "www", "sitemap.xml", "robots.txt", "manifest.json",
-]);
-
 function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   // Vaste Atelier-huid (27-08): de login hoort bij de bone-merkwereld van de
   // landing, niet bij het licht/donker-thema van de app erachter.
@@ -1527,6 +1523,8 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   // opent op Registreren en toont een korte uitleg; inloggen kan ook.
   const [staffInvite] = useState(() => !!readStaffInvite());
   const [mode, setMode] = useState(urlRef || urlSignup || staffInvite ? "signup" : "signin");
+  // Aanmelden als uitgenodigd teamlid: alleen e-mail en wachtwoord.
+  const inviteSignup = staffInvite && mode === "signup";
   // If the user checked "Onthoud mij" on a previous sign-in, we pre-fill the
   // email field so they only type their password. Supabase itself already
   // persists the session (localStorage) — this flag only controls whether we
@@ -1566,18 +1564,29 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
 
   const handle = async () => {
     if (!form.email || !form.password) { setError(t.fillAllFields); return; }
-    if (mode === "signup" && !form.businessName) { setError(t.fillBusinessName); return; }
+    if (mode === "signup" && !inviteSignup && !form.businessName) { setError(t.fillBusinessName); return; }
     setLoading(true);
     setError("");
 
     if (mode === "signup") {
-      let slug = form.slug || form.businessName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "mijn-studio";
+      // Uitgenodigd teamlid: geen salonvelden (die horen bij de salon die haar
+      // uitnodigt), dus ook geen controle op naam of slug. Naam en slug
+      // hieronder zijn alleen een terugval voor als de uitnodiging niet meer
+      // geldig blijkt: dan wordt het, zoals altijd, een eigen salon, die ze
+      // later in Instellingen een naam en adres geeft.
+      const inviteFallback = inviteSignup ? {
+        name: lang === "nl" ? "Mijn salon" : lang === "es" ? "Mi salón" : "My salon",
+        slug: ((form.email.split("@")[0] || "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 30) || "salon") + "-" + Math.random().toString(36).slice(2, 6),
+      } : null;
+      const businessName = inviteFallback ? inviteFallback.name : form.businessName;
+      let slug = inviteFallback ? inviteFallback.slug : (form.slug || form.businessName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "mijn-studio");
       // Gereserveerde namen (routes van Vellu zelf, zoals /contact of /admin)
       // krijgen net als een bezette naam een achtervoegsel: anders opent
       // vellu.cc/contact nooit de salon maar Vellu's eigen pagina (L3-19).
-      const reserved = RESERVED_SIGNUP_SLUGS.has(slug);
+      // Eén lijst met de slug-editor in de app en de database (shared.jsx).
+      const reserved = !inviteFallback && RESERVED_SLUGS.has(slug);
       // Check slug uniqueness
-      const { data: existing } = reserved ? { data: null } : await supabase.from("public_salons").select("id").eq("slug", slug).maybeSingle();
+      const { data: existing } = (reserved || inviteFallback) ? { data: null } : await supabase.from("public_salons").select("id").eq("slug", slug).maybeSingle();
       if (reserved || existing) {
         const originalSlug = slug;
         slug = slug + "-" + Math.random().toString(36).slice(2, 6);
@@ -1602,7 +1611,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         password: form.password,
         options: {
           data: {
-            business_name: form.businessName,
+            business_name: businessName,
             slug: slug,
             city: form.city || "Nederland",
             ...(inviteToken ? { staff_invite: true } : {})
@@ -1624,7 +1633,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: data.user.id,
         email: form.email,
-        business_name: form.businessName,
+        business_name: businessName,
         slug: slug,
         city: form.city || "Nederland",
         country_code: form.countryCode || "NL",
@@ -1656,7 +1665,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         }
       }
 
-      onLogin({ name: form.businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null, account_type: form.accountType, inviteOutcome });
+      onLogin({ name: businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null, account_type: form.accountType, inviteOutcome });
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
       if (error) { setError(t.wrongCredentials); setLoading(false); return; }
@@ -1757,7 +1766,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
               </div>
             )}
 
-            {mode === "signup" && referrerName && (
+            {mode === "signup" && !staffInvite && referrerName && (
               <div style={{
                 background: `${AT.EARTH}12`, border: `1px solid ${AT.EARTH}33`, borderRadius: 12,
                 padding: "10px 14px", marginBottom: 14, fontSize: 12, color: c.text, textAlign: "center",
@@ -1773,7 +1782,9 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
             )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
-              {mode === "signup" && <>
+              {/* Salonvelden niet voor een uitgenodigd teamlid: zij komt in de
+                  salon die haar uitnodigde (zie handle). */}
+              {mode === "signup" && !inviteSignup && <>
                 <input className="input-field" placeholder={t.businessNameField} value={form.businessName} onChange={e => setForm(f => ({...f, businessName: e.target.value}))} />
                 <input className="input-field" placeholder={t.city} value={form.city} onChange={e => setForm(f => ({...f, city: e.target.value}))} />
                 {/* Land / regio — explicitly labelled and with live feedback,

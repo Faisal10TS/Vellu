@@ -21,6 +21,10 @@ const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY || 'sb_publishable_9a56u0YAwj
 const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 // Zelfde markten als de app (ownerLangFor): daar is de pagina Nederlands.
 const NL_MARKETS = new Set(['NL', 'BE', 'AW', 'CW', 'SX', 'BQ']);
+// Spaanstalige markten: vandaag alleen Spanje (COUNTRIES in shared.jsx);
+// uitbreiden als er Spaanstalige landen bijkomen. De rest krijgt Engels.
+const ES_MARKETS = new Set(['ES']);
+const OG_LOCALES = { nl: 'nl_NL', en: 'en_US', es: 'es_ES' };
 
 const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -56,12 +60,23 @@ async function loadSalon(slug) {
 function metaFor(salon, slug) {
   const name = String(salon.business_name || '').trim() || 'Salon';
   const city = String(salon.city || '').split(',').pop().trim();
-  const nl = NL_MARKETS.has(salon.country_code || 'NL');
-  const description = nl
+  const cc = salon.country_code || 'NL';
+  const lang = NL_MARKETS.has(cc) ? 'nl' : ES_MARKETS.has(cc) ? 'es' : 'en';
+  const description = lang === 'nl'
     ? `Boek een afspraak bij ${name}${city ? ` in ${city}` : ''}. Online boeken, geen commissie.`
+    : lang === 'es'
+    ? `Reserva una cita en ${name}${city ? ` en ${city}` : ''}. Reserva online, sin comisiones.`
     : `Book an appointment at ${name}${city ? ` in ${city}` : ''}. Book online, no commission.`;
   const img = [salon.cover_image_url, salon.logo_url].find((u) => typeof u === 'string' && /^https:\/\//.test(u)) || '';
-  return { title: `${name} | Vellu`, description, url: `https://vellu.cc/${slug}`, image: img };
+  return { title: `${name} | Vellu`, description, url: `https://vellu.cc/${slug}`, image: img, lang };
+}
+
+// og:locale volgt de taal van de beschrijving; de andere twee talen van de
+// pagina (taalkeuze bovenaan) staan als alternatief.
+function localeTags(lang) {
+  const main = OG_LOCALES[lang] || OG_LOCALES.nl;
+  return [`<meta property="og:locale" content="${main}" />`]
+    .concat(Object.values(OG_LOCALES).filter((v) => v !== main).map((v) => `<meta property="og:locale:alternate" content="${v}" />`));
 }
 
 // Vervangt een bestaande tag of voegt hem vóór </head> toe. Met een functie
@@ -81,6 +96,10 @@ function inject(html, m) {
   out = setTag(out, /<meta\s+property="og:description"[^>]*>/i, `<meta property="og:description" content="${esc(m.description)}" />`);
   out = setTag(out, /<meta\s+name="twitter:title"[^>]*>/i, `<meta name="twitter:title" content="${esc(m.title)}" />`);
   out = setTag(out, /<meta\s+name="twitter:description"[^>]*>/i, `<meta name="twitter:description" content="${esc(m.description)}" />`);
+  // Eerst de oude alternatieven weg, dan staat alleen og:locale zelf nog.
+  out = out.replace(/\s*<meta\s+property="og:locale:alternate"[^>]*>/gi, '');
+  out = setTag(out, /<meta\s+property="og:locale"[^>]*>/i, localeTags(m.lang).join('\n    '));
+  out = out.replace(/<html\s+lang="[^"]*"/i, () => `<html lang="${m.lang}"`);
   if (m.image) {
     out = setTag(out, /<meta\s+property="og:image"\s[^>]*>/i, `<meta property="og:image" content="${esc(m.image)}" />`);
     out = setTag(out, /<meta\s+name="twitter:image"[^>]*>/i, `<meta name="twitter:image" content="${esc(m.image)}" />`);
@@ -96,8 +115,9 @@ function minimal(m) {
   const t = m ? m.title : 'Vellu';
   const d = m ? m.description : '';
   const u = m ? m.url : 'https://vellu.cc/';
+  const lang = (m && m.lang) || 'nl';
   return `<!doctype html>
-<html lang="nl">
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <title>${esc(t)}</title>
@@ -105,6 +125,7 @@ function minimal(m) {
 <link rel="canonical" href="${esc(u)}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Vellu">
+${localeTags(lang).join('\n')}
 <meta property="og:url" content="${esc(u)}">
 <meta property="og:title" content="${esc(t)}">
 <meta property="og:description" content="${esc(d)}">

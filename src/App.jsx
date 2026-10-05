@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLoca
 import { supabase, rememberStaffInviteFromUrl, readStaffInvite, claimStaffInvite } from "./supabase.js";
 import {
   ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, parseDate, Layout, curSym, fmtAmt,
-  AT, AT_COLORS, AT_RADIUS, AtelierSkin, salonNow, useToast, ToastContainer
+  AT, AT_COLORS, AT_RADIUS, AtelierSkin, salonNow, ToastContainer
 } from "./shared.jsx";
 
 // ─── LAZY ROUTE CHUNKS ────────────────────────────────────────
@@ -102,6 +102,9 @@ function PlanSelectionGate(props) {
 // ('claimed' | 'invalid_or_expired' | 'has_salon' | 'failed'), of null als er
 // niets te claimen viel. OwnerEntryPage toont bij de laatste twee echte
 // weigeringen een melding.
+// role 'staff_inactive': teamlid van een andere salon zonder salonprofiel
+// (gedeactiveerd, of de salon was niet te laden; zie reason) en zonder eigen
+// salon. OwnerEntryPage logt dan uit met een melding.
 async function resolveUserRole(user) {
   if (!user) return { role: null, inviteOutcome: null };
   const [{ data: staffByUserId }, { data: ownerProfile }] = await Promise.all([
@@ -131,9 +134,24 @@ async function resolveUserRole(user) {
     // profielrij, maar zonder geheimen (agenda-feedtoken, Google-token,
     // Mollie-id's, facturatieprofielen…). Een medewerker mag de profielrij
     // van de salon niet meer zelf lezen (S1-12).
-    const { data: salonProfile } = await supabase.rpc("staff_salon_profile");
+    let { data: salonProfile, error: profileErr } = await supabase.rpc("staff_salon_profile");
+    if (profileErr) {
+      // Uitrolvangnet: staat deze frontend live vóór de migratie met de rpc
+      // (PGRST202/404), dan nog één keer de oude rechtstreekse lezing. Die
+      // policy verdwijnt pas ná deze deploy; daarna geeft dit gewoon niets.
+      const { data: legacy } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
+      salonProfile = legacy || null;
+    }
     if (salonProfile) {
       return { role: "staff", staffUser: { staffMember, profile: salonProfile, email: user.email }, inviteOutcome };
+    }
+    // Geen salonprofiel: de rpc geeft alleen een ACTIEF teamlid haar salon
+    // (gedeactiveerd), of de salon was niet te laden. Niet doorvallen naar het
+    // eigenaarspad zonder profiel: dan zag ze ingelogd het inlogscherm of
+    // "kies een plan". Heeft ze daarnaast een eigen salon, dan gaat ze daar
+    // gewoon heen (hieronder).
+    if (!ownerProfile) {
+      return { role: "staff_inactive", reason: staffMember.active === false ? "inactive" : "unavailable", inviteOutcome };
     }
   }
 
@@ -163,9 +181,11 @@ async function forgetPushOnThisDevice() {
     const sub = reg?.pushManager ? await limit(reg.pushManager.getSubscription(), 1500) : null;
     if (!sub) return;
     await limit(supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint), 2000);
-    await limit(sub.unsubscribe(), 1500);
+    // Opzeggen in de browser heeft de sessie niet nodig: niet op wachten, dan
+    // hangt de uitlogknop alleen nog op het wissen van de rij.
+    sub.unsubscribe().catch(() => {});
   };
-  try { await limit(run().catch(() => {}), 4000); } catch { /* uitloggen gaat altijd door */ }
+  try { await limit(run().catch(() => {}), 3500); } catch { /* uitloggen gaat altijd door */ }
 }
 
 function OwnerEntryPage({ lang, setLang }) {
@@ -174,19 +194,29 @@ function OwnerEntryPage({ lang, setLang }) {
   const [owner, setOwner] = useState(null);
   const [staffUser, setStaffUser] = useState(null); // { staffMember, salonData }
   const [loading, setLoading] = useState(true);
-  // Melding als een uitnodiging niet (meer) kan: één keer per bezoek, ook al
-  // lopen de sessie-check en het inlogformulier tegelijk.
-  // Alleen refs en de (stabiele) toast-setter: de sessie-check hieronder
+  // Meldingen als een uitnodiging niet (meer) kan of een teamaccount geen
+  // salon (meer) heeft. Eigen lijst i.p.v. useToast: die verdwijnt na 3
+  // seconden, te kort voor deze zinnen, en dit is het enige teken dat er iets
+  // niet doorging. Eén keer zolang hij in beeld staat, ook al lopen de
+  // sessie-check en het inlogformulier tegelijk.
+  // Alleen refs en de (stabiele) state-setter: de sessie-check hieronder
   // draait in een effect dat maar één keer wordt opgezet en houdt dus de
   // versie van de eerste render vast; de taal komt daarom uit een ref.
-  const { toasts, show: showToast } = useToast();
-  const inviteNoticeShown = useRef(false);
+  const [notices, setNotices] = useState([]);
+  const noticesShown = useRef(new Set());
   const langRef = useRef(lang);
   useEffect(() => { langRef.current = lang; });
+  const notify = (key, msg) => {
+    if (noticesShown.current.has(key)) return;
+    noticesShown.current.add(key);
+    setNotices(prev => [...prev, { id: key, message: msg, type: "error" }]);
+    setTimeout(() => {
+      noticesShown.current.delete(key);
+      setNotices(prev => prev.filter(n => n.id !== key));
+    }, 10000);
+  };
   const noteInvite = (outcome) => {
-    if (inviteNoticeShown.current) return;
     if (outcome !== "invalid_or_expired" && outcome !== "has_salon") return;
-    inviteNoticeShown.current = true;
     const lang = langRef.current;
     const msg = outcome === "has_salon"
       ? (lang === "nl" ? "Dit account heeft al een eigen salon. Gebruik een ander e-mailadres voor je teamaccount."
@@ -195,7 +225,20 @@ function OwnerEntryPage({ lang, setLang }) {
       : (lang === "nl" ? "Deze uitnodiging is verlopen of al gebruikt."
         : lang === "es" ? "Esta invitación ha caducado o ya se ha usado."
         : "This invitation has expired or was already used.");
-    showToast(msg, "error");
+    notify("invite_" + outcome, msg);
+  };
+  // Teamlid zonder salonprofiel (resolveUserRole 'staff_inactive'): uitloggen
+  // met uitleg, i.p.v. ingelogd op het inlogscherm of bij "kies een plan".
+  const noteStaffInactive = (reason) => {
+    const lang = langRef.current;
+    const msg = reason === "inactive"
+      ? (lang === "nl" ? "Je teamaccount is gedeactiveerd. Neem contact op met je salon."
+        : lang === "es" ? "Tu cuenta de equipo ha sido desactivada. Ponte en contacto con tu salón."
+        : "Your team account has been deactivated. Please contact your salon.")
+      : (lang === "nl" ? "Je salon kon niet worden geladen. Log opnieuw in."
+        : lang === "es" ? "No se pudo cargar tu salón. Vuelve a iniciar sesión."
+        : "Your salon could not be loaded. Please sign in again.");
+    notify("staff_" + reason, msg);
   };
 
   // Wachtwoord-herstel. De reset-mail landt hier met een hash: bij een geldig
@@ -242,6 +285,12 @@ function OwnerEntryPage({ lang, setLang }) {
           if (cancelled) return;
           noteInvite(resolved.inviteOutcome);
           if (resolved.role === "staff") { setStaffUser(resolved.staffUser); return; }
+          if (resolved.role === "staff_inactive") {
+            noteStaffInactive(resolved.reason);
+            // SIGNED_OUT draait hydrate opnieuw: zonder sessie het inlogscherm.
+            await supabase.auth.signOut();
+            return;
+          }
           if (resolved.role === "owner") {
             // Rebuild the owner view-model from the full profile.
             const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
@@ -295,6 +344,11 @@ function OwnerEntryPage({ lang, setLang }) {
       const resolved = await resolveUserRole(session.user);
       noteInvite(resolved.inviteOutcome);
       if (resolved.role === "staff") { setStaffUser(resolved.staffUser); return; }
+      if (resolved.role === "staff_inactive") {
+        noteStaffInactive(resolved.reason);
+        await supabase.auth.signOut();
+        return;
+      }
       if (resolved.role === "owner") { setOwner(u); return; }
     }
     setOwner(u);
@@ -335,14 +389,14 @@ function OwnerEntryPage({ lang, setLang }) {
   const hasPlan = planIsActive(owner);
 
   if (owner && !hasPlan) {
-    return <><PlanSelectionGate user={owner} lang={lang} setLang={setLang} onLogout={handleLogout} /><ToastContainer toasts={toasts} /></>;
+    return <><PlanSelectionGate user={owner} lang={lang} setLang={setLang} onLogout={handleLogout} /><ToastContainer toasts={notices} /></>;
   }
 
   if (owner) {
-    return <><OwnerApp user={owner} lang={lang} setLang={setLang} salons={{}} onSalonUpdate={() => {}} onLogout={handleLogout} /><ToastContainer toasts={toasts} /></>;
+    return <><OwnerApp user={owner} lang={lang} setLang={setLang} salons={{}} onSalonUpdate={() => {}} onLogout={handleLogout} /><ToastContainer toasts={notices} /></>;
   }
 
-  return <><OwnerAuth lang={lang} setLang={setLang} onBack={() => navigate("/")} onLogin={handleLogin} /><ToastContainer toasts={toasts} /></>;
+  return <><OwnerAuth lang={lang} setLang={setLang} onBack={() => navigate("/")} onLogin={handleLogin} /><ToastContainer toasts={notices} /></>;
 }
 
 // ─── NIEUW WACHTWOORD INSTELLEN (herstel-link uit de mail) ──────────────────
@@ -700,6 +754,12 @@ function SalonRoute({ lang, setLang }) {
       // toch alleen naar vandaag en later.
       const salonToday = salonNow(data.country_code || "NL");
       const blocksFrom = fmt(new Date(salonToday.getFullYear(), salonToday.getMonth(), salonToday.getDate() - 1));
+      // Uitrolvangnet voor de twee nieuwe views: staat deze frontend live
+      // vóór de migratie (view bestaat nog niet), dan nog één keer de oude
+      // tabel met dezelfde filters, zoals de pagina die vandaag leest. Die
+      // publieke policies verdwijnen pas ná deze deploy; daarna wordt de
+      // terugval niet meer gebruikt (en zou hij niets opleveren).
+      const viewOr = async (query, legacy) => { const r = await query; return r.error ? legacy() : r; };
       // Load related data in parallel for faster page load
       const [
         { data: reviews },
@@ -730,9 +790,15 @@ function SalonRoute({ lang, setLang }) {
         // datum, weekdag, soort en tijden.
         // Ook terugkerende blokkades (weekday gezet) meenemen — hun anker-
         // datum kan in het verleden liggen en zou anders uit de gte vallen.
-        supabase.from("public_staff_day_overrides").select("*").eq("owner_id", data.id).or(`date.gte.${blocksFrom},weekday.not.is.null`),
+        viewOr(
+          supabase.from("public_staff_day_overrides").select("*").eq("owner_id", data.id).or(`date.gte.${blocksFrom},weekday.not.is.null`),
+          () => supabase.from("staff_day_overrides").select("id, owner_id, staff_id, service_id, date, weekday, kind, block_time_start, block_time_end").eq("owner_id", data.id).or(`date.gte.${blocksFrom},weekday.not.is.null`)
+        ),
         // Winkelproducten (Professional): zie de uitleg bij public_salons hierboven.
-        supabase.from("public_products").select("*").eq("owner_id", data.id).order("position"),
+        viewOr(
+          supabase.from("public_products").select("*").eq("owner_id", data.id).order("position"),
+          () => supabase.from("products").select("id, owner_id, name_nl, name_en, name_es, description_nl, description_en, description_es, price, photo_url, position, created_at").eq("owner_id", data.id).eq("active", true).eq("visible_online", true).order("position")
+        ),
       ]);
       setSalon({
         id: data.slug,
