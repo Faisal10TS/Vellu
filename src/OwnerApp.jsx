@@ -7114,6 +7114,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const sel = Object.entries(productSaleSel).filter(([, q]) => q > 0);
     const voucherAmt = parseFloat(kassaVoucher) || 0;
     if (!sel.length && !(voucherAmt > 0)) { setProductSaleFor(null); return; }
+    // Typfout in het e-mailadres ("anna@gmail") vóór er iets geboekt wordt:
+    // de factuur (en bij een betaalverzoek het betaalblok) gaat naar dit adres.
+    const walkinMail = walkinEmail.trim();
+    if (walkinMail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(walkinMail)) {
+      toast.show(lang === "nl" ? "Controleer het e-mailadres van de klant" : lang === "es" ? "Revisa el correo electrónico del cliente" : "Check the client's email address", "error");
+      return;
+    }
     const items = sel.map(([pid, qty]) => {
       const p = (salonData.products || []).find(x => x.id === pid);
       return p ? { id: p.id, name: prodName(p), price: parseFloat(p.price) || 0, qty } : null;
@@ -7213,7 +7220,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       return;
     }
     {
-      const now = new Date();
+      // Datum en tijd van de verkoop op de klok van de SALON: een Bonairiaanse
+      // verkoop om 21:30, aangeslagen op een laptop op NL-tijd, landde anders
+      // op morgen 03:30 (verkeerde kasboekdag en dagrapport).
+      const now = salonNow(salonData.country_code);
       const pad2 = (n) => String(n).padStart(2, "0");
       // Bonnummer atomair uit de database. Uit de lokaal gecachte salonData
       // lezen ging mis zodra er twee kassa's meedraaien (tabblad naast de
@@ -7231,10 +7241,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const row = {
         owner_id: salonData.owner_id,
         service_id: null,
-        service_name: `${lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"} · ${saleLabel}${kortingAmt > 0 ? ` (${lang === "nl" ? "korting" : lang === "es" ? "descuento" : "discount"} −${fmtAmt(cur, kortingAmt)})` : ""}${redeemAmt > 0 ?` (${lang === "nl" ? "kadobon" : lang === "es" ? "tarjeta" : "gift card"} ${redeemVoucher.code} \u2212${fmtAmt(cur, redeemAmt)})` : ""}`,
+        service_name: `${lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"} · ${saleLabel}${kortingAmt > 0 ? ` (${lang === "nl" ? "korting" : lang === "es" ? "descuento" : "discount"} -${fmtAmt(cur, kortingAmt)})` : ""}${redeemAmt > 0 ?` (${lang === "nl" ? "kadobon" : lang === "es" ? "tarjeta" : "gift card"} ${redeemVoucher.code} -${fmtAmt(cur, redeemAmt)})` : ""}`,
+        // Gewoon "-" (ASCII) in de naam: het wiskundige minteken (U+2212) zit
+        // niet in het standaardfont van jsPDF en maakte de hele regel in het
+        // omzet- en kasboekrapport onleesbaar.
         service_price: netTotal,
         service_duration: 0,
-        date: fmt(getToday()),
+        date: fmt(now),
         time: `${pad2(now.getHours())}:${pad2(now.getMinutes())}`,
         client_name: walkinName.trim() || (lang === "nl" ? "Losse verkoop" : lang === "es" ? "Venta directa" : "Walk-in sale"),
         client_email: walkinEmail.trim().toLowerCase(),
@@ -7278,9 +7291,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       }
       // De teller is al opgehoogd door de RPC hierboven; alleen de lokale kopie
       // nog bijtrekken zodat die niet achterloopt op de database.
-      update(d => { d.next_receipt_number = receiptNo + 1; return d; });
+      // De verkoop meteen lokaal toevoegen, VÓÓR decrementStock (nog een
+      // netwerkronde), en op id: het realtime-INSERT van dezelfde rij kan er
+      // al zijn, en een tweede blinde toevoeging zette de verkoop dubbel in de
+      // lijst, het dagtotaal en het verwachte kassaldo.
+      update(d => {
+        d.next_receipt_number = receiptNo + 1;
+        d.appointments = d.appointments.some(x => x.id === data.id)
+          ? d.appointments.map(x => x.id === data.id ? data : x)
+          : [data, ...d.appointments];
+        return d;
+      });
       await decrementStock(items);
-      update(d => { d.appointments = [data, ...d.appointments]; return d; });
       // Op rekening: meteen in de lijst Nog te ontvangen, zonder herladen.
       if (isOpenReceivable(data)) setReceivables(r => [...r.filter(x => x.id !== data.id), data]);
       if (onAccount) toast.show(`${lang === "nl" ? "Op rekening gezet" : lang === "es" ? "Puesto a cuenta" : "Put on account"} · ${fmtAmt(cur, netTotal)}`);
@@ -7302,6 +7324,29 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     }
   };
 
+  // Rij opzoeken in ÁLLE bronnen: het 90-dagenvenster, een bijgehaalde oude
+  // periode (agenda), een oude kassadag en de open posten (Nog te ontvangen).
+  // Alleen salonData doorzoeken gaf bij een oude afspraak of verkoop een stille
+  // no-op: "Factuur verstuurd" zonder mail, producten die verdwenen, een tik in
+  // de tijdlijn die niets opende. Null als de rij nergens staat.
+  const findApptRow = (id) => {
+    if (!id) return null;
+    for (const src of [...APPT_ROW_SOURCES(), receivables]) {
+      const hit = (src || []).find(x => x.id === id && !x._isSubSlot);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  // Lokale bijwerking van één rij in dezelfde bronnen, zodat een oude dag of
+  // periode na opslaan meteen klopt (en niet pas na herladen).
+  const patchApptLocal = (id, patch) => {
+    const apply = (rows) => (rows || []).map(x => x.id === id ? { ...x, ...patch } : x);
+    update(d => { d.appointments = apply(d.appointments); return d; });
+    setPeriodExtra(p => p && p.rows ? { ...p, rows: apply(p.rows) } : p);
+    setKassaDayExtra(p => p && p.rows ? { ...p, rows: apply(p.rows) } : p);
+    setReceivables(r => apply(r));
+  };
+
   // Modal-router: walk-in verkoop → kassa-motor hierboven; anders producten
   // aanslaan op een bestaande afspraak (komt op dezelfde factuur).
   const addProductsToAppt = async () => {
@@ -7312,21 +7357,37 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const p = (salonData.products || []).find(x => x.id === pid);
       return p ? { id: p.id, name: prodName(p), price: parseFloat(p.price) || 0, qty } : null;
     }).filter(Boolean);
-    const a = salonData.appointments.find(x => x.id === productSaleFor);
-    if (!a) { setProductSaleFor(null); return; }
+    // Ook een afspraak van vóór het 90-dagenvenster (oude dag in de agenda):
+    // vroeger sloot de modal hier stil en waren de producten weg.
+    const a = findApptRow(productSaleFor);
+    if (!a) {
+      toast.show(lang === "nl" ? "Afspraak niet gevonden — ververs de pagina" : lang === "es" ? "Cita no encontrada — recarga la página" : "Appointment not found — refresh the page", "error");
+      return;
+    }
     const extraTotal = items.reduce((s, it) => s + it.price * it.qty, 0);
     const label = items.map(it => it.qty > 1 ? `${it.name} ×${it.qty}` : it.name).join(", ");
     const newPrice = +(parseFloat(a.service_price || 0) + extraTotal).toFixed(2);
     const newName = `${a.service_name} + ${label}`;
     const newProducts = [...(Array.isArray(a.products) ? a.products : []), ...items];
-    // Product erbij op een al (vooruit)betaalde afspraak → er staat weer iets open.
-    const payPatch = paymentPatchForPrice(a, newPrice);
+    // Product erbij op een al betaalde afspraak. Aan de balie afgerekend
+    // (contant, pin, overschrijving): het product gaat op dezelfde manier mee
+    // en de afspraak blijft betaald. Zonder dit vroeg de factuur de klant om
+    // een bedrag dat ze al had betaald, en stond er "Vooruitbetaald" bij een
+    // pinbetaling. Vooruitbetaald of nog open: het product komt open te staan.
+    const paidAtCounter = a.status === "completed" && !!a.payment_method && a.payment_method !== "prepaid"
+      && !OPEN_PAY_METHODS.has(a.payment_method) && paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005;
+    const payPatch = paidAtCounter
+      ? { amount_paid: newPrice, paid_at: a.paid_at || new Date().toISOString() }
+      : paymentPatchForPrice(a, newPrice);
     const { error } = await supabase.from("appointments").update({ service_price: newPrice, service_name: newName, products: newProducts, ...payPatch }).eq("id", a.id);
     if (error) { toast.show(t.somethingWrong, "error"); return; }
     await decrementStock(items);
-    update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, service_price: newPrice, service_name: newName, products: newProducts, ...payPatch } : x); return d; });
+    patchApptLocal(a.id, { service_price: newPrice, service_name: newName, products: newProducts, ...payPatch });
     setProductSaleFor(null); setProductSaleSel({});
-    toast.show(lang === "nl" ? "Producten toegevoegd aan de afspraak" : lang === "es" ? "Productos añadidos a la cita" : "Products added to the appointment");
+    const pmTxt = paidAtCounter && payMethodLabel(a.payment_method, lang) ? ` (${payMethodLabel(a.payment_method, lang)})` : "";
+    toast.show(paidAtCounter
+      ? (lang === "nl" ? `Producten toegevoegd · betaald${pmTxt}` : lang === "es" ? `Productos añadidos · pagado${pmTxt}` : `Products added · paid${pmTxt}`)
+      : (lang === "nl" ? "Producten toegevoegd aan de afspraak" : lang === "es" ? "Productos añadidos a la cita" : "Products added to the appointment"));
   };
 
   // Alle rijen met productregels binnen een periode: kassa-verkopen EN
@@ -7349,7 +7410,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // kasboek-dag, als PDF of Excel. Haalt de kasboekregels én de contante
   // betalingen (kassa + contant afgerekende afspraken) van de periode op.
   const exportCashbook = async (scope, format, baseDay) => {
-    const today = fmt(getToday());
+    const today = fmt(salonNow(salonData.country_code));
     const base = baseDay && baseDay <= today ? baseDay : today;
     const d = parseDate(base);
     const locale = lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB";
@@ -7360,12 +7421,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     else { from = `${d.getFullYear()}-01-01`; to = `${d.getFullYear()}-12-31`; label = String(d.getFullYear()); }
     if (to > today) to = today;
     try {
+      // Kasboekregels en betalingen gepagineerd (fetchAllRows, vaste volgorde
+      // met id als laatste sleutel): een jaar telt al snel meer dan de 1000
+      // rijen die PostgREST per verzoek teruggeeft, en dan vielen de laatste
+      // maanden stil uit de export.
       const [mv, appts, pays] = await Promise.all([
-        supabase.from("cash_movements").select("*").eq("owner_id", salonData.owner_id).gte("date", from).lte("date", to).order("date").order("created_at"),
+        fetchAllRows(() => supabase.from("cash_movements").select("*").eq("owner_id", salonData.owner_id).gte("date", from).lte("date", to).order("date").order("created_at").order("id")),
         fetchApptsBetween(from, to),
         // Klantenrekening: contante (deel)betalingen op open posten, op de dag
         // van ontvangst — die staan niet in de verkoopregels van de periode.
-        supabase.from("client_payments").select("*").eq("owner_id", salonData.owner_id).eq("method", "cash").gte("paid_on", from).lte("paid_on", to).order("paid_on").order("created_at"),
+        fetchAllRows(() => supabase.from("client_payments").select("*").eq("owner_id", salonData.owner_id).eq("method", "cash").gte("paid_on", from).lte("paid_on", to).order("paid_on").order("created_at").order("id")),
       ]);
       if (mv.error || appts === null || pays.error) {
         toast.show(lang === "nl" ? "Kon de periode niet ophalen — probeer het opnieuw" : lang === "es" ? "No se pudo cargar el período — inténtalo de nuevo" : "Could not load the period — please try again", "error");
@@ -7396,20 +7461,31 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   };
   // Rapport productverkoop (dag/maand/kwartaal/jaar) als PDF of Excel; beide
   // modules worden lazy geladen.
-  const downloadProductReport = async (scope, format = productReportFormat) => {
+  const downloadProductReport = async (scope, format = productReportFormat, baseDay) => {
+    // Vangnet voor de aanroep (scope, dag): een datum als tweede argument is
+    // de basisdag, niet het formaat.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(format || ""))) { baseDay = format; format = productReportFormat; }
     if (productReportBusy) return;
     setProductReportBusy(true);
     try {
-      const today = fmt(getToday());
-      // Jaar loopt van 1 januari t/m vandaag \u2014 niet de laatste 365 dagen.
-      // Een boekhouder wil het kalenderjaar, niet een schuivend venster.
-      // Kwartaal = kalenderkwartaal van vandaag (K3 = 1 jul t/m vandaag).
-      const kwartaal = Math.floor((parseInt(today.slice(5, 7), 10) - 1) / 3);
-      const from = scope === "year" ? today.slice(0, 4) + "-01-01"
-        : scope === "quarter" ? today.slice(0, 4) + "-" + String(kwartaal * 3 + 1).padStart(2, "0") + "-01"
-        : scope === "month" ? today.slice(0, 8) + "01"
-        : today;
-      const to = today;
+      // Rond de dag die in de Kassa open staat (zoals het Kasboek hieronder),
+      // niet altijd rond vandaag: anders kreeg "Dag" bij 2 okt het rapport van
+      // vandaag en was de maand september vanaf 1 oktober niet meer te maken.
+      // Nooit voorbij vandaag (klok van de salon). Jaar = kalenderjaar,
+      // kwartaal = kalenderkwartaal van die dag.
+      const today = fmt(salonNow(salonData.country_code));
+      const base = baseDay && baseDay <= today ? baseDay : today;
+      const kwartaal = Math.floor((parseInt(base.slice(5, 7), 10) - 1) / 3);
+      const baseD = parseDate(base);
+      const from = scope === "year" ? base.slice(0, 4) + "-01-01"
+        : scope === "quarter" ? base.slice(0, 4) + "-" + String(kwartaal * 3 + 1).padStart(2, "0") + "-01"
+        : scope === "month" ? base.slice(0, 8) + "01"
+        : base;
+      let to = scope === "year" ? base.slice(0, 4) + "-12-31"
+        : scope === "quarter" ? fmt(new Date(baseD.getFullYear(), kwartaal * 3 + 3, 0))
+        : scope === "month" ? fmt(new Date(baseD.getFullYear(), baseD.getMonth() + 1, 0))
+        : base;
+      if (to > today) to = today;
       // Het jaarrapport begint op 1 januari en valt dus al vanaf april buiten
       // het 90-dagen-venster van salonData; fetchApptsBetween haalt die maanden
       // erbij in plaats van er stilzwijgend een kwartaalrapport van te maken.
@@ -7424,12 +7500,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         return;
       }
       const label = scope === "year"
-        ? today.slice(0, 4)
+        ? base.slice(0, 4)
         : scope === "quarter"
-        ? `Q${kwartaal + 1} ${today.slice(0, 4)}`
+        ? `Q${kwartaal + 1} ${base.slice(0, 4)}`
         : scope === "month"
-        ? new Date(today + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { month: "long", year: "numeric" })
-        : new Date(today + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+        ? new Date(base + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { month: "long", year: "numeric" })
+        : new Date(base + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
       const params = {
         salon: salonData,
         appointments: rows,
@@ -7685,62 +7761,122 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // salonnaamregel eronder leeg.
     w.document.write(`<!doctype html><html><head><title>${esc(title)} — ${esc(salonData.name || "Vellu")}</title>
       <style>body{font-family:Arial,sans-serif;padding:24px;color:#222}h1{font-size:20px;margin:0 0 2px}h2{font-size:14px;margin:18px 0 6px}p.sub{color:#777;font-size:11px;margin:0 0 8px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 8px;font-size:12px;text-align:left}th{background:#f4f4f4}</style>
-      </head><body><h1>${esc(title)}</h1><p class="sub">${esc(salonData.name || "")} · ${esc(fmt(getToday()))}</p>${body}
+      </head><body><h1>${esc(title)}</h1><p class="sub">${esc(salonData.name || "")} · ${esc(fmt(salonNow(salonData.country_code)))}</p>${body}
       <script>window.onload=function(){window.print()}<\/script></body></html>`);
     w.document.close();
   };
 
   // apptOverride: de kassa-flow factureert direct na het aanmaken van de
   // verkoop-rij — die zit dan nog niet in salonData (state is nog niet
-  // geflusht), dus de verse rij gaat als object mee.
+  // geflusht), dus de verse rij gaat als object mee. Facturen en de
+  // verkoopdetails geven hun rij ook mee, zodat een factuur van vóór het
+  // 90-dagenvenster gewoon verstuurd kan worden.
   const sendInvoiceWith = async (id, profileIdx, apptOverride) => {
     if (processingApptId) return;
     setProcessingApptId(id);
     setInvoicePickerFor(null);
+    invoicePickerRowRef.current = null;
     try {
-      const a = apptOverride || salonData.appointments.find(x => x.id === id);
-      // Buiten het blok gehesen: de lokale bijwerking onderaan draait ook als
-      // er geen afspraak gevonden is, en heeft het nummer dan nodig.
-      let sentInvoiceNumber = null;
-      if (a) {
+      const a = findApptRow(id) || (apptOverride && !apptOverride._isSubSlot ? apptOverride : null);
+      if (!a) {
+        // Nooit meer "Factuur verstuurd" zonder dat er iets verstuurd is.
+        toast.show(lang === "nl" ? "Afspraak niet gevonden — factuur niet verstuurd" : lang === "es" ? "Cita no encontrada — factura no enviada" : "Appointment not found — invoice not sent", "error");
+        return;
+      }
+      {
         const extras = salonData.invoice_profiles || [];
         const isExtra = profileIdx !== null && profileIdx !== undefined && extras[profileIdx];
         const p = isExtra ? extras[profileIdx] : null;
         const prefix = (p ? p.invoice_prefix : salonData.invoice_prefix) || "INV";
-        // Het nummer komt uit de database, niet uit salonData. Dat is het hele
-        // punt: twee tabbladen lazen hier allebei dezelfde gecachte waarde en
-        // stuurden twee facturen met hetzelfde nummer de deur uit. De RPC hoogt
-        // op en geeft terug in één ondeelbare stap, dus een tweede aanroep
-        // krijgt gegarandeerd het volgende nummer.
-        const { data: rpcNum, error: numErr } = await supabase.rpc("next_invoice_number", {
-          p_owner: salonData.owner_id,
-          p_profile_key: p ? (p.id || null) : null,
-        });
-        if (numErr || !rpcNum) {
-          // Zonder gegarandeerd uniek nummer gaat er geen factuur uit. Een
-          // dubbele nummering repareer je niet achteraf.
-          console.error("factuurnummer ophalen mislukt:", numErr);
-          toast.show(lang === "nl" ? "Factuurnummer ophalen mislukt — factuur niet verstuurd"
-                   : lang === "es" ? "No se pudo obtener el número de factura — no se envió"
-                   : "Could not get an invoice number — invoice not sent", "error");
-          setProcessingApptId(null);
-          return;
+        // "Factuur opnieuw": de rij heeft al een nummer en houdt dat. Een nieuw
+        // nummer gaf de klant twee facturen met verschillende nummers voor één
+        // verkoop, en het eerst verstuurde nummer verdween uit de database.
+        let invoiceNumber = a.invoice_number ? String(a.invoice_number) : null;
+        if (!invoiceNumber) {
+          // Het nummer komt uit de database, niet uit salonData. Dat is het hele
+          // punt: twee tabbladen lazen hier allebei dezelfde gecachte waarde en
+          // stuurden twee facturen met hetzelfde nummer de deur uit. De RPC hoogt
+          // op en geeft terug in één ondeelbare stap, dus een tweede aanroep
+          // krijgt gegarandeerd het volgende nummer.
+          const { data: rpcNum, error: numErr } = await supabase.rpc("next_invoice_number", {
+            p_owner: salonData.owner_id,
+            p_profile_key: p ? (p.id || null) : null,
+          });
+          if (numErr || !rpcNum) {
+            // Zonder gegarandeerd uniek nummer gaat er geen factuur uit. Een
+            // dubbele nummering repareer je niet achteraf.
+            console.error("factuurnummer ophalen mislukt:", numErr);
+            toast.show(lang === "nl" ? "Factuurnummer ophalen mislukt — factuur niet verstuurd"
+                     : lang === "es" ? "No se pudo obtener el número de factura — no se envió"
+                     : "Could not get an invoice number — invoice not sent", "error");
+            return;
+          }
+          const nextNum = rpcNum;
+          invoiceNumber = `${prefix}-${String(nextNum).padStart(4, "0")}`;
+          // De teller is al opgehoogd door de RPC (ook als de mail hieronder
+          // mislukt — dat nummer is dan verbruikt); hier alleen de lokale kopie
+          // bijtrekken zodat het scherm het volgende nummer klopt laat zien.
+          if (isExtra) {
+            update(d => {
+              d.invoice_profiles = (d.invoice_profiles || []).map((x, i) =>
+                i === profileIdx ? { ...x, next_invoice_number: nextNum + 1 } : x);
+              return d;
+            });
+          } else {
+            update(d => { d.next_invoice_number = nextNum + 1; return d; });
+          }
         }
-        const nextNum = rpcNum;
-        const invoiceNumber = `${prefix}-${String(nextNum).padStart(4, "0")}`;
-        sentInvoiceNumber = invoiceNumber;
         // Regels op de factuur: bij een gedeelde boeking elke behandeling met
         // haar stylist en EIGEN prijs (plus eventuele producten), zodat één
         // factuur laat zien wie wat krijgt en wat het totaal is (TTNB, 09-09).
         const invoiceItems = (() => {
           const bdx = Array.isArray(a.service_breakdown) ? a.service_breakdown : [];
-          const prod = (Array.isArray(a.products) ? a.products : []).map(it => ({ name: it.name || "", qty: parseInt(it.qty) || 1, price: (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1) }));
-          if (bdx.length < 2) return prod.length ? [{ name: String(a.service_name || "").split(" + ")[0], price: Math.max(0, parseFloat(a.service_price || 0) - prod.reduce((s, x) => s + x.price, 0)) }, ...prod] : null;
+          const prodRaw = Array.isArray(a.products) ? a.products : [];
+          const prod = prodRaw.map(it => ({ name: it.name || "", qty: parseInt(it.qty) || 1, price: (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1) }));
+          if (bdx.length < 2) {
+            if (!prod.length) return null;
+            // Behandelregel = wat er na de producten overblijft. Een
+            // kassaverkoop (of een rest onder 1 cent) heeft er geen: die gaf
+            // een spookregel "Verkoop · ..." van 0,00 boven de producten.
+            const rest = Math.round((parseFloat(a.service_price || 0) - prod.reduce((s, x) => s + x.price, 0)) * 100) / 100;
+            if (a.is_sale || rest < 0.01) return prod;
+            // Label mét extra's (partLabelOf / service_name), zonder de
+            // productnamen die "+ Product" achteraan de naam zetten. Het oude
+            // split(" + ")[0] gooide ook de extra's weg terwijl hun prijs in
+            // deze regel zat.
+            const prodTags = new Set(prodRaw.map(it => (parseInt(it.qty) || 1) > 1 ? `${it.name} ×${it.qty}` : String(it.name || "")));
+            let label = bdx.length === 1 ? partLabelOf(a, 0, salonData.staff || []) : String(a.service_name || "");
+            for (;;) {
+              const k = label.lastIndexOf(" + ");
+              if (k < 0 || !label.slice(k + 3).split(", ").every(x => prodTags.has(x))) break;
+              label = label.slice(0, k);
+            }
+            return [{ name: label, price: rest }, ...prod];
+          }
           const pp = partPricesOf(a, salonData.services || [], salonData.staff || []);
           if (!pp) return null;
           return [...bdx.map((p2, i) => ({ name: partLabelOf(a, i, salonData.staff || []), staff: (salonData.staff || []).find(s => s.id === p2.staff_id)?.name || "", price: pp[i] })), ...prod];
         })();
-        await sendEmails("invoice", {
+        // Betaalgegevens van het standaardprofiel: staat er precies één
+        // stylist met eigen IBAN/betaallink op de boeking, dan haar rekening
+        // (dezelfde regel als de WhatsApp-teksten en book-appointment 12a).
+        const pd = p ? null : payDetailsForAppt(a);
+        // "Vooruitbetaald" alleen bij een echte vooruitbetaling of
+        // geregistreerde (deel)betalingen, of als er nog iets open staat / te
+        // veel betaald is. Aan de balie volledig betaald (pin, contant, kassa)
+        // → geen bedrag, maar paid_in_full: de mail zegt dan "Betaald" in
+        // plaats van "Vooruitbetaald -€X / Voldaan €0,00".
+        const paidNow = paidAmountOf(a);
+        const openNow = outstandingOf(a);
+        const sendPaid = a.payment_method === "prepaid"
+          || clientPayments.some(cp => cp.appointment_id === a.id)
+          || (paidNow > 0 && Math.abs(openNow) > 0.005);
+        const r = await sendEmails("invoice", {
+          // Server (send-emails) koppelt ontvanger en betaalgegevens aan deze
+          // rij en dit profiel in de database.
+          appointment_id: a.id,
+          invoice_profile_id: p ? (p.id || null) : null,
+          invoice_profile_index: isExtra ? profileIdx : null,
           client_name: a.client_name,
           client_email: a.client_email,
           service_name: a.service_name,
@@ -7752,7 +7888,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           salon_address: (p ? p.address : salonData.address) || "",
           salon_kvk: (p ? p.kvk_number : salonData.kvk_number) || "",
           salon_btw: (p ? p.btw_id : salonData.btw_id) || "",
-          salon_iban: (p ? p.iban : salonData.iban) || "",
+          salon_iban: (p ? p.iban : pd.iban) || "",
           // Betaalblok: zodra de post in Vellu nog open staat — op rekening of
           // een betaalverzoek uit de Kassa, of een afspraak afgerond met
           // "Later / factuur" (payment_method null). Sinds 25-09-2026 kiest de
@@ -7765,11 +7901,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           payment_request: OPEN_PAY_METHODS.has(a.payment_method ?? null),
           // Al (vooruit)betaald bedrag: de factuur trekt het af ("Vooruitbetaald
           // -€45 / Te betalen €30") en het betaalblok vraagt alleen het restant.
-          amount_paid: paidAmountOf(a),
-          iban_holder: p ? (p.iban_holder || p.label || "") : (salonData.iban_holder || ""),
+          // Zie sendPaid hierboven: alleen bij een echte vooruitbetaling/deel-
+          // betaling; volledig aan de balie betaald → paid_in_full.
+          amount_paid: sendPaid ? paidNow : 0,
+          paid_in_full: !sendPaid && !OPEN_PAY_METHODS.has(a.payment_method ?? null) && openNow <= 0.005,
+          iban_holder: p ? (p.iban_holder || p.label || "") : (pd.ibanHolder || ""),
           // bunq.me/PayPal.Me links get the exact OPEN amount appended, so the
           // client never has to type it (other providers pass through).
-          payment_link: getPaymentLinkWithAmount(p ? (p.payment_link || "") : (salonData.payment_link || ""), Math.max(0, outstandingOf(a))),
+          payment_link: getPaymentLinkWithAmount(p ? (p.payment_link || "") : (pd.paymentLink || ""), Math.max(0, openNow)),
           salon_accent: salonData.accent || "",
           // 0 als het bedrag niet op een klantdocument mag (Aruba). Zo laat ook
           // een nog niet bijgewerkte factuurmail de belastingregel weg — de
@@ -7797,39 +7936,58 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           currency: cur,
           tax_label: tax.label,
           tax_id_label: tax.idLabel,
-          lang
+          // Klantmail in de taal waarin de klant boekte (appointments.lang),
+          // niet in de dashboardtaal van de eigenaar — zoals annuleren en
+          // terugbetalen. Op Bonaire boekt een groot deel in het Engels.
+          lang: a.lang || ownerLangFor(salonData.country_code),
         });
+        // Mislukt de mail, dan is de factuur NIET verstuurd: niet als verzonden
+        // markeren (anders verdween de verstuurknop en stond er "Verzonden"
+        // terwijl de klant niets kreeg). Het nummer blijft verbruikt.
+        if (!r || !r.success) {
+          toast.show(lang === "nl" ? "Factuur niet verstuurd — probeer het opnieuw" : lang === "es" ? "Factura no enviada — inténtalo de nuevo" : "Invoice not sent — please try again", "error");
+          return;
+        }
         // Het nummer wordt nu OPGESLAGEN bij de afspraak. Daarvoor bestond het
         // alleen in de verstuurde mail, waardoor niet na te zoeken was welk
         // nummer naar welke klant ging — en de database een duplicaat ook niet
         // kon weigeren. Er ligt nu een unieke index op (owner_id,
         // invoice_number).
-        await supabase.from("appointments")
-          .update({ invoice_sent: true, invoice_number: invoiceNumber }).eq("id", id);
-        // De teller is al opgehoogd door de RPC; hier alleen de lokale kopie
-        // bijtrekken zodat het scherm het volgende nummer klopt laat zien.
-        if (isExtra) {
-          update(d => {
-            d.invoice_profiles = (d.invoice_profiles || []).map((x, i) =>
-              i === profileIdx ? { ...x, next_invoice_number: nextNum + 1 } : x);
-            return d;
-          });
-        } else {
-          update(d => { d.next_invoice_number = nextNum + 1; return d; });
+        const { error: upErr } = await supabase.from("appointments")
+          .update({ invoice_sent: true, invoice_number: invoiceNumber }).eq("id", a.id);
+        if (upErr) {
+          console.error("factuur opslaan mislukt:", upErr);
+          toast.show(lang === "nl" ? `Factuur ${invoiceNumber} is verstuurd, maar niet als verzonden opgeslagen — ververs de pagina` : lang === "es" ? `La factura ${invoiceNumber} se envió, pero no se guardó como enviada — recarga la página` : `Invoice ${invoiceNumber} was sent, but could not be saved as sent — refresh the page`, "error");
+          return;
         }
+        patchApptLocal(a.id, { invoice_sent: true, invoice_number: invoiceNumber });
       }
-      update(d => { d.appointments = d.appointments.map(a => a.id === id ? {...a, invoice_sent:true, invoice_number: sentInvoiceNumber ?? a.invoice_number} : a); return d; });
       toast.show(t.invoiceSent);
     } finally { setProcessingApptId(null); }
   };
 
-  const sendInvoice = async (id) => {
+  // Rij die met de profielkiezer mee moet (een factuur van buiten het
+  // 90-dagenvenster staat niet in salonData).
+  const invoicePickerRowRef = useRef(null);
+  const sendInvoice = async (id, row) => {
     if (processingApptId) return;
+    const a = findApptRow(id) || (row && !row._isSubSlot ? row : null);
+    const extras = salonData.invoice_profiles || [];
     // With no extras there's only one profile — send instantly. With extras,
     // open the picker so the right person invoices the right client.
-    if ((salonData.invoice_profiles || []).length === 0) {
-      return sendInvoiceWith(id, null);
+    if (extras.length === 0) {
+      return sendInvoiceWith(id, null, a);
     }
+    // Opnieuw versturen: het bestaande nummer zegt al bij welk profiel de
+    // factuur hoort (voorvoegsel + alleen cijfers), dus geen kiezer.
+    if (a && a.invoice_number) {
+      const num = String(a.invoice_number);
+      const owns = (prefix) => num.startsWith(`${prefix || "INV"}-`) && /^\d+$/.test(num.slice(`${prefix || "INV"}-`.length));
+      const idx = extras.findIndex(x => owns(x.invoice_prefix));
+      if (idx >= 0) return sendInvoiceWith(id, idx, a);
+      if (owns(salonData.invoice_prefix)) return sendInvoiceWith(id, null, a);
+    }
+    invoicePickerRowRef.current = a;
     setInvoicePickerFor(id);
   };
 
@@ -7872,16 +8030,36 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
   // Toggle the paid flag on an invoice row — light bookkeeping so the owner
   // can see who still owes after a payment request went out.
-  const togglePaid = async (a) => {
+  const togglePaid = async (raw) => {
+    // Altijd de verste stand van de rij (ook buiten het 90-dagenvenster).
+    const a = findApptRow(raw?.id) || raw;
+    if (!a) return;
     // Klantenrekening: een post op rekening, of een post waarop al (deel)-
     // betalingen zijn geregistreerd, loopt via het betalingsvenster — daar
     // staan bedrag, betaalwijze en datum, en de historie blijft kloppen.
     const hasPayments = clientPayments.some(p => p.appointment_id === a.id);
     if (!a.paid_at && (a.payment_method === "account" || hasPayments)) { openPayModal(a); return; }
+    // Deels betaald (bv. €45 vooruitbetaald op een behandeling die €75 werd):
+    // het restant ook via het betalingsvenster, als eigen betaling. Zo kan
+    // "terugzetten" later alleen dát restant weghalen en blijft de
+    // vooruitbetaling staan (vroeger zette dit amount_paid op 0).
+    if (!a.paid_at && paidAmountOf(a) > 0.005 && outstandingOf(a) > 0.005) { openPayModal(a); return; }
     if (a.paid_at && hasPayments) {
       toast.show(lang === "nl" ? "Deze post heeft geregistreerde betalingen — open het betalingsvenster om er een te verwijderen" : lang === "es" ? "Esta partida tiene pagos registrados — abre la ventana de pagos para eliminar uno" : "This item has recorded payments — open the payment window to remove one", "error");
       openPayModal(a);
       return;
+    }
+    // Vooruitbetaald zonder geregistreerde betalingen: terugzetten wist ook de
+    // vooruitbetaling zelf. Nooit meer stil — eerst uitdrukkelijk vragen.
+    if (a.paid_at && a.payment_method === "prepaid") {
+      const paidTxt = fmtAmt(cur, paidAmountOf(a));
+      const ok = await showConfirm(lang === "nl"
+        ? `Deze afspraak is vooruitbetaald (${paidTxt}). Ook die vooruitbetaling als niet ontvangen boeken?`
+        : lang === "es"
+        ? `Esta cita está pagada por adelantado (${paidTxt}). ¿Marcar también ese pago como no recibido?`
+        : `This appointment was paid in advance (${paidTxt}). Also book that prepayment as not received?`,
+        { tone: "primary", confirmText: lang === "nl" ? "Terugzetten" : lang === "es" ? "Restablecer" : "Set back" });
+      if (!ok) return;
     }
     const newVal = a.paid_at ? null : new Date().toISOString();
     // Betaald = het hele bedrag; terugzetten = niets ontvangen.
@@ -7891,7 +8069,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       toast.show(lang === "nl" ? "Kon betaalstatus niet bijwerken" : lang === "es" ? "No se pudo actualizar el estado del pago" : "Could not update payment status", "error");
       return;
     }
-    update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, ...patch } : x); return d; });
+    patchApptLocal(a.id, patch);
     // Lijst Nog te ontvangen mee laten bewegen (betaald = eruit, teruggezet = erin).
     const merged = { ...a, ...patch };
     setReceivables(r => isOpenReceivable(merged) ? [...r.filter(x => x.id !== a.id), merged].sort((x, y) => x.date.localeCompare(y.date)) : r.filter(x => x.id !== a.id));
@@ -7904,11 +8082,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // factuur-mail ("Al betaald / Nog te betalen") gewoon blijven werken.
   const openPayModal = (a) => {
     setPayFor(a);
-    setPayForm({ amount: outstandingOf(a).toFixed(2), method: "cash", date: fmt(getToday()), note: "" });
+    setPayForm({ amount: outstandingOf(a).toFixed(2), method: "cash", date: fmt(salonNow(salonData.country_code)), note: "" });
   };
   const applyPaymentPatch = (a, patch) => {
     const merged = { ...a, ...patch };
-    update(d => { d.appointments = d.appointments.map(x => x.id === a.id ? { ...x, ...patch } : x); return d; });
+    patchApptLocal(a.id, patch);
     setReceivables(r => isOpenReceivable(merged) ? [...r.filter(x => x.id !== a.id), merged].sort((x, y) => x.date.localeCompare(y.date)) : r.filter(x => x.id !== a.id));
     return merged;
   };
@@ -7919,7 +8097,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const amount = Math.round((parseFloat(payForm.amount) || 0) * 100) / 100;
     if (amount <= 0) { toast.show(lang === "nl" ? "Vul een bedrag in" : lang === "es" ? "Introduce un importe" : "Enter an amount", "error"); return; }
     if (amount > open + 0.005) { toast.show(lang === "nl" ? `Meer dan er openstaat (${fmtAmt(cur, open)})` : lang === "es" ? `Más de lo pendiente (${fmtAmt(cur, open)})` : `More than is outstanding (${fmtAmt(cur, open)})`, "error"); return; }
-    const paidOn = /^\d{4}-\d{2}-\d{2}$/.test(payForm.date) ? payForm.date : fmt(getToday());
+    const paidOn = /^\d{4}-\d{2}-\d{2}$/.test(payForm.date) ? payForm.date : fmt(salonNow(salonData.country_code));
     setPayBusy(true);
     try {
       const { data: pay, error } = await supabase.from("client_payments").insert({
@@ -7931,7 +8109,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const settled = paidNow + 0.005 >= (parseFloat(a.service_price) || 0);
       const patch = { amount_paid: paidNow, paid_at: settled ? new Date().toISOString() : null };
       const { error: e2 } = await supabase.from("appointments").update(patch).eq("id", a.id);
-      if (e2) throw e2;
+      if (e2) {
+        // Geen half werk: zonder bijgewerkte post mag de betaling niet blijven
+        // staan (die telde anders in het kasboek, de post bleef open en een
+        // tweede poging boekte hem dubbel).
+        const { error: undoErr } = await supabase.from("client_payments").delete().eq("id", pay.id);
+        if (undoErr) console.error("klantbetaling terugdraaien mislukt:", undoErr);
+        throw e2;
+      }
       const merged = applyPaymentPatch(a, patch);
       setClientPayments(p => [pay, ...p]);
       if (settled) { setPayFor(null); }
@@ -7945,14 +8130,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     } finally { setPayBusy(false); }
   };
   const deleteClientPayment = async (pay) => {
-    const a = (payFor && payFor.id === pay.appointment_id) ? payFor : ((salonData.appointments || []).find(x => x.id === pay.appointment_id) || receivables.find(x => x.id === pay.appointment_id));
+    const a = (payFor && payFor.id === pay.appointment_id) ? payFor : findApptRow(pay.appointment_id);
     if (!a) return;
     if (!(await showConfirm(lang === "nl" ? `Betaling van ${fmtAmt(cur, pay.amount)} verwijderen? Het bedrag komt weer open te staan.` : lang === "es" ? `¿Eliminar el pago de ${fmtAmt(cur, pay.amount)}? El importe vuelve a quedar pendiente.` : `Delete the payment of ${fmtAmt(cur, pay.amount)}? The amount becomes outstanding again.`))) return;
-    const { error } = await supabase.from("client_payments").delete().eq("id", pay.id);
-    if (error) { toast.show(t.somethingWrong, "error"); return; }
+    // Eerst de post bijwerken, dan de betaling weghalen; mislukt dat tweede,
+    // dan de post terugzetten. Zo staan post en betalingen nooit los van
+    // elkaar (vroeger werd de fout van de tweede stap genegeerd).
     const paidNow = Math.max(0, Math.round((paidAmountOf(a) - (parseFloat(pay.amount) || 0)) * 100) / 100);
     const patch = { amount_paid: paidNow, paid_at: null };
-    await supabase.from("appointments").update(patch).eq("id", a.id);
+    const { error: e1 } = await supabase.from("appointments").update(patch).eq("id", a.id);
+    if (e1) { toast.show(t.somethingWrong, "error"); return; }
+    const { error } = await supabase.from("client_payments").delete().eq("id", pay.id);
+    if (error) {
+      const { error: undoErr } = await supabase.from("appointments").update({ amount_paid: a.amount_paid ?? null, paid_at: a.paid_at ?? null }).eq("id", a.id);
+      if (undoErr) console.error("post terugzetten mislukt:", undoErr);
+      toast.show(t.somethingWrong, "error");
+      return;
+    }
     const merged = applyPaymentPatch(a, patch);
     setClientPayments(p => p.filter(x => x.id !== pay.id));
     setPayFor(merged);
@@ -7962,10 +8156,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const addService = async () => {
     // Owner-visible input in current lang → require that. If lang=en they type
     // name_en and NL gets auto-translated below (and vice versa).
+    // Geeft true terug als de dienst is toegevoegd, anders false — de knop
+    // "Dienst toevoegen" sluit het formulier alleen bij succes, zodat een
+    // foutmelding (svcError) zichtbaar blijft.
     const primaryName = lang === "nl" ? newSvc.name_nl : lang === "es" ? (newSvc.name_es || newSvc.name_en || newSvc.name_nl) : (newSvc.name_en || newSvc.name_nl);
-    if (!primaryName || !newSvc.price) { setSvcError(t.fillRequired); return; }
+    if (!primaryName || !newSvc.price) { setSvcError(t.fillRequired); return false; }
     const price = parseFloat(newSvc.price);
-    if (!Number.isFinite(price) || price < 0) { setSvcError(lang === "nl" ? "Ongeldige prijs" : lang === "es" ? "Precio no válido" : "Invalid price"); return; }
+    if (!Number.isFinite(price) || price < 0) { setSvcError(lang === "nl" ? "Ongeldige prijs" : lang === "es" ? "Precio no válido" : "Invalid price"); return false; }
     setSvcError("");
     const filled = await autoFillTranslations(newSvc, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
     // Append to end: position = max existing + 1 (so new rows land below drag-drop ordered ones).
@@ -7988,10 +8185,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       // Previously the error was silently swallowed and the form was cleared so owners
       // thought the service was added. Show a real error and keep the form so they can retry.
       toast.show(lang === "nl" ? "Dienst toevoegen mislukt" : lang === "es" ? "No se pudo añadir el servicio" : "Failed to add service", "error");
-      return;
+      return false;
     }
     update(d => { d.services = [...d.services, { ...data, name_nl: data.name_nl || data.name, name_en: data.name_en || data.name, photos: [], variants: [], extras: [] }]; return d; });
     setNewSvc({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60", category_id: "" });
+    // Teamleden met een BEPERKTE dienstenlijst (minstens één staff_services-
+    // rij) krijgen de nieuwe dienst erbij. Anders deed niemand hem: hij stond
+    // wel online, maar book-appointment weigerde elke boeking (staff_required)
+    // en de klant liep vast. Wie hem niet doet, zet hem uit onder Team.
+    // Teamleden zonder rijen doen al alles en hoeven niets.
+    const restricted = (salonData.staff || []).filter(m => m.active !== false && (m.service_ids || []).length > 0);
+    if (restricted.length > 0) {
+      const { error: ssErr } = await supabase.from("staff_services").insert(restricted.map(m => ({ staff_id: m.id, service_id: data.id })));
+      if (ssErr) {
+        console.error("staff_services bij nieuwe dienst:", ssErr);
+        toast.show(lang === "nl" ? "Dienst toegevoegd, maar niet aan het team gekoppeld — zet hem aan onder Team" : lang === "es" ? "Servicio añadido, pero no asignado al equipo — actívalo en Equipo" : "Service added, but not assigned to the team — switch it on under Team", "error");
+      } else {
+        const ids = new Set(restricted.map(m => m.id));
+        update(d => { d.staff = (d.staff || []).map(m => ids.has(m.id) ? { ...m, service_ids: [...(m.service_ids || []), data.id] } : m); return d; });
+      }
+    }
+    return true;
   };
 
   const deleteService = async (id) => {
@@ -8006,21 +8220,41 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     }
     const { error } = await supabase.from("services").delete().eq("id", id).eq("owner_id", salonData.owner_id);
     if (error) { toast.show(t.somethingWrong, "error"); return; }
-    update(d => { d.services = d.services.filter(s => s.id !== id); return d; });
+    // staff_services en staff_service_prices gaan in de database mee (ON
+    // DELETE CASCADE); de lokale teamlijsten ook bijwerken. Bleef het id daar
+    // staan, dan schreef "Opslaan" bij een stylist het weer mee, faalde de
+    // hele insert op de foreign key en hield ze nul rijen over = alle diensten.
+    update(d => {
+      d.services = d.services.filter(s => s.id !== id);
+      d.staff = (d.staff || []).map(m => ({
+        ...m,
+        service_ids: (m.service_ids || []).filter(sid => sid !== id),
+        price_overrides: (m.price_overrides || []).filter(o => o.service_id !== id),
+      }));
+      return d;
+    });
   };
 
   const [photoUploading, setPhotoUploading] = useState(null); // serviceId or null
 
   const addPhoto = async (serviceId, file) => {
+    if (!file) return;
     setPhotoUploading(serviceId);
     // 1400 px dekt de lightbox op een 3×-telefoon; de tegel zelf is 300 px.
     // Cache een jaar: de naam bevat een timestamp en wordt nooit overschreven.
-    const uploadFile = await compressImage(file, 1400);
-    const fileName = `${salonData.owner_id}/${serviceId}/${Date.now()}_${uploadFile.name}`;
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("service-photos")
-      .upload(fileName, uploadFile, { cacheControl: "31536000", upsert: false });
-    
+    let uploadFile, fileName, uploadError;
+    try {
+      uploadFile = await compressImage(file, 1400);
+      fileName = `${salonData.owner_id}/${serviceId}/${Date.now()}_${uploadFile.name}`;
+      ({ error: uploadError } = await supabase.storage
+        .from("service-photos")
+        .upload(fileName, uploadFile, { cacheControl: "31536000", upsert: false }));
+    } catch (e) {
+      // Netwerkfout of onleesbaar bestand: ook dan een melding, geen
+      // spinner die stil verdwijnt.
+      uploadError = e;
+    }
+
     if (uploadError) {
       console.error("Upload error:", uploadError);
       // Tot 05-10-2026 zonder melding: de spinner verdween en er kwam geen foto.
@@ -8045,6 +8279,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       console.error("DB error:", dbError);
       // Clean up orphaned file from storage
       await supabase.storage.from("service-photos").remove([fileName]);
+      toast.show(uploadErrorText(lang, dbError), "error");
       setPhotoUploading(null);
       return;
     }
@@ -8096,7 +8331,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // leegmaken van het formulier.
   const openAddAppt = () => {
     setShowAddAppt(true); setAddApptDone(false);
-    setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", client_birthday: "", notify_client: true });
+    setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(salonNow(salonData.country_code)), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", client_birthday: "", notify_client: true });
     setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false);
   };
   // Zelfde formulier, maar met dag en (optioneel) tijd al ingevuld — voor de
@@ -8131,7 +8366,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       if (error) throw error;
       update(d => { d.calendar_feed_token = token; return d; });
     } catch (e) {
-      toast(lang === "nl" ? "Kon de agenda-link niet aanmaken" : lang === "es" ? "No se pudo crear el enlace del calendario" : "Could not create the calendar link", "error");
+      // toast is het useToast()-object: toast(...) gooide een TypeError en de
+      // knop leek dood. Altijd toast.show.
+      console.error("agenda-link aanmaken:", e);
+      toast.show(lang === "nl" ? "Kon de agenda-link niet aanmaken" : lang === "es" ? "No se pudo crear el enlace del calendario" : "Could not create the calendar link", "error");
     } finally {
       setCalFeedBusy(false);
     }
@@ -8143,7 +8381,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       ? "Nieuwe link maken? De oude agenda-link stopt dan met werken op alle apparaten."
       : lang === "es"
       ? "¿Crear un enlace nuevo? El enlace de agenda anterior dejará de funcionar en todos los dispositivos."
-      : "Create a new link? The old calendar link will stop working on all devices.")) return;
+      : "Create a new link? The old calendar link will stop working on all devices.",
+      // Neutrale knop: zonder tone stond hier de rode "Verwijderen".
+      { tone: "primary", confirmText: lang === "nl" ? "Nieuwe link maken" : lang === "es" ? "Crear nuevo enlace" : "Create new link" })) return;
     setCalFeedBusy(true);
     try {
       const rnd = () => (crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/-/g, "");
@@ -8151,9 +8391,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const { error } = await supabase.from("profiles").update({ calendar_feed_token: token }).eq("id", salonData.owner_id);
       if (error) throw error;
       update(d => { d.calendar_feed_token = token; return d; });
-      toast(lang === "nl" ? "Nieuwe agenda-link aangemaakt" : lang === "es" ? "Nuevo enlace de calendario creado" : "New calendar link created", "success");
+      toast.show(lang === "nl" ? "Nieuwe agenda-link aangemaakt" : lang === "es" ? "Nuevo enlace de calendario creado" : "New calendar link created", "success");
     } catch (e) {
-      toast(lang === "nl" ? "Kon de link niet vernieuwen" : lang === "es" ? "No se pudo actualizar el enlace" : "Could not refresh the link", "error");
+      console.error("agenda-link vernieuwen:", e);
+      toast.show(lang === "nl" ? "Kon de link niet vernieuwen" : lang === "es" ? "No se pudo actualizar el enlace" : "Could not refresh the link", "error");
     } finally {
       setCalFeedBusy(false);
     }
@@ -8169,29 +8410,53 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // Emit UTC times (Z suffix). Previously DTSTART/DTEND were "floating" (no timezone),
     // which Google/Apple Calendar interpret in the importing device's local time —
     // an owner traveling abroad would see appointments on wrong hours. UTC is unambiguous.
+    // Het UTC-moment komt uit de tijdzone van de SALON (localToUtc + tzFor),
+    // niet uit die van het apparaat: 10:00 op Bonaire, geëxporteerd op een
+    // laptop op NL-tijd, landde anders op 04:00.
     const pad = (n) => String(n).padStart(2, "0");
     const fmtUTC = (d) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
     const icsStatus = (s) => s === "completed" ? "CONFIRMED" : (s === "cancelled" || s === "no_show" ? "CANCELLED" : "CONFIRMED");
+    // RFC 5545: \ ; , en regeleinden in tekst escapen, regels langer dan 75
+    // octets vouwen (vervolgregel begint met een spatie).
+    const icsText = (v) => String(v == null ? "" : v).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+    const enc = new TextEncoder();
+    const fold = (line) => {
+      let out = "", len = 0;
+      for (const ch of line) {
+        const n = enc.encode(ch).length;
+        if (len + n > 75) { out += "\r\n "; len = 1; }
+        out += ch; len += n;
+      }
+      return out;
+    };
+    const tz = tzFor(salonData.country_code);
+    const stamp = fmtUTC(new Date());
     const events = apptList.map(a => {
-      const start = new Date(a.date + "T" + a.time + ":00");
-      const end = new Date(start.getTime() + (a.service_duration || 60) * 60000);
+      const start = localToUtc(a.date, String(a.time || "").slice(0, 5), tz);
+      if (!start) return null;
+      const end = new Date(start.getTime() + (parseInt(a.service_duration) || 60) * 60000);
+      const desc = [a.client_name, a.client_email, a.client_phone, fmtAmt(cur, a.service_price), `Status: ${a.status}`].filter(Boolean).map(icsText).join("\\n");
       return [
         "BEGIN:VEVENT",
+        // Uniek per deel: met een medewerkerfilter staan de delen van één
+        // gedeelde boeking als losse blokken in de lijst; met hetzelfde UID
+        // voegde de agenda-app ze samen en viel er een weg.
+        `UID:${a._slotKey || a.id}@vellu.cc`,
+        `DTSTAMP:${stamp}`,
         `DTSTART:${fmtUTC(start)}`,
         `DTEND:${fmtUTC(end)}`,
-        `SUMMARY:${a.client_name} — ${a.service_name}`,
-        `DESCRIPTION:${a.client_name}\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}\\n${fmtAmt(cur, a.service_price)}\\nStatus: ${a.status}`,
-        `LOCATION:${salonData.name}, ${salonData.city}`,
+        `SUMMARY:${icsText(`${a.client_name} — ${a.service_name}`)}`,
+        `DESCRIPTION:${desc}`,
+        `LOCATION:${icsText([salonData.name, salonData.city].filter(Boolean).join(", "))}`,
         `STATUS:${icsStatus(a.status)}`,
-        `UID:${a.id}@vellu.cc`,
         "END:VEVENT"
-      ].join("\r\n");
-    });
+      ].map(fold).join("\r\n");
+    }).filter(Boolean);
     const ics = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
       "PRODID:-//Vellu//Beauty Booking//EN",
-      "X-WR-CALNAME:Vellu - " + salonData.name,
+      fold("X-WR-CALNAME:" + icsText("Vellu - " + salonData.name)),
       ...events,
       "END:VCALENDAR"
     ].join("\r\n");
@@ -8200,6 +8465,61 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const a = document.createElement("a");
     a.href = url; a.download = `vellu-${salonData.id}-agenda.ics`;
     a.click(); URL.revokeObjectURL(url);
+  };
+
+  // "Vorige keer" (notitie van het vorige bezoek) ook voor klanten met een
+  // langere cyclus: notities van vóór het 90-dagenvenster staan niet in
+  // salonData. Eén kleine query (alleen rijen mét notitie, alleen de velden
+  // die de kaart nodig heeft) bij het laden van de salon.
+  const [olderAdvice, setOlderAdvice] = useState([]);
+  useEffect(() => {
+    if (!salonData?.owner_id) return;
+    let alive = true;
+    const before = loadedWindowFrom();
+    fetchAllRows(() => supabase.from("appointments")
+      .select("id, client_email, date, time, status, visit_advice, advice_followed")
+      .eq("owner_id", salonData.owner_id).lt("date", before).not("visit_advice", "is", null)
+      .order("id"))
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error) { console.error("oudere notities:", error); return; }
+        setOlderAdvice(data || []);
+      });
+    return () => { alive = false; };
+  }, [salonData?.owner_id]);
+  // "Gedaan? Ja/Nee" op zo'n oudere rij: die staat niet in salonData, dus
+  // setAdviceFollowed zou alleen de database bijwerken en de chip niet.
+  const setOlderAdviceFollowed = async (id, val) => {
+    const { error } = await supabase.from("appointments").update({ advice_followed: val }).eq("id", id).eq("owner_id", salonData.owner_id);
+    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
+    setOlderAdvice(list => (list || []).map(x => x.id === id ? { ...x, advice_followed: val } : x));
+  };
+  // No-show met een vooruitbetaling die hoger is dan de vergoeding: de salon
+  // houdt de vergoeding en betaalt de rest terug. "Terugbetaald" legt dat
+  // vast (amount_paid = vergoeding), zodat de regel van de kaart verdwijnt.
+  // Geen mail: de terugbetaalmail noemt de behandelprijs, en die klopt hier niet.
+  const recordNoShowRefund = async (raw) => {
+    if (processingApptId) return;
+    const a = findApptRow(raw?.id) || raw;
+    if (!a) return;
+    const fee = Math.round((parseFloat(a.no_show_fee) || 0) * 100) / 100;
+    const refund = Math.round((paidAmountOf(a) - fee) * 100) / 100;
+    if (fee <= 0 || refund <= 0.005) return;
+    const ok = await showConfirm(lang === "nl"
+      ? `Terugbetaling van ${fmtAmt(cur, refund)} aan ${a.client_name} vastleggen? De salon houdt ${fmtAmt(cur, fee)} als no-show-vergoeding.`
+      : lang === "es"
+      ? `¿Registrar la devolución de ${fmtAmt(cur, refund)} a ${a.client_name}? El salón se queda ${fmtAmt(cur, fee)} como tarifa por ausencia.`
+      : `Record the refund of ${fmtAmt(cur, refund)} to ${a.client_name}? The salon keeps ${fmtAmt(cur, fee)} as the no-show fee.`,
+      { tone: "primary", confirmText: lang === "nl" ? "Terugbetaald" : lang === "es" ? "Devuelto" : "Refunded" });
+    if (!ok) return;
+    setProcessingApptId(a.id);
+    try {
+      const patch = { amount_paid: fee };
+      const { error } = await supabase.from("appointments").update(patch).eq("id", a.id);
+      if (error) { toast.show(lang === "nl" ? "Kon de terugbetaling niet vastleggen" : lang === "es" ? "No se pudo registrar la devolución" : "Could not record the refund", "error"); return; }
+      patchApptLocal(a.id, patch);
+      toast.show(lang === "nl" ? `Terugbetaling van ${fmtAmt(cur, refund)} vastgelegd` : lang === "es" ? `Devolución de ${fmtAmt(cur, refund)} registrada` : `Refund of ${fmtAmt(cur, refund)} recorded`);
+    } finally { setProcessingApptId(null); }
   };
 
   // Rendered as a plain function (NOT a React component) so it doesn't get a new identity
@@ -8329,9 +8649,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
         const canEdit = true && (a.status === "confirmed" || a.status === "completed" || a.status === "pending_payment");
         const mail = (a.client_email || "").toLowerCase();
-        const prev = mail ? (salonData.appointments || [])
+        // Ook notities van vóór het 90-dagenvenster (olderAdvice); salonData
+        // wint bij een id dat in beide staat.
+        const inWindowIds = new Set((salonData.appointments || []).map(x => x.id));
+        const prev = mail ? [...(salonData.appointments || []), ...(olderAdvice || []).filter(x => !inWindowIds.has(x.id))]
           .filter(x => x.id !== a.id && (x.client_email || "").toLowerCase() === mail && x.visit_advice && x.status !== "cancelled" && x.status !== "no_show" && (x.date < a.date || (x.date === a.date && (x.time || "") < (a.time || ""))))
           .sort((x, y) => (y.date + (y.time || "")).localeCompare(x.date + (x.time || "")))[0] : null;
+        const prevIsOlder = !!prev && !inWindowIds.has(prev.id);
+        const followPrev = (val) => prevIsOlder ? setOlderAdviceFollowed(prev.id, val) : setAdviceFollowed(prev.id, val);
         if (!prev && !a.visit_advice && !canEdit) return null;
         const editing = adviceEdit && adviceEdit.id === a.id;
         const fmtD = (ds) => { const d = parseDate(ds); return `${d.getDate()} ${(lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN)[d.getMonth()]}`; };
@@ -8359,8 +8684,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ fontSize: 11, color: c.text, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{prev.visit_advice}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 10, color: c.textMuted }}>{L("Gedaan?", "Done?", "¿Lo hizo?")}</span>
-                    {chip(prev.advice_followed === true, L("Ja", "Yes", "Sí"), () => setAdviceFollowed(prev.id, prev.advice_followed === true ? null : true), c.success)}
-                    {chip(prev.advice_followed === false, L("Nee", "No", "No"), () => setAdviceFollowed(prev.id, prev.advice_followed === false ? null : false), c.danger)}
+                    {chip(prev.advice_followed === true, L("Ja", "Yes", "Sí"), () => followPrev(prev.advice_followed === true ? null : true), c.success)}
+                    {chip(prev.advice_followed === false, L("Nee", "No", "No"), () => followPrev(prev.advice_followed === false ? null : false), c.danger)}
                   </div>
                 </div>
               ) : editing ? (
@@ -8398,13 +8723,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         const cel = { width: "100%", minWidth: 0, fontSize: 10, padding: "9px 4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dis ? 0.5 : 1 };
         const icoon = { width: 32, height: 32, flexShrink: 0, borderRadius: 8, background: "transparent", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", opacity: dis ? 0.5 : 1, padding: 0 };
         const dur = parseInt(a.service_duration || a.duration || 60);
+        // No-show kan pas als de afspraak begonnen is (klok van de salon):
+        // een mis-tik op een toekomstige afspraak telde als no-show en kon de
+        // klant zelfs blokkeren. Begin = de hele boeking (_baseTime bij een deelblok).
+        const noShowOpen = (() => {
+          const now = salonNow(salonData.country_code);
+          const today = fmt(now);
+          const clock = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+          const start = String(a._baseTime || a.time || "").slice(0, 5);
+          return a.date < today || (a.date === today && start <= clock);
+        })();
         return (
           <div data-appt-actions style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div data-appt-grid style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1.5fr 1fr 1fr 1fr 1fr", gap: 6 }}>
               <button className="btn-ghost" data-appt-primary style={{ ...cel, gridColumn: isMobile ? "1 / -1" : "auto", color: accent, borderColor: completeFor === a.id ? accent : `${accent}55`, background: `${accent}12`, fontWeight: 600 }} disabled={dis} onClick={() => (paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005) ? markComplete(a.id, null) : setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : t.markComplete}</button>
               <button className="btn-ghost" style={cel} disabled={dis} onClick={() => startReschedule(a)}>{lang === "nl" ? "Verplaats" : lang === "es" ? "Reprogramar" : "Reschedule"}</button>
               <button className="btn-ghost" style={cel} disabled={dis} onClick={() => openEditAppt(a)} title={lang === "nl" ? "Datum, tijd of prijs aanpassen" : lang === "es" ? "Editar fecha, hora o precio" : "Edit date, time or price"}>{lang === "nl" ? "Bewerk" : lang === "es" ? "Editar" : "Edit"}</button>
-              <button className="btn-ghost" style={{ ...cel, color: c.danger, borderColor: `${c.danger}33` }} disabled={dis} onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
+              <button className="btn-ghost" style={{ ...cel, color: c.danger, borderColor: `${c.danger}33`, ...(noShowOpen ? {} : { opacity: 0.4, cursor: "not-allowed" }) }} disabled={dis || !noShowOpen}
+                title={noShowOpen ? undefined : (lang === "nl" ? "No-show kan pas vanaf de starttijd" : lang === "es" ? "La ausencia se puede marcar desde la hora de inicio" : "No-show is available from the start time")}
+                onClick={() => markNoShow(a.id)}>{processingApptId === a.id ? "..." : t.markNoShow}</button>
               {/* Annuleren: klant krijgt bericht, rij blijft uitgegrijsd staan.
                   Verwijderen (de X in de rij eronder) is voor foutieve invoer. */}
               <button className="btn-ghost" style={{ ...cel, color: c.danger, borderColor: `${c.danger}33` }} disabled={dis}
@@ -8417,7 +8754,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   title: `${a.client_name} — ${a.service_name}`,
                   date: a.date, time: a.time, duration: dur,
                   description: `${t.treatment}: ${a.service_name}\n${t.name}: ${a.client_name}\n${fmtAmt(cur, a.service_price)}`,
-                  location: salonData.name + (salonData.city ? ", " + salonData.city : "")
+                  location: salonData.name + (salonData.city ? ", " + salonData.city : ""),
+                  // Tijd van de afspraak in de tijdzone van de salon (&ctz),
+                  // niet in die van het apparaat.
+                  tz: tzFor(salonData.country_code),
                 }), "_blank");
               }}><NavIcon name="calendar" size={13} color="currentColor" /></button>
               {/* WhatsApp de KLANT direct (alleen haar nummer nodig, niet het
@@ -8452,7 +8792,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <div style={{ fontSize: 11, color: c.warning, marginBottom: 8, lineHeight: 1.45, display: "flex", alignItems: "center", gap: 5 }}>
             <NavIcon name="alerttri" size={11} color={c.warning} />
             {lang === "nl" ? "Vooruitbetaling" : lang === "es" ? "Pago por adelantado" : "Prepayment"} {fmtAmt(cur, parseFloat(a.service_price || 0))}
-            {a.payment_due_at ? ` · ${lang === "nl" ? "vervalt" : lang === "es" ? "caduca" : "expires"} ${fmtDueShort(a.payment_due_at)}` : ""}
+            {/* Termijn op de klok van de SALON (timeZone), niet die van het
+                apparaat — een Bonaire-salon die vanuit NL kijkt zag 5 à 6 uur verschil. */}
+            {a.payment_due_at ? ` · ${lang === "nl" ? "vervalt" : lang === "es" ? "caduca" : "expires"} ${(() => {
+              try { return new Date(a.payment_due_at).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { timeZone: tzFor(salonData.country_code), weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
+              catch { return fmtDueShort(a.payment_due_at); }
+            })()}` : ""}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <button className="btn-ghost" style={{ flex: "1 0 auto", fontSize: 10, padding: "8px 14px", whiteSpace: "nowrap", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markPrepaid(a)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Betaling ontvangen" : lang === "es" ? "Pago recibido" : "Payment received")}</button>
@@ -8508,7 +8853,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       )}
       {/* Invoice needs an address to send to — a walk-in sale without a
           captured email simply has no invoice button. */}
-      {a.status === "completed" && !a.invoice_sent && a.client_email && <button className="btn-primary" style={{ fontSize:11, marginTop:4, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id)}>{processingApptId === a.id ? "..." : t.sendInvoice}</button>}
+      {a.status === "completed" && !a.invoice_sent && a.client_email && <button className="btn-primary" style={{ fontSize:11, marginTop:4, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => sendInvoice(a.id, a)}>{processingApptId === a.id ? "..." : t.sendInvoice}</button>}
       {a.status === "completed" && a.invoice_sent && <div style={{ fontSize:11, color: c.success, marginTop:6 }}>{t.invoiceSent}</div>}
       {/* Betaalstand. Deels betaald (vooruitbetaling op een behandeling die
           duurder werd): wat er nog openstaat + "Restbetaling ontvangen" +
@@ -8521,7 +8866,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           <div style={{ marginTop: 6 }}>
             <div style={{ fontSize: 11, color: c.warning, display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
               <NavIcon name="alerttri" size={11} color={c.warning} />
-              {lang === "nl" ? `Vooruitbetaald ${fmtAmt(cur, paid)} · nog ${fmtAmt(cur, open)} open` : lang === "es" ? `Pagado por adelantado ${fmtAmt(cur, paid)} · quedan ${fmtAmt(cur, open)}` : `Paid in advance ${fmtAmt(cur, paid)} · ${fmtAmt(cur, open)} still open`}
+              {/* "Vooruitbetaald" alleen bij een echte vooruitbetaling; een
+                  pin- of contante betaling aan de balie heet gewoon "Betaald". */}
+              {a.payment_method === "prepaid"
+                ? (lang === "nl" ? `Vooruitbetaald ${fmtAmt(cur, paid)} · nog ${fmtAmt(cur, open)} open` : lang === "es" ? `Pagado por adelantado ${fmtAmt(cur, paid)} · quedan ${fmtAmt(cur, open)}` : `Paid in advance ${fmtAmt(cur, paid)} · ${fmtAmt(cur, open)} still open`)
+                : (lang === "nl" ? `Betaald ${fmtAmt(cur, paid)} · nog ${fmtAmt(cur, open)} open` : lang === "es" ? `Pagado ${fmtAmt(cur, paid)} · quedan ${fmtAmt(cur, open)}` : `Paid ${fmtAmt(cur, paid)} · ${fmtAmt(cur, open)} still open`)}
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 14px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markPrepaid(a)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Restbetaling ontvangen" : lang === "es" ? "Resto recibido" : "Remainder received")}</button>
@@ -8569,15 +8918,47 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         const fee = parseFloat(a.no_show_fee) || 0;
         const price = parseFloat(a.service_price) || 0;
         const pct = fee > 0 && price > 0 ? Math.round(fee / price * 100) : 0;
+        // Wat de klant al betaalde (vooruitbetaling) telt mee: alleen het
+        // verschil vragen, en bij meer betaald dan de vergoeding het teveel
+        // terugbetalen. Vroeger vroeg het verzoek de hele vergoeding erbovenop.
+        const paid = paidAmountOf(a);
+        const due = Math.round((fee - paid) * 100) / 100;
+        // Rekening van de stylist als zij als enige op de boeking staat en een
+        // eigen IBAN/betaallink heeft (zelfde regel als de andere betaalteksten).
+        const pd = payDetailsForAppt(a);
         return (
           <div style={{ marginTop: 6 }} data-no-show-line>
             <div style={{ fontSize: 11, color: c.danger, display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
               <NavIcon name="xmark" size={11} color={c.danger} /> {t.noShow}
               {fee > 0 && <span>· {lang === "nl" ? "vergoeding" : lang === "es" ? "tarifa" : "fee"} {fmtAmt(cur, fee)} ({pct}%)</span>}
             </div>
-            {fee > 0 && a.client_phone && (salonData.payment_link || salonData.iban) && (
+            {fee > 0 && paid > 0 && due > 0.005 && (
+              <div style={{ fontSize: 11, color: c.textSub, marginTop: 4 }}>
+                {lang === "nl" ? `Al betaald ${fmtAmt(cur, paid)} · nog ${fmtAmt(cur, due)} te vragen` : lang === "es" ? `Ya pagado ${fmtAmt(cur, paid)} · quedan ${fmtAmt(cur, due)} por cobrar` : `Already paid ${fmtAmt(cur, paid)} · ${fmtAmt(cur, due)} left to request`}
+              </div>
+            )}
+            {fee > 0 && due < -0.005 && (
+              <div style={{ marginTop: 6 }} data-no-show-refund>
+                <div style={{ fontSize: 11, color: c.warning, display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
+                  <NavIcon name="alerttri" size={11} color={c.warning} />
+                  {lang === "nl" ? `Vooruitbetaald ${fmtAmt(cur, paid)}: houd ${fmtAmt(cur, fee)}, betaal ${fmtAmt(cur, -due)} terug` : lang === "es" ? `Pagado por adelantado ${fmtAmt(cur, paid)}: quédate ${fmtAmt(cur, fee)}, devuelve ${fmtAmt(cur, -due)}` : `Paid in advance ${fmtAmt(cur, paid)}: keep ${fmtAmt(cur, fee)}, refund ${fmtAmt(cur, -due)}`}
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 14px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => recordNoShowRefund(a)} title={lang === "nl" ? "Het teveel is teruggestort" : lang === "es" ? "El exceso se ha devuelto" : "The excess has been refunded"}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Terugbetaald" : lang === "es" ? "Devuelto" : "Refunded")}</button>
+                  {a.client_phone && (
+                    <a
+                      href={getWhatsAppUrl(a.client_phone, getWhatsAppRefundMsg(lang, { clientName: a.client_name, salonName: salonData.name, amount: -due, countryCode: salonData.country_code }), salonData.country_code)}
+                      target="_blank" rel="noopener noreferrer" className="btn-ghost"
+                      style={{ fontSize: 10, padding: "8px 12px", color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
+                      title={lang === "nl" ? "Rekeningnummer vragen via WhatsApp" : lang === "es" ? "Pedir el número de cuenta por WhatsApp" : "Ask for the account number via WhatsApp"}
+                    >WhatsApp</a>
+                  )}
+                </div>
+              </div>
+            )}
+            {fee > 0 && due > 0.005 && a.client_phone && (pd.paymentLink || pd.iban) && (
               <a
-                href={getWhatsAppUrl(a.client_phone, getWhatsAppNoShowFeeMsg(lang, { clientName: a.client_name, salonName: salonData.name, amount: fee, pct, paymentLink: salonData.payment_link, iban: salonData.iban, ibanHolder: salonData.iban_holder || salonData.name, countryCode: salonData.country_code }), salonData.country_code)}
+                href={getWhatsAppUrl(a.client_phone, getWhatsAppNoShowFeeMsg(lang, { clientName: a.client_name, salonName: salonData.name, amount: due, pct, paymentLink: pd.paymentLink, iban: pd.iban, ibanHolder: pd.ibanHolder, countryCode: salonData.country_code }), salonData.country_code)}
                 target="_blank" rel="noopener noreferrer" className="btn-ghost"
                 style={{ fontSize: 10, padding: "8px 12px", marginTop: 6, color: "#25D366", borderColor: "#25D36633", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
                 title={lang === "nl" ? "Betaalverzoek voor de no-show-vergoeding via WhatsApp" : lang === "es" ? "Solicitud de pago de la tarifa por ausencia por WhatsApp" : "Payment request for the no-show fee via WhatsApp"}
@@ -8878,7 +9259,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         <div onClick={() => { if (!blockSaving) { setBlockModalOpen(false); setBlockEditId(null); } }}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
           <div onClick={(e) => e.stopPropagation()}
-               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 24, maxWidth: 440, width: "100%", color: c.text }}>
+               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 24, maxWidth: 440, width: "100%", color: c.text, maxHeight: "88dvh", overflowY: "auto" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
               {blockEditId
                 ? (lang === "nl" ? "Blokkade bewerken" : lang === "es" ? "Editar bloqueo" : "Edit block")
@@ -8951,7 +9332,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                   {!blockForm.repeat && (
                   <div><label style={lbl}>{lang === "nl" ? "Tot (optioneel)" : lang === "es" ? "Hasta (opcional)" : "To (optional)"}</label>
-                    <input className="input-field" type="date" value={blockForm.to} onChange={e => setBlockForm(f => ({ ...f, to: e.target.value }))} style={{ width: "100%" }} />
+                    <input className="input-field" type="date" min={blockForm.from || undefined} value={blockForm.to} onChange={e => setBlockForm(f => ({ ...f, to: e.target.value }))} style={{ width: "100%" }} />
                   </div>
                   )}
                 </div>
@@ -9004,7 +9385,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <select className="input-field" value={blockForm.service_id || ""} onChange={e => setBlockForm(f => ({ ...f, service_id: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
                     <option value="">{lang === "nl" ? "Kies een behandeling…" : lang === "es" ? "Elige un tratamiento…" : "Choose a treatment…"}</option>
                     {(salonData.services || []).map(sv => (
-                      <option key={sv.id} value={sv.id}>{lang === "nl" ? (sv.name_nl || sv.name) : (sv.name_en || sv.name_nl || sv.name)}</option>
+                      <option key={sv.id} value={sv.id}>{lang === "nl" ? (sv.name_nl || sv.name) : lang === "es" ? (sv.name_es || sv.name_en || sv.name_nl || sv.name) : (sv.name_en || sv.name_nl || sv.name)}</option>
                     ))}
                   </select>
                   {blockForm.service_id && (
@@ -9049,7 +9430,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 : "Pick which profile is sending this invoice. Each has its own numbering."}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
-              <button className="btn-ghost" onClick={() => sendInvoiceWith(invoicePickerFor, null)}
+              <button className="btn-ghost" onClick={() => sendInvoiceWith(invoicePickerFor, null, invoicePickerRowRef.current)}
                 style={{ padding: "12px 14px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: c.bgCard, border: `1px solid ${c.border}`, color: c.text }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 600 }}>{salonData.name}</div>
@@ -9060,7 +9441,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 </div>
               </button>
               {(salonData.invoice_profiles || []).map((p, idx) => (
-                <button key={p.id || idx} className="btn-ghost" onClick={() => sendInvoiceWith(invoicePickerFor, idx)}
+                <button key={p.id || idx} className="btn-ghost" onClick={() => sendInvoiceWith(invoicePickerFor, idx, invoicePickerRowRef.current)}
                   style={{ padding: "12px 14px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: c.bgCard, border: `1px solid ${c.border}`, color: c.text }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 600 }}>{p.label || (lang === "nl" ? `Profiel ${idx + 2}` : lang === "es" ? `Perfil ${idx + 2}` : `Profile ${idx + 2}`)}</div>
@@ -9193,7 +9574,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               }, 0);
               return tot > 0 ? (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14, padding: "10px 14px", background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Totaal extra" : "Total extra"}</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Totaal extra" : lang === "es" ? "Total adicional" : "Total extra"}</span>
                   <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: accent }}>+{fmtAmt(cur, tot)}</span>
                 </div>
               ) : null;
@@ -9236,7 +9617,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           balie moet je een aanslag kunnen nakijken, een bon meegeven, de
           factuur alsnog mailen of een misser terugdraaien. */}
       {saleDetail && createPortal((() => {
-        const sale = (salonData.appointments || []).find(a => a.id === saleDetail.id) || saleDetail;
+        // Verste stand uit alle bronnen (ook een oude kassadag), zodat
+        // "Betaald" en "Factuur mailen" daar meteen meebewegen.
+        const sale = findApptRow(saleDetail.id) || saleDetail;
         const lines = Array.isArray(sale.products) ? sale.products : [];
         const amt = (it) => (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1);
         const gross = lines.filter(it => amt(it) > 0).reduce((x, it) => x + amt(it), 0);
@@ -9299,7 +9682,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   </div>
                 ))}
                 <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${c.border}` }}>
-                  {negSum > 0 && <Row label={lang === "nl" ? "Subtotaal" : "Subtotal"} value={`${fmtAmt(cur, (gross + Math.max(0, rest)))}`} />}
+                  {negSum > 0 && <Row label={lang === "nl" ? "Subtotaal" : lang === "es" ? "Subtotal" : "Subtotal"} value={`${fmtAmt(cur, (gross + Math.max(0, rest)))}`} />}
                   {kortingLn > 0 && <Row label={lang === "nl" ? "Korting" : lang === "es" ? "Descuento" : "Discount"} value={`−${fmtAmt(cur, kortingLn)}`} tone={c.success} />}
                   {redeemed > 0 && <Row label={lang === "nl" ? "Kadobon ingewisseld" : lang === "es" ? "Tarjeta canjeada" : "Gift card redeemed"} value={`−${fmtAmt(cur, redeemed)}`} tone={c.success} />}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 4 }}>
@@ -9330,7 +9713,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 <button className="btn-ghost" style={{ flex: 1, minWidth: 130, padding: "11px 12px", fontSize: 11, opacity: (!sale.client_email || !!processingApptId) ? 0.45 : 1 }}
                   disabled={!sale.client_email || !!processingApptId}
                   title={!sale.client_email ? (lang === "nl" ? "Geen e-mailadres bij deze verkoop" : lang === "es" ? "Esta venta no tiene correo electrónico" : "No email on this sale") : ""}
-                  onClick={() => sendInvoice(sale.id)}>
+                  onClick={() => sendInvoice(sale.id, sale)}>
                   <NavIcon name="mail" size={12} color="currentColor" /> {sale.invoice_sent ? (lang === "nl" ? "Factuur opnieuw" : lang === "es" ? "Reenviar factura" : "Resend invoice") : (lang === "nl" ? "Factuur mailen" : lang === "es" ? "Enviar factura" : "Email invoice")}
                 </button>
               </div>
@@ -9385,18 +9768,56 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <button type="button" className="btn-ghost" style={{ padding: "8px 12px", fontSize: 10, color: accent, borderColor: `${accent}44` }} onClick={async () => {
                       const amt = parseFloat(voucherRedeem[v.id]);
                       if (!Number.isFinite(amt) || amt <= 0) return;
-                      const next = Math.max(0, parseFloat(v.remaining) - amt);
-                      const { error } = await supabase.from("gift_vouchers").update({ remaining: next }).eq("id", v.id);
+                      // Vers saldo ophalen (zoals de kassa doet) en alleen
+                      // bijwerken als het intussen niet veranderd is: met de
+                      // lijst open op een tablet en een inwisseling aan de kassa
+                      // zette "Afboeken" anders het oude saldo terug.
+                      const { data: fresh, error: rErr } = await supabase.from("gift_vouchers").select("remaining, active").eq("id", v.id).maybeSingle();
+                      if (rErr || !fresh) { toast.show(t.somethingWrong, "error"); return; }
+                      if (fresh.active === false) {
+                        setVouchers(list => list.map(x => x.id === v.id ? { ...x, ...fresh } : x));
+                        toast.show(lang === "nl" ? "Deze kadobon is gedeactiveerd" : lang === "es" ? "Esta tarjeta está desactivada" : "This gift card has been deactivated", "error");
+                        return;
+                      }
+                      const next = +Math.max(0, (parseFloat(fresh.remaining) || 0) - amt).toFixed(2);
+                      const { data: hit, error } = await supabase.from("gift_vouchers").update({ remaining: next }).eq("id", v.id).eq("remaining", fresh.remaining).select("id");
                       if (error) { toast.show(t.somethingWrong, "error"); return; }
+                      if (!hit || hit.length === 0) {
+                        toast.show(lang === "nl" ? "Het saldo is net gewijzigd — controleer het en probeer opnieuw" : lang === "es" ? "El saldo acaba de cambiar — revísalo e inténtalo de nuevo" : "The balance just changed — check it and try again", "error");
+                        const { data: again } = await supabase.from("gift_vouchers").select("remaining, active").eq("id", v.id).maybeSingle();
+                        if (again) setVouchers(list => list.map(x => x.id === v.id ? { ...x, ...again } : x));
+                        return;
+                      }
                       setVouchers(list => list.map(x => x.id === v.id ? { ...x, remaining: next } : x));
                       setVoucherRedeem(s => ({ ...s, [v.id]: "" }));
                       toast.show(lang === "nl" ? `Afgeboekt — restsaldo ${fmtAmt(cur, next)}` : lang === "es" ? `Descontado — saldo ${fmtAmt(cur, next)}` : `Deducted — balance ${fmtAmt(cur, next)}`);
                     }}>{lang === "nl" ? "Afboeken" : lang === "es" ? "Descontar" : "Deduct"}</button>
                     <button type="button" className="btn-ghost" style={{ marginLeft: "auto", padding: "8px 12px", fontSize: 10, color: c.danger, borderColor: `${c.danger}33` }} onClick={async () => {
+                      // Eerst bevestigen: één tik naast "Afboeken" maakte het
+                      // saldo van de klant onbruikbaar. Terugzetten kan hieronder.
+                      if (!(await showConfirm(lang === "nl"
+                        ? `Kadobon ${v.code} deactiveren? Het saldo van ${fmtAmt(cur, parseFloat(v.remaining))} is dan niet meer te gebruiken (je kunt hem later weer activeren).`
+                        : lang === "es"
+                        ? `¿Desactivar la tarjeta ${v.code}? El saldo de ${fmtAmt(cur, parseFloat(v.remaining))} deja de poder usarse (puedes reactivarla después).`
+                        : `Deactivate gift card ${v.code}? The balance of ${fmtAmt(cur, parseFloat(v.remaining))} can no longer be used (you can reactivate it later).`,
+                        { confirmText: lang === "nl" ? "Deactiveren" : lang === "es" ? "Desactivar" : "Deactivate" }))) return;
                       const { error } = await supabase.from("gift_vouchers").update({ active: false }).eq("id", v.id);
                       if (error) { toast.show(t.somethingWrong, "error"); return; }
                       setVouchers(list => list.map(x => x.id === v.id ? { ...x, active: false } : x));
                     }}>{lang === "nl" ? "Deactiveren" : lang === "es" ? "Desactivar" : "Deactivate"}</button>
+                  </div>
+                )}
+                {/* Gedeactiveerd met saldo: terug te zetten. Een bon die bij het
+                    verwijderen van een verkoop is ingetrokken heeft saldo 0 en
+                    komt hier dus niet terug. */}
+                {!v.active && parseFloat(v.remaining) > 0 && (
+                  <div style={{ display: "flex", marginTop: 8 }}>
+                    <button type="button" className="btn-ghost" style={{ marginLeft: "auto", padding: "8px 12px", fontSize: 10, color: accent, borderColor: `${accent}44` }} onClick={async () => {
+                      const { error } = await supabase.from("gift_vouchers").update({ active: true }).eq("id", v.id);
+                      if (error) { toast.show(t.somethingWrong, "error"); return; }
+                      setVouchers(list => list.map(x => x.id === v.id ? { ...x, active: true } : x));
+                      toast.show(lang === "nl" ? `Kadobon ${v.code} weer actief` : lang === "es" ? `Tarjeta ${v.code} activa de nuevo` : `Gift card ${v.code} active again`);
+                    }}>{lang === "nl" ? "Weer activeren" : lang === "es" ? "Reactivar" : "Reactivate"}</button>
                   </div>
                 )}
               </div>
@@ -9464,10 +9885,16 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // de gewone afspraakkaart met ál haar knoppen, met de live status uit de
         // lijst (na Afronden/No-show/Annuleren verandert het paneel meteen mee).
         // Een deel-blok (medewerkerfilter) houdt zijn eigen tijd en duur.
-        const live = (salonData.appointments || []).find(x => x.id === apptDetail.id);
+        // Ook een afspraak uit een bijgehaalde oude periode (vóór het
+        // 90-dagenvenster): die opende vroeger niet.
+        const live = findApptRow(apptDetail.id);
         if (!live) return null;
+        // Deelblok: alleen tijd, duur, label en sleutel van het deel; al het
+        // andere (status, betaling, notitie, klantgegevens) live uit de rij.
+        // Vroeger kwam o.a. visit_advice uit de momentopname van de tik, zodat
+        // een net opgeslagen notitie niet verscheen.
         const a = apptDetail._isSubSlot
-          ? { ...live, ...apptDetail, status: live.status, paid_at: live.paid_at, amount_paid: live.amount_paid, payment_method: live.payment_method, invoice_sent: live.invoice_sent, no_show_fee: live.no_show_fee, service_price: live.service_price }
+          ? { ...live, time: apptDetail.time, _baseTime: apptDetail._baseTime, service_duration: apptDetail.service_duration, service_name: apptDetail.service_name, _slotKey: apptDetail._slotKey, _isSubSlot: true }
           : { ...apptDetail, ...live };
         const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
         const dateLabel = new Date(a.date + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -9496,7 +9923,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         <div onClick={() => !editApptSaving && setEditingAppt(null)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
           <div onClick={(e) => e.stopPropagation()}
-               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 24, maxWidth: 420, width: "100%", color: c.text }}>
+               style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 24, maxWidth: 420, width: "100%", color: c.text, maxHeight: "88dvh", overflowY: "auto" }}>
+            {/* maxHeight + overflowY: op een telefoon is het formulier (twee
+                behandelingen met extra's, korting, notitie) hoger dan het
+                scherm; zonder schuifvak vielen Opslaan of de bovenste velden weg. */}
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>
               {lang === "nl" ? "Afspraak bewerken" : lang === "es" ? "Editar cita" : "Edit appointment"}
             </div>
