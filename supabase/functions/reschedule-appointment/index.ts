@@ -499,7 +499,19 @@ serve(async (req) => {
     const nieuweNaam = nieuweStylist ? naamVan.get(nieuweStylist) : null;
     if (oudeNaam && appt.service_name) {
       updatePayload.service_name = String(appt.service_name).split(` (${oudeNaam})`).join(nieuweNaam ? ` (${nieuweNaam})` : "");
+    } else if (!oudeStylist && nieuweNaam && appt.service_name) {
+      // Had de afspraak nog geen stylist, dan staat er ook geen "(naam)" in.
+      // Bij één dienst (geen " · ", geen kortingscode achteraan) hoort die
+      // achteraan, zoals bij boeken; bij meerdere delen is de plek niet
+      // eenduidig en laten we de naam staan (staff_name klopt wel).
+      const sn = String(appt.service_name);
+      if (!sn.includes(" · ") && !/\]\s*$/.test(sn) && !sn.endsWith(` (${nieuweNaam})`)) {
+        updatePayload.service_name = `${sn} (${nieuweNaam})`;
+      }
     }
+    // De prijs (service_price en de bedragen in service_breakdown) blijft de
+    // geboekte prijs: verzetten herprijst niet. Een andere teamprijs zet de
+    // eigenaar zelf via Bewerken.
   }
 
   const { data: updated, error: uErr } = await supabase

@@ -8,21 +8,24 @@
 // blijft het bewijs van een écht bezoek.
 //
 // Drie regels:
-//  1. HET ANTWOORD VERRAADT NIETS. Onbekend adres, geen afgeronde afspraak,
+//  1. HET ANTWOORD VERRAADT NIETS. Onbekend adres, geen geweest bezoek,
 //     alles al beoordeeld of gethrottled: altijd dezelfde 200 { ok: true }.
 //     Anders kon iemand met deze functie uitvinden wie klant is bij een salon.
 //     Sinds 05-10-2026 ook niet via de TIJD: het antwoord gaat meteen na de
 //     invoercontrole terug en het opzoeken + mailen loopt daarna op de
 //     achtergrond (EdgeRuntime.waitUntil).
-//  2. ALLEEN AFGERONDE BEZOEKEN (status completed, datum vóór vandaag in de
-//     tijdzone van de salon), geen kassaverkopen. De jongste afspraak zonder
-//     review wint; een nog geldige, ongebruikte token voor die afspraak wordt
-//     hergebruikt.
+//  2. ALLEEN GEWEEST BEZOEKEN: datum vóór vandaag in de tijdzone van de salon
+//     en status completed of confirmed (zelfde regel als de uitnodiging van
+//     send-followups; veel salons zetten een geweest bezoek niet op afgerond),
+//     geen kassaverkopen. De jongste afspraak zonder review wint; een nog
+//     geldige, ongebruikte token voor die afspraak wordt hergebruikt.
 //  3. VERZENDINGEN TELLEN, NIET TOKENS (review_tokens.last_sent_at): dezelfde
-//     link gaat hooguit één keer per uur de deur uit, en per adres per salon
-//     hooguit 3 verschillende links per 24 uur. Hiervoor telde de limiet alleen
-//     NIEUWE tokens, dus een hergebruikte token kon eindeloos gemaild worden.
-//     Plus een limiet per IP, zoals de andere publieke functies.
+//     link gaat hooguit één keer per 8 uur de deur uit (dus hooguit 3 keer per
+//     24 uur), en per adres per salon zijn er hooguit 3 verschillende links per
+//     24 uur in omloop. Hiervoor telde de limiet alleen NIEUWE tokens, dus een
+//     hergebruikte token kon eindeloos gemaild worden; met een wachttijd van
+//     één uur kon dat nog 24 keer per dag. Plus een limiet per IP, zoals de
+//     andere publieke functies.
 //
 // Auth: publieke pagina zonder sessie → verify_jwt = false (zie config.toml).
 
@@ -59,7 +62,9 @@ function generateToken(): string {
 }
 const REVIEW_TOKEN_DAYS = 60;
 const MAX_PER_DAY = 3;
-const RESEND_AFTER_MS = 60 * 60 * 1000; // dezelfde link hooguit 1x per uur
+// Dezelfde link hooguit 1x per 8 uur: zo blijft ook het opnieuw mailen van één
+// hergebruikte token binnen MAX_PER_DAY verzendingen per 24 uur.
+const RESEND_AFTER_MS = 8 * 60 * 60 * 1000;
 
 // Limiet per IP (in het geheugen, per isolate), zoals book-appointment en
 // waitlist-notify.
@@ -186,7 +191,8 @@ async function verwerk(slug: string, email: string, reqLang: unknown) {
 
   // Regel 3: verzendingen tellen. Hooguit MAX_PER_DAY verschillende links per
   // adres per salon in 24 uur, geteld op last_sent_at (niet op created_at: een
-  // hergebruikte token telde daar nooit mee).
+  // hergebruikte token telde daar nooit mee). Hoe vaak één en dezelfde link
+  // opnieuw mag, regelt RESEND_AFTER_MS hieronder.
   const pattern = likeEscape(email);
   const now = Date.now();
   const since = new Date(now - 24 * 60 * 60 * 1000).toISOString();
@@ -198,8 +204,8 @@ async function verwerk(slug: string, email: string, reqLang: unknown) {
     .gte("last_sent_at", since);
   if ((recent || 0) >= MAX_PER_DAY) { console.log("throttled", salon.id); return; }
 
-  // Afgeronde bezoeken: status completed en datum vóór vandaag in de tijdzone
-  // van de salon. Jongste eerst.
+  // Geweest bezoeken: datum vóór vandaag in de tijdzone van de salon, status
+  // completed of confirmed (zoals send-followups). Jongste eerst.
   const todayStr = salonToday(salon.country_code);
   const { data: appts, error: apptErr } = await supabase
     .from("appointments")
@@ -207,7 +213,7 @@ async function verwerk(slug: string, email: string, reqLang: unknown) {
     .eq("owner_id", salon.id)
     .ilike("client_email", pattern)
     .lt("date", todayStr)
-    .eq("status", "completed")
+    .in("status", ["completed", "confirmed"])
     .order("date", { ascending: false })
     .order("time", { ascending: false })
     .limit(25);
@@ -231,11 +237,11 @@ async function verwerk(slug: string, email: string, reqLang: unknown) {
   // Eén token per afspraak (unique index review_tokens_appointment_uniq):
   // geldig → hergebruiken; verlopen → dezelfde rij verversen met een nieuwe
   // token en einddatum; nog geen rij → aanmaken. Elke verzending stempelt
-  // last_sent_at; dezelfde link gaat hooguit één keer per uur weg. Het stempel
-  // bij hergebruik is voorwaardelijk (claim), zodat twee gelijktijdige
+  // last_sent_at; dezelfde link gaat hooguit één keer per 8 uur weg. Het
+  // stempel bij hergebruik is voorwaardelijk (claim), zodat twee gelijktijdige
   // aanvragen niet allebei mailen.
   const nowIso = new Date(now).toISOString();
-  const hourAgo = new Date(now - RESEND_AFTER_MS).toISOString();
+  const resendCutoff = new Date(now - RESEND_AFTER_MS).toISOString();
   const expiresAt = new Date(now + REVIEW_TOKEN_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const existing = tokenByAppt.get(appt.id);
   let token: string;
@@ -244,7 +250,7 @@ async function verwerk(slug: string, email: string, reqLang: unknown) {
     const { data: claimed, error: claimErr } = await supabase.from("review_tokens")
       .update({ last_sent_at: nowIso })
       .eq("token", existing.token)
-      .or(`last_sent_at.is.null,last_sent_at.lt."${hourAgo}"`)
+      .or(`last_sent_at.is.null,last_sent_at.lt."${resendCutoff}"`)
       .select("token");
     if (claimErr) { console.error("review token claim:", claimErr); return; }
     if (!claimed || claimed.length === 0) { console.log("resend too soon", salon.id); return; }

@@ -1123,10 +1123,15 @@ serve(async (req) => {
   // toets nog eens, nu met onze eigen rij in de database, maar alleen tegen
   // afspraken die EERDER zijn aangemaakt dan de onze (created_at, bij gelijke
   // tijd het id). Van twee gelijktijdige boekingen ziet de latere de eerdere en
-  // trekt zich terug; de eerdere ziet de latere niet en blijft staan — precies
-  // één overleeft. Vóór codes, voorraad, token en mails, dus er valt niets terug
-  // te draaien behalve de rij zelf. Lukt dat verwijderen niet, dan laten we de
-  // boeking staan (het oude gedrag) in plaats van een spookafspraak te maken.
+  // trekt zich terug; de eerdere negeert de latere en blijft staan. Dat sluit
+  // vrijwel alle races, maar niet allemaal: created_at is het begin van de
+  // transactie en een rij is pas na de commit zichtbaar. Commit de eerdere pas
+  // nadat de latere deze toets al deed, dan blijven ze allebei staan (venster
+  // van milliseconden). Alleen een slot in de database (advisory lock of
+  // exclusion constraint) sluit dat helemaal. Vóór codes, voorraad, token en
+  // mails, dus er valt niets terug te draaien behalve de rij zelf. Lukt dat
+  // verwijderen niet, dan laten we de boeking staan (het oude gedrag) in plaats
+  // van een spookafspraak te maken.
   {
     const { data: naInsert, error: naErr } = await haalBestaande();
     if (naErr) {
