@@ -3439,12 +3439,18 @@ function SL({ children }) {
 
 // Elke knop zet zijn EIGEN modus: het actieve zonnetje nog eens aantikken liet
 // het thema juist omslaan naar donker. toggle() bewaart de keuze (localStorage).
-function ThemeToggle() {
+// `lang` is optioneel, net als bij Header: zonder valt hij terug op <html lang>.
+function ThemeToggle({ lang } = {}) {
   const { theme, toggle } = useTheme();
+  let L = lang;
+  if (!L) { try { L = document.documentElement.lang; } catch { L = ""; } }
+  const modeLabel = (m) => m === "light"
+    ? (L === "nl" ? "Lichte modus" : L === "es" ? "Modo claro" : "Light mode")
+    : (L === "nl" ? "Donkere modus" : L === "es" ? "Modo oscuro" : "Dark mode");
   return (
     <div className="lang-toggle">
       {[["light","sun"], ["dark","moon"]].map(([m, icon]) => (
-        <button key={m} aria-label={m === "light" ? "Light mode" : "Dark mode"} aria-pressed={theme === m} className={`lang-btn ${theme === m ? "active" : "inactive"}`} onClick={() => { if (theme !== m) toggle(); }} style={{ padding: "7px 10px", display: "flex", alignItems: "center" }}><NavIcon name={icon} size={14} color="currentColor" /></button>
+        <button key={m} aria-label={modeLabel(m)} aria-pressed={theme === m} className={`lang-btn ${theme === m ? "active" : "inactive"}`} onClick={() => { if (theme !== m) toggle(); }} style={{ padding: "7px 10px", display: "flex", alignItems: "center" }}><NavIcon name={icon} size={14} color="currentColor" /></button>
       ))}
     </div>
   );
