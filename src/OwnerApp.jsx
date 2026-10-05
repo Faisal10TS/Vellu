@@ -9958,8 +9958,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               })()}
 
               {/* Staff scope — same chips as the agenda. Everything below
-                  (today's list, expected revenue, week/month/year KPIs and the
-                  popular services) follows it so the numbers always match the
+                  (today's list, expected revenue, week/month/year KPIs, the
+                  8-week chart and the popular services) follows it so the numbers always match the
                   appointments shown. */}
               {(salonData.staff || []).length > 0 && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
@@ -10356,9 +10356,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (w * 7 + dowMon));
                     const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 7);
                     const wsStr = fmt(weekStart); const weStr = fmt(weekEnd);
-                    const rev = appts
+                    // Volgt de stylist-chip net als de tegels erboven: met chip
+                    // alleen háár aandeel (shareOf), zonder chip de hele prijs.
+                    const rev = dashAppts
                       .filter(a => a.status === "completed" && a.date >= wsStr && a.date < weStr)
-                      .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
+                      .reduce((s, a) => s + (dashStaff ? shareOf(a, dashStaff) : parseFloat(a.service_price || 0)), 0);
                     const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
                     weeks.push({ label, revenue: rev });
                   }
@@ -10513,7 +10515,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         // altijd, vóór de naam-match.
                         const exact = (salonData.products || []).some(p => p.active && (p.barcode || "").trim() === q);
                         const matches = kassaMatchesNow();
-                        if (exact || matches.length === 0) { handleKassaCode(q); return; }
+                        if (exact) { handleKassaCode(q); return; }
+                        if (matches.length === 0) {
+                          // Lijkt het op een code (cijfers, geen spatie), dan de
+                          // barcodemelding; een naam als "shampo" krijgt "geen product".
+                          if (/\d/.test(q) && !/\s/.test(q)) { handleKassaCode(q); return; }
+                          toast.show(lang === "nl" ? `Geen product gevonden: ${q}` : lang === "es" ? `Ningún producto encontrado: ${q}` : `No product found: ${q}`, "error");
+                          return;
+                        }
                         if (matches.length === 1) {
                           // Net als tikken en scannen: de bevestiging van de vorige
                           // klant gaat weg, anders zat het artikel onzichtbaar in het mandje.
@@ -11000,7 +11009,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               </div>
                               <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                                 {knop(lang === "nl" ? "Gepast" : lang === "es" ? "Exacto" : "Exact", tot.toFixed(2), ingevuld && Math.abs(ontvangen - tot) < 0.005)}
-                                {snel.map(v => knop(`${cur}${v}`, String(v), ingevuld && Math.abs(ontvangen - v) < 0.005))}
+                                {snel.map(v => knop(fmtAmt(cur, v).slice(0, -3), String(v), ingevuld && Math.abs(ontvangen - v) < 0.005))}
                               </div>
                               <div data-kassa-change style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 10 }}>
                                 <span style={{ fontSize: 11, fontWeight: 600, color: teWeinig ? c.danger : c.text }}>
@@ -12134,7 +12143,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             background: isSel ? `${accent}22` : (() => {
                               if (cell.muted) return "transparent";
                               const ov = salonData.day_overrides?.[ds];
-                              const blocked = ov?.type === "blocked" && !ov.block_time_start && (!agendaStaff || !ov.staff_id || ov.staff_id === agendaStaff);
+                              // Zelfde regel als "Gesloten" in de weekweergave: alleen
+                              // salonbreed (of, met filter, haar dag). De vrije dag van
+                              // één stylist kleurt de dag zonder filter niet rood.
+                              const blocked = ov?.type === "blocked" && !ov.block_time_start && (!ov.staff_id || ov.staff_id === agendaStaff);
                               return blocked ? `${c.danger}12` : isToday ? `${accent}10` : "transparent";
                             })(),
                             borderRight: col < 6 ? `1px solid ${c.border}` : "none",
@@ -12156,7 +12168,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               const heleDagRij = rijen.some(b => !b.service_id && !b.block_time_start);
                               const tijdRij = rijen.some(b => !b.service_id && b.block_time_start);
                               if (!legacy && rijen.length === 0) return null;
-                              const isFull = (legacy && !legacy.block_time_start) || heleDagRij;
+                              // Arcering = dag dicht, net als "Gesloten" in de week:
+                              // alleen salonbrede rijen (of die van de gefilterde
+                              // stylist). Andermans vrije dag blijft zichtbaar via
+                              // het blokkade-icoon hieronder.
+                              const sluit = (staffId) => !staffId || staffId === agendaStaff;
+                              const isFull = (legacy && !legacy.block_time_start && sluit(legacy.staff_id)) || rijen.some(b => !b.service_id && !b.block_time_start && sluit(b.staff_id));
                               return (
                                 <>
                                   {isFull && (
