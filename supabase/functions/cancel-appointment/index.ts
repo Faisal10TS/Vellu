@@ -547,7 +547,8 @@ serve(async (req) => {
   // al server-side.
   return json(200, {
     status: "cancelled",
-    appointment: sanitize(appt),
+    // appt is de stand van vóór de update; de afspraak is nu geannuleerd.
+    appointment: sanitize({ ...appt, status: "cancelled" }),
     country_code: cc,
     ...salonBits,
   }, origin);

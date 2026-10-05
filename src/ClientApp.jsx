@@ -695,20 +695,23 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   // for a booking customer. Uses a Blob URL — no server changes needed.
   useEffect(() => {
     if (!initialSalon?.slug) return;
+    // Absolute URL's: een manifest uit een blob:-URL heeft geen basis, dus
+    // relatieve start_url/scope/src negeert Chrome.
+    const o = window.location.origin;
     const dynamicManifest = {
       name: `${initialSalon.name} via Vellu`,
       short_name: initialSalon.name?.slice(0, 12) || "Vellu",
       description: lang === "nl" ? `Boek je afspraak bij ${initialSalon.name}` : lang === "es" ? `Reserva tu cita en ${initialSalon.name}` : `Book your appointment at ${initialSalon.name}`,
-      start_url: `/${initialSalon.slug}`,
-      scope: "/",
+      start_url: `${o}/${initialSalon.slug}`,
+      scope: `${o}/`,
       display: "standalone",
       background_color: "#0d0b0a",
       theme_color: initialSalon.accent || "#0d0b0a",
       orientation: "portrait",
       icons: [
-        { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
-        { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
-        { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        { src: `${o}/icon-192.png`, sizes: "192x192", type: "image/png" },
+        { src: `${o}/icon-512.png`, sizes: "512x512", type: "image/png" },
+        { src: `${o}/icon-512.png`, sizes: "512x512", type: "image/png", purpose: "maskable" },
       ],
     };
     const blob = new Blob([JSON.stringify(dynamicManifest)], { type: "application/json" });
