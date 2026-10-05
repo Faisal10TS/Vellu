@@ -7,15 +7,19 @@ import {
   compressImage, uploadErrorText, sendEmails, createCancellationToken, ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppReminderMsg,
   getPaymentLinkWithAmount,
-  getToday, fmt, parseDate, getDays,
+  fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, fmtAmt, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, getWhatsAppRefundMsg, partPricesOf, partLabelOf, useDashboardScrollbars,
+  salonNow, tzFor, localToUtc, fetchAllRows,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
 import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
+
+// Ophaalvenster van de agenda: 90 dagen terug, op de klok van de salon.
+const windowStartFor = (countryCode) => { const d = salonNow(countryCode); d.setDate(d.getDate() - 90); return fmt(d); };
 
 function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const { colors: themeC, theme } = useTheme();
@@ -81,6 +85,67 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // (catalogus) en send-emails (facturen); dit is de bijpassende UI.
   const canInvoice = salonProfile.staff_can_invoice !== false;
   const canEditServices = salonProfile.staff_can_edit_services !== false;
+  const L3 = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
+  // "Vandaag" en "nu" op de klok van de SALON, niet op die van het toestel:
+  // een medewerker van een Bonaire-salon met de telefoon nog op NL-tijd zag na
+  // 20:00 de afspraken van morgen onder "Vandaag" (audit S1-24).
+  const salonToday = () => salonNow(salonProfile.country_code);
+  // Betaalstand zoals staff_list_appointments hem meestuurt (pay_state) als
+  // omzet verborgen is; hier uit een volledige rij (realtime, eigen insert).
+  const payStateOf = (r) => {
+    const price = parseFloat(r?.service_price || 0) || 0;
+    const paid = paidAmountOf(r);
+    if ((paid > 0 || r?.paid_at) && paid >= price - 0.005) return "paid";
+    return paid > 0 ? "partial" : "open";
+  };
+  // Zelfde velden als de RPC wegstript als de eigenaar omzet of klantgegevens
+  // voor het team uit heeft gezet. Realtime en de eigen insert leveren de
+  // volle rij (RLS geeft eigen rijen), dus die gaan hier eerst doorheen.
+  const stripRow = (row) => {
+    if (!row || (showMoney && showContact)) return row;
+    const r = { ...row };
+    if (!showMoney) {
+      r.pay_state = payStateOf(row);
+      for (const k of ["service_price", "amount_paid", "cash_received", "discount_amount", "no_show_fee", "tax_snapshot"]) delete r[k];
+      const noPrice = (list) => Array.isArray(list) ? list.map(x => { if (!x || typeof x !== "object") return x; const y = { ...x }; delete y.price; return y; }) : list;
+      r.products = noPrice(r.products);
+      r.service_breakdown = noPrice(r.service_breakdown);
+    }
+    if (!showContact) for (const k of ["client_email", "client_phone", "client_allergies"]) delete r[k];
+    return r;
+  };
+  // Het realtime-kanaal leeft langer dan één render; via de ref gebruikt het
+  // altijd de actuele schakelaars van de eigenaar.
+  const stripRowRef = useRef(stripRow);
+  useEffect(() => { stripRowRef.current = stripRow; });
+  // Mag er een mail naar de klant? Met klantgegevens zichtbaar weten we of er
+  // een adres is; staan ze uit, dan zoekt send-emails de ontvanger zelf op via
+  // appointment_id en is een klant op de afspraak genoeg (audit S1-07).
+  const mayMailClient = (a) => showContact ? !!String(a?.client_email || "").trim() : !!(a?.client_id || a?.client_name);
+  // Sleutel van een klant die niet alleen op het e-mailadres leunt (dat stript
+  // de RPC als klantgegevens uit staan): adres zoals altijd, anders klant-id,
+  // anders (alleen voor de klantenlijst) de naam.
+  const clientKeyOf = (a, withName = true) => {
+    const mail = String(a?.client_email || "").trim().toLowerCase();
+    if (mail) return `mail:${mail}`;
+    if (a?.client_id) return `id:${a.client_id}`;
+    const name = String(a?.client_name || "").trim().toLowerCase();
+    return withName && name ? `name:${name}` : "";
+  };
+  // Factuurvoorvoegsel: drie gekoppelde stylisten gebruikten "INV", net als de
+  // salon, en de unieke index (owner_id, invoice_number) weigerde dan het
+  // nummer pas NA het mailen (audit S1-11). Leeg of gelijk aan dat van de
+  // salon = een eigen voorvoegsel uit de eerste letters van haar naam.
+  const salonPrefix = String(salonProfile.invoice_prefix || "INV").trim().toUpperCase();
+  const derivedPrefix = (() => {
+    const letters = String(staffMember.name || "").normalize("NFD").replace(/[^A-Za-z]/g, "").toUpperCase();
+    const p = letters.slice(0, 3) || "TM";
+    return p === salonPrefix ? `${p}2` : p;
+  })();
+  const effectivePrefix = (p) => {
+    const v = String(p || "").trim();
+    return (!v || v.toUpperCase() === salonPrefix) ? derivedPrefix : v;
+  };
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
   const toast = useToast();
 
@@ -88,7 +153,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // Scroll-nudge na iOS-toetsenbord-dismiss voor overgebleven fixed elementen;
   // de onderbalk zelf is sinds de app-shell-ombouw een flex-sibling.
   useVisualBottomLock();
-  const [calDate, setCalDate] = useState(fmt(getToday()));
+  const [calDate, setCalDate] = useState(() => fmt(salonToday()));
   const [staffWeekOffset, setStaffWeekOffset] = useState(0);
   const [appointments, setAppointments] = useState([]);
   // Active salon staff (for the filter chips + naming whose appointment it is)
@@ -115,7 +180,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     iban: staffMember.iban || "",
     iban_holder: staffMember.iban_holder || "",
     payment_link: staffMember.payment_link || "",
-    invoice_prefix: staffMember.invoice_prefix || "INV",
+    invoice_prefix: effectivePrefix(staffMember.invoice_prefix),
     next_invoice_number: staffMember.next_invoice_number || 1
   });
   const [invoiceSaved, setInvoiceSaved] = useState(false);
@@ -127,13 +192,21 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [editExtraForm, setEditExtraForm] = useState({ name_nl: "", name_en: "", price: "" });
   const [gallery, setGallery] = useState(null);
   const [showAddAppt, setShowAddAppt] = useState(false);
-  const [addApptForm, setAddApptForm] = useState({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_birthday: "", notify_client: true });
+  // lang = taal van de KLANT (bevestiging en latere mails), standaard de
+  // markttaal van de salon — niet de schermtaal van de medewerker (S1-21).
+  const [addApptForm, setAddApptForm] = useState(() => ({ service_id: "", variant_id: "", date: fmt(salonToday()), time: "", client_name: "", client_email: "", client_phone: "", client_birthday: "", notify_client: true, lang: ownerLangFor(salonProfile.country_code) }));
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
   const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
   const [svcError, setSvcError] = useState("");
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [staffSettingsTab, setStaffSettingsTab] = useState("werktijden");
+  // Elk tabblad opent bovenaan: de inhoud wisselt binnen hetzelfde
+  // scrollvak, dus zonder reset opende Klanten halverwege (audit S1-18).
+  const scrollPaneRef = useRef(null);
+  useEffect(() => {
+    try { if (scrollPaneRef.current) scrollPaneRef.current.scrollTop = 0; window.scrollTo(0, 0); } catch { /* oude browsers */ }
+  }, [view, staffSettingsTab]);
   const [calViewMode, setCalViewMode] = useState("week");
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceFilter, setInvoiceFilter] = useState("all");
@@ -155,7 +228,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [staffBlocks, setStaffBlocks] = useState([]);
   const [blockModalOpen, setBlockModalOpen] = useState(false);
   const [blockSaving, setBlockSaving] = useState(false);
-  const [blockForm, setBlockForm] = useState({ mode: "time", from: fmt(getToday()), to: "", time_start: "09:00", time_end: "17:00", reason: "" });
+  const [blockForm, setBlockForm] = useState(() => ({ mode: "time", from: fmt(salonToday()), to: "", time_start: "09:00", time_end: "17:00", reason: "" }));
   // When set, the block modal edits an existing time-block row (UPDATE).
   const [blockEditId, setBlockEditId] = useState(null);
   // Telefoon-agenda-abonnement (iCal-feed): eigen token per medewerker, de
@@ -169,7 +242,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [staffExceptions, setStaffExceptions] = useState([]);
   const [excModalOpen, setExcModalOpen] = useState(false);
   const [excSaving, setExcSaving] = useState(false);
-  const [excForm, setExcForm] = useState({ date: fmt(getToday()), open: "09:00", close: "17:00" });
+  const [excForm, setExcForm] = useState(() => ({ date: fmt(salonToday()), open: "09:00", close: "17:00" }));
   const [copied, setCopied] = useState(false);
   const copyLink = async () => {
     const url = `${window.location.origin}/${salonProfile.slug || ""}`;
@@ -202,9 +275,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // Andersom zag hij na het aanzetten niets van het team tot hij de pagina
   // herlaadde. Deps toevoegen is hier veilig: geen van deze waarden komt uit
   // state die deze effect zelf zet, dus een hertrigger-lus kan niet ontstaan.
-  // service_ids is geen array-per-fetch maar simpelweg undefined (staff_members
-  // heeft die kolom niet; de koppeling leeft in staff_services), dus ook die
-  // dep is stabiel.
+  // "Mijn diensten" komt uit staff_services (staff_members heeft geen kolom
+  // service_ids; die filter stond daardoor altijd op "alles", audit S1-10).
   useEffect(() => {
     // Nu de effect opnieuw kan starten, kunnen er twee laadrondes tegelijk
     // lopen. Zonder deze vlag mag een trage oude ronde de verse uitkomst
@@ -217,19 +289,24 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         // where this stylist owns only a non-primary service still surface in
         // their own agenda. We filter to "mine" client-side against staff_id,
         // staff_assignments and service_breakdown.
-        const [{ data: apptsAll }, { data: svcs }, { data: manual }, { data: blocks }, { data: staffRows }] = await Promise.all([
+        const [{ data: apptsAll }, { data: svcs }, { data: manual }, { data: blocks }, { data: staffRows }, { data: myLinks }] = await Promise.all([
           // Server-side gefilterd: staff_list_appointments (SECURITY DEFINER)
           // stript prijs- en contactvelden volgens de owner-toggles vóórdat
           // er iets over de lijn gaat — de UI-gating hieronder is dus geen
           // enige verdedigingslinie meer. Reshape naar { data } zodat de
-          // destructuring hieronder gelijk blijft.
-          supabase.rpc("staff_list_appointments", { p_from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] })
+          // destructuring hieronder gelijk blijft. Gepagineerd (fetchAllRows;
+          // de RPC sorteert op datum, id): PostgREST geeft per keer hooguit
+          // 1000 rijen en een drukke salon met teamzicht zit daar snel boven.
+          fetchAllRows(() => supabase.rpc("staff_list_appointments", { p_from: windowStartFor(salonProfile.country_code) }))
             .then(r => ({ data: (r.data || []).sort((a, b) => String(b.date).localeCompare(String(a.date))), error: r.error })),
           supabase.from("services").select("*, service_variants(*), service_extras(*, staff_extra_exclusions(staff_id)), service_photos(*)").eq("owner_id", salonProfile.id),
-          supabase.from("manual_clients").select("email, notes").eq("owner_id", salonProfile.id).not("notes", "is", null),
+          fetchAllRows(() => supabase.from("manual_clients").select("email, notes").eq("owner_id", salonProfile.id).not("notes", "is", null).order("id")),
           supabase.from("staff_day_overrides").select("*").eq("staff_id", staffMember.id).order("date"),
           // Team roster for the filter chips — only needed when the feature is on.
-          seeAll ? supabase.from("staff_members").select("id, name, position").eq("owner_id", salonProfile.id).eq("active", true).order("position") : Promise.resolve({ data: [] }),
+          // public_staff: de rijen van collega's zelf (IBAN, adres, agendatoken)
+          // zijn voor medewerkers niet meer leesbaar (audit S1-12).
+          seeAll ? supabase.from("public_staff").select("id, name, position").eq("owner_id", salonProfile.id).eq("active", true).order("position") : Promise.resolve({ data: [] }),
+          supabase.from("staff_services").select("service_id").eq("staff_id", staffMember.id),
         ]);
         if (cancelled) return;
         const isMine = (a) => {
@@ -252,7 +329,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           if (m.email && m.notes) notesMap[m.email.toLowerCase()] = m.notes;
         }
         setClientNotes(notesMap);
-        const mySvcIds = staffMember.service_ids || [];
+        // Geen koppelingen = alle diensten (zelfde regel als de boekingspagina).
+        const mySvcIds = (myLinks || []).map(r => r.service_id);
         const mapped = (svcs || []).map(s => ({
           ...s, name_nl: s.name_nl || s.name || "", name_en: s.name_en || "",
           variants: (s.service_variants || []).sort((a,b) => (a.position||0) - (b.position||0)),
@@ -280,7 +358,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     };
     load();
     return () => { cancelled = true; };
-  }, [salonProfile.id, staffMember.id, staffMember.user_id, staffMember.service_ids, seeAll]);
+  }, [salonProfile.id, salonProfile.country_code, staffMember.id, staffMember.user_id, seeAll]);
 
   // Real-time subscription for staff appointments
   // seeAll bepaalt het server-side filter van dit kanaal: de hele salon of
@@ -314,15 +392,19 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     const channel = supabase
       .channel(`staff-appointments-${seeAll ? `all-${salonProfile.id}` : staffMember.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: seeAll ? `owner_id=eq.${salonProfile.id}` : `staff_id=eq.${staffMember.id}` }, (payload) => {
+        // Realtime levert de volle rij; eerst dezelfde velden eraf als de RPC
+        // wegstript wanneer omzet of klantgegevens voor het team uit staan.
+        // (Op de lijn zitten ze nog wel: restrisico, zie audit S1-12.)
+        const row = stripRowRef.current(payload.new);
         if (payload.eventType === "INSERT") {
           // Tijdens het omzetten van de schakelaar leeft het oude kanaal nog even
           // naast het nieuwe (de afmelding kost een netwerkrondje, en een
           // vertrekkend kanaal blijft zijn callbacks aanroepen). Een boeking die
           // precies in dat gaatje binnenkomt stond er anders twee keer in. Op id
           // ontdubbelen is goedkoper dan die race dichttimmeren.
-          setAppointments(a => a.some(x => x.id === payload.new.id) ? a : [payload.new, ...a]);
+          setAppointments(a => a.some(x => x.id === row.id) ? a : [row, ...a]);
         } else if (payload.eventType === "UPDATE") {
-          setAppointments(a => a.map(x => x.id === payload.new.id ? payload.new : x));
+          setAppointments(a => a.map(x => x.id === row.id ? row : x));
         } else if (payload.eventType === "DELETE") {
           setAppointments(a => a.filter(x => x.id !== payload.old.id));
         }
@@ -354,10 +436,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       if (Date.now() - lastSync < 10000) return;
       busy = true;
       // Zelfde RPC en venster als de hoofdlading — die stript serverzijde de
-      // velden die deze medewerker niet mag zien.
-      const { data, error } = await supabase.rpc("staff_list_appointments", {
-        p_from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      });
+      // velden die deze medewerker niet mag zien. Ook gepagineerd.
+      const { data, error } = await fetchAllRows(() => supabase.rpc("staff_list_appointments", {
+        p_from: windowStartFor(salonProfile.country_code),
+      }));
       busy = false;
       if (!alive || error || !data) return;
       lastSync = Date.now();
@@ -375,7 +457,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", resync);
     };
-  }, [staffMember.id, staffMember.user_id, salonProfile.id, seeAll]);
+  }, [staffMember.id, staffMember.user_id, salonProfile.id, salonProfile.country_code, seeAll]);
 
   // Does appointment `a` involve staff member `id` (primary, assignment map or
   // any breakdown part)? Same rule the owner agenda/dashboard use.
@@ -399,7 +481,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // sees the team's schedule, not the team's income.
   const activeAppts = scopedAppts.filter(a => a.status !== "cancelled" && a.status !== "no_show");
   // Op tijd gesorteerd: de RPC levert op datum, de volgorde binnen een dag was willekeurig.
-  const todayAppts = activeAppts.filter(a => a.date === fmt(getToday())).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  // Salondatum één keer per render: salonNow bouwt een Intl-formatter, dus niet per rij.
+  const todayStr = fmt(salonToday());
+  const todayAppts = activeAppts.filter(a => a.date === todayStr).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
   const completedAppts = myAppts.filter(a => a.status === "completed");
   // Eigen aandeel in een gecombineerde boeking (staffShareOf): doet een
   // collega een ander deel, dan telt alleen wat déze stylist deed. Zonder
@@ -415,6 +499,33 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const scopedPrice = (a) => scopedShareId ? staffShareOf(a, scopedShareId, shareCat.services, shareCat.staff) : parseFloat(a.service_price || 0);
   const totalEarnings = completedAppts.reduce((s, a) => s + myShare(a), 0);
   const calAppts = scopedAppts.filter(a => a.status !== "cancelled" && a.date === calDate);
+  // Hele bedragen op de tegels en grafieken, maar wel via fmtAmt (duizendtallen-
+  // punt, zelfde symbool als overal): "€1.234" i.p.v. "€1234" (audit S1-17).
+  const fmtWhole = (n) => fmtAmt(cur, Math.round(Number(n) || 0)).replace(/,00$/, "");
+  // Pijltjes als inline SVG: tekens als ↑ ↓ → ▲ ▼ ↻ tekent iOS als emoji (S1-20).
+  const glyph = (kind, size = 10) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "inline-block", verticalAlign: "-0.1em", flexShrink: 0 }}>
+      {kind === "up" ? (<><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></>)
+        : kind === "down" ? (<><line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" /></>)
+        : kind === "right" ? (<><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></>)
+        : kind === "chevUp" ? <polyline points="6 15 12 9 18 15" />
+        : kind === "chevDown" ? <polyline points="6 9 12 15 18 9" />
+        : (<><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></>)}
+    </svg>
+  );
+  // Betaalstand van een kaart. Met omzet verborgen stript de RPC de bedragen
+  // en stuurt hij pay_state mee; anders rekenen we het zoals altijd uit.
+  const isFullyPaid = (a) => showMoney ? (paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005) : a.pay_state === "paid";
+  const isPartlyPaid = (a) => showMoney ? (paidAmountOf(a) > 0 && outstandingOf(a) > 0.005) : a.pay_state === "partial";
+  // Haar teamprijs (staff_service_prices) voor een dienst/variant, anders de
+  // catalogusprijs — zelfde regel als de boekingspagina (staffPriceFor).
+  const myPriceOf = (svc, variant) => {
+    const ov = (shareCat.staff.find(s => s.id === staffMember.id)?.price_overrides || [])
+      .find(o => o.service_id === svc?.id && (o.variant_id || null) === (variant?.id || null));
+    const p = ov ? parseFloat(ov.price) : NaN;
+    return Number.isFinite(p) ? p : (parseFloat(variant ? variant.price : svc?.price) || 0);
+  };
+  const svcNameOf = (s) => lang === "nl" ? (s?.name_nl || s?.name || "") : lang === "es" ? (s?.name_es || s?.name_en || s?.name_nl || s?.name || "") : (s?.name_en || s?.name_nl || s?.name || "");
 
   // Everyone/<stylist> chips — only when the owner enabled team visibility and
   // there's more than one active stylist. Shared by the dashboard + agenda.
@@ -459,7 +570,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     : s === "pending_payment" ? (lang === "nl" ? "Wacht op betaling" : lang === "es" ? "Pendiente de pago" : "Awaiting payment")
     : s;
   const fmtDueShort = (iso) => {
-    try { return new Date(iso).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
+    try { return new Date(iso).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: tzFor(salonProfile.country_code) }); }
     catch { return String(iso || ""); }
   };
   // Scope all mutations to this salon's owner_id — defense-in-depth on top of
@@ -478,11 +589,27 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       // "Later / factuur" (method null): "on-arrival" van de boekingspagina
       // expliciet naar null, anders blijft de post onzichtbaar als open post en
       // krijgt de factuur geen betaalblok (zie OwnerApp.markComplete).
-      const patch = { status: "completed", ...(method
-        ? { payment_method: method, paid_at: new Date().toISOString(), amount_paid: parseFloat(apptRow?.service_price || 0) || 0 }
-        : (apptRow?.payment_method === "on-arrival" ? { payment_method: null } : {})) };
-      const { error } = await supabase.from("appointments").update(patch).eq("id", id).eq("owner_id", salonProfile.id);
-      if (error) { toast.show(lang === "nl" ? "Fout bij voltooien" : lang === "es" ? "Error al completar" : "Error completing", "error"); return; }
+      let patch;
+      // Restbetaling van een deels vooruitbetaalde afspraak: ook met zichtbare
+      // omzet via de RPC. Die laat 'prepaid' staan en boekt alleen het restant
+      // als client_payments-rij in de gekozen wijze, zodat het kasboek niet de
+      // hele prijs als contant telt (zoals de eigenaars-app het restant boekt).
+      const prepaidRest = showMoney && !!method && apptRow?.payment_method === "prepaid" && isPartlyPaid(apptRow);
+      if (!showMoney || prepaidRest) {
+        // Omzet verborgen: de prijs kent deze medewerker niet (de RPC stript
+        // hem), dus "amount_paid = prijs" moet de database zelf zetten. Nooit
+        // client-side een bedrag schrijven: dat werd 0 (audit S1-06).
+        const { data: res, error } = await supabase.rpc("staff_complete_appointment", { p_id: id, p_method: method });
+        if (error || !res) { toast.show(lang === "nl" ? "Fout bij voltooien" : lang === "es" ? "Error al completar" : "Error completing", "error"); return; }
+        patch = { status: res.status || "completed", payment_method: res.payment_method ?? null, paid_at: res.paid_at ?? null,
+          ...(method ? (showMoney ? { amount_paid: parseFloat(apptRow?.service_price || 0) || 0 } : { pay_state: "paid" }) : {}) };
+      } else {
+        patch = { status: "completed", ...(method
+          ? { payment_method: method, paid_at: new Date().toISOString(), amount_paid: parseFloat(apptRow?.service_price || 0) || 0 }
+          : (apptRow?.payment_method === "on-arrival" ? { payment_method: null } : {})) };
+        const { error } = await supabase.from("appointments").update(patch).eq("id", id).eq("owner_id", salonProfile.id);
+        if (error) { toast.show(lang === "nl" ? "Fout bij voltooien" : lang === "es" ? "Error al completar" : "Error completing", "error"); return; }
+      }
       setAppointments(a => a.map(x => x.id === id ? {...x, ...patch} : x));
       setCompleteFor(null);
       toast.show((lang === "nl" ? "Afspraak voltooid" : lang === "es" ? "Cita completada" : "Appointment completed") + (method ? ` · ${payMethodLabel(method)}` : ""));
@@ -513,30 +640,50 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       // Eerste betaling: reservering → bevestigd. Restbetaling (behandeling werd
       // duurder na de vooruitbetaling): alleen het bedrag bijwerken.
       const first = a.status === "pending_payment";
-      const patch = first
-        ? { status: "confirmed", payment_method: "prepaid", paid_at: new Date().toISOString(), amount_paid: price }
-        : { paid_at: new Date().toISOString(), amount_paid: price };
-      let q = supabase.from("appointments").update(patch).eq("id", a.id).eq("owner_id", salonProfile.id);
-      if (first) q = q.eq("status", "pending_payment");
-      const { data: hit, error } = await q.select("id");
-      if (error || !hit || hit.length === 0) {
-        toast.show(lang === "nl" ? "Kon de betaling niet vastleggen; ververs de pagina" : lang === "es" ? "No se pudo registrar el pago; recarga la página" : "Could not record the payment; refresh the page", "error");
-        return;
+      let patch;
+      if (!showMoney) {
+        // Omzet verborgen: de database zet amount_paid op de echte prijs; hier
+        // stond anders 0 (de gestripte prijs) en zag de eigenaar de
+        // vooruitbetaling als onbetaald (audit S1-06).
+        const { data: res, error } = await supabase.rpc("staff_mark_prepaid", { p_id: a.id });
+        if (error || !res) {
+          toast.show(lang === "nl" ? "Kon de betaling niet vastleggen; ververs de pagina" : lang === "es" ? "No se pudo registrar el pago; recarga la página" : "Could not record the payment; refresh the page", "error");
+          return;
+        }
+        patch = { status: res.status || a.status, payment_method: res.payment_method ?? a.payment_method ?? null, paid_at: res.paid_at ?? null, pay_state: "paid" };
+      } else {
+        patch = first
+          ? { status: "confirmed", payment_method: "prepaid", paid_at: new Date().toISOString(), amount_paid: price }
+          : { paid_at: new Date().toISOString(), amount_paid: price };
+        let q = supabase.from("appointments").update(patch).eq("id", a.id).eq("owner_id", salonProfile.id);
+        if (first) q = q.eq("status", "pending_payment");
+        const { data: hit, error } = await q.select("id");
+        if (error || !hit || hit.length === 0) {
+          toast.show(lang === "nl" ? "Kon de betaling niet vastleggen; ververs de pagina" : lang === "es" ? "No se pudo registrar el pago; recarga la página" : "Could not record the payment; refresh the page", "error");
+          return;
+        }
       }
       setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...patch } : x));
       toast.show(first
         ? (lang === "nl" ? "Betaling vastgelegd, afspraak bevestigd" : lang === "es" ? "Pago registrado, cita confirmada" : "Payment recorded, appointment confirmed")
         : (lang === "nl" ? "Restbetaling vastgelegd, alles is betaald" : lang === "es" ? "Pago restante registrado, todo pagado" : "Remaining payment recorded, fully paid"));
-      if (first && a.client_email) {
+      // Geen client_email-poort meer: staan klantgegevens uit, dan stript de
+      // RPC het adres en zoekt send-emails de ontvanger op via appointment_id.
+      if (first && patch.status === "confirmed" && mayMailClient(a)) {
         let cancelUrl = null;
         try {
           const { data: tok } = await supabase.from("cancellation_tokens").select("token").eq("appointment_id", a.id).not("used", "is", true).limit(1).maybeSingle();
           if (tok?.token) cancelUrl = `https://vellu.cc/cancel/${tok.token}`;
         } catch { /* dan zonder link */ }
         sendEmails("booking_confirmation", {
-          client_name: a.client_name, client_email: a.client_email, client_phone: a.client_phone || null,
+          appointment_id: a.id,
+          client_name: a.client_name, client_email: a.client_email || "", client_phone: a.client_phone || null,
           service_name: a.service_name, date: a.date, time: (a.time || "").slice(0, 5),
-          payment: "prepaid", price: a.service_price,
+          // Omzet verborgen: deze app kent de prijs dan niet (de RPC stript hem)
+          // en stuurt geen price mee. send-emails vult hem (nog) NIET uit de
+          // afspraakrij, dus de mail toont dan Totaal 0; dat moet server-side
+          // (send-emails, user-JWT-tak: service_price uit de rij als b.price ontbreekt).
+          payment: "prepaid", ...(showMoney ? { price: a.service_price } : {}),
           salon_name: salonProfile.business_name, owner_email: null, salon_email: salonProfile.salon_email || "",
           salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "",
           lang: a.lang || ownerLangFor(salonProfile.country_code), currency: cur,
@@ -552,9 +699,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [priceFor, setPriceFor] = useState(null);
   const [priceInput, setPriceInput] = useState("");
   const savePrice = async (a) => {
-    if (processingApptId) return;
-    const newPrice = Math.round((parseFloat(String(priceInput).replace(",", ".")) || 0) * 100) / 100;
-    if (!Number.isFinite(newPrice) || newPrice < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : lang === "es" ? "Precio no válido" : "Invalid price", "error"); return; }
+    // Prijs bewerken bestaat alleen met zichtbare omzet (de knop is er anders niet).
+    if (processingApptId || !showMoney) return;
+    // Leeg of onleesbaar = weigeren. Was parseFloat("") || 0: een leeg veld
+    // (of een komma-bedrag dat type=number als "" teruggeeft) zette de prijs op
+    // 0 en mailde de klant "prijs gewijzigd naar €0,00" (audit S1-13). Een 0
+    // die bewust is ingetypt mag wel.
+    const raw = String(priceInput ?? "").trim().replace(",", ".");
+    const parsed = raw === "" ? NaN : Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : lang === "es" ? "Precio no válido" : "Invalid price", "error"); return; }
+    const newPrice = Math.round(parsed * 100) / 100;
     const oldPrice = parseFloat(a.service_price || 0) || 0;
     if (Math.abs(newPrice - oldPrice) < 0.005) { setPriceFor(null); return; }
     setProcessingApptId(a.id);
@@ -565,9 +719,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...patch } : x));
       setPriceFor(null);
       toast.show(lang === "nl" ? `Prijs aangepast naar ${fmtAmt(cur, newPrice)}` : lang === "es" ? `Precio ajustado a ${fmtAmt(cur, newPrice)}` : `Price changed to ${fmtAmt(cur, newPrice)}`);
-      if (a.client_email && a.status !== "cancelled" && a.status !== "no_show") {
+      if (mayMailClient(a) && a.status !== "cancelled" && a.status !== "no_show") {
         sendEmails("appointment_updated", {
-          client_name: a.client_name, client_email: a.client_email, client_phone: a.client_phone || null,
+          appointment_id: a.id,
+          client_name: a.client_name, client_email: a.client_email || "", client_phone: a.client_phone || null,
           service_name: a.service_name, date: a.date, time: (a.time || "").slice(0, 5),
           price: newPrice, old_price: oldPrice,
           salon_name: salonProfile.business_name, salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "",
@@ -585,7 +740,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // Te veel betaald (prijs omlaag na een vooruitbetaling) en teruggestort:
   // vastleggen (niets meer open) + bevestigingsmail. Zie OwnerApp.recordRefund.
   const recordRefund = async (a) => {
-    if (processingApptId) return;
+    // Met omzet verborgen kent deze app geen bedragen; dan schreef dit
+    // amount_paid = 0 en mailde het een valse terugbetaling (audit S1-06).
+    if (processingApptId || !showMoney) return;
     const price = parseFloat(a.service_price || 0) || 0;
     const refund = Math.round((paidAmountOf(a) - price) * 100) / 100;
     if (refund <= 0) return;
@@ -604,9 +761,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       if (error) { toast.show(lang === "nl" ? "Kon de terugbetaling niet vastleggen" : lang === "es" ? "No se pudo registrar la devolución" : "Could not record the refund", "error"); return; }
       setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...patch } : x));
       toast.show(lang === "nl" ? `Terugbetaling van ${fmtAmt(cur, refund)} vastgelegd` : lang === "es" ? `Devolución de ${fmtAmt(cur, refund)} registrada` : `Refund of ${fmtAmt(cur, refund)} recorded`);
-      if (a.client_email) {
+      if (mayMailClient(a)) {
         sendEmails("refund_sent", {
-          client_name: a.client_name, client_email: a.client_email,
+          appointment_id: a.id,
+          client_name: a.client_name, client_email: a.client_email || "",
           service_name: a.service_name, date: a.date, time: (a.time || "").slice(0, 5),
           price, amount_paid: paidBefore, refund,
           salon_name: salonProfile.business_name, salon_email: salonProfile.salon_email || "",
@@ -641,9 +799,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       // missen zodra de status ergens anders (eigenaar, edge-functie) wijzigt.
       // .select() geeft de rij ná de triggers terug, mét het vastgelegde
       // no_show_fee (no-show-vergoeding), anders stond het pas na herladen op de kaart.
-      const { data: fresh, error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id).eq("owner_id", salonProfile.id).select("no_show_fee");
+      const { data: fresh, error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id).eq("owner_id", salonProfile.id).select(showMoney ? "no_show_fee" : "id");
       if (error) { toast.show(lang === "nl" ? "Fout bij markeren" : lang === "es" ? "Error al marcar como no presentado" : "Error marking no-show", "error"); return; }
-      const noShowFee = Array.isArray(fresh) && fresh[0] ? fresh[0].no_show_fee : null;
+      // Omzet verborgen: ook de vergoeding is een bedrag, dus niet in de state.
+      const noShowFee = showMoney && Array.isArray(fresh) && fresh[0] ? fresh[0].no_show_fee : null;
       setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show", no_show_fee: noShowFee} : x));
     } finally { setProcessingApptId(null); }
   };
@@ -655,30 +814,47 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   };
 
   const exportCalendar = (apptList) => {
-    // Emit UTC — floating-time DTSTART was interpreted in device-local tz by calendar apps.
+    // Altijd UTC-momenten (…Z), uitgerekend op de klok van de SALON
+    // (localToUtc + tzFor) en niet op die van het toestel: op een telefoon die
+    // nog op NL-tijd stond, schoof een Bonaire-afspraak 6 uur op (S1-24/S1-26).
     const pad = (n) => String(n).padStart(2, "0");
     const fmtUTC = (d) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+    // RFC 5545: backslash, ; , en regeleinden escapen, regels na 75 octets vouwen.
+    // Een dienstnaam met extra's ("BIAB + Gel, French") brak de import anders.
+    const esc = (s) => String(s ?? "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+    const enc = new TextEncoder();
+    const fold = (line) => { let out = "", len = 0; for (const ch of line) { const b = enc.encode(ch).length; if (len + b > 75) { out += "\r\n "; len = 1; } out += ch; len += b; } return out; };
+    const tz = tzFor(salonProfile.country_code);
+    const stamp = fmtUTC(new Date());
     const icsStatus = (s) => s === "completed" ? "CONFIRMED" : (s === "cancelled" || s === "no_show" ? "CANCELLED" : "CONFIRMED");
     const events = apptList.map(a => {
-      const start = new Date(a.date + "T" + a.time + ":00");
-      const end = new Date(start.getTime() + (a.service_duration || 60) * 60000);
+      const start = localToUtc(a.date, String(a.time || "").slice(0, 5), tz);
+      if (!start) return null;
+      const end = new Date(start.getTime() + (parseInt(a.service_duration) || 60) * 60000);
+      const desc = [
+        a.client_name,
+        ...(showContact ? [a.client_email, a.client_phone].filter(Boolean) : []),
+        ...(showMoney ? [fmtAmt(cur, a.service_price)] : []),
+        `Status: ${a.status}`,
+      ].join("\n");
       return [
         "BEGIN:VEVENT",
+        `UID:${a._slotKey || a.id}@vellu.cc`,
+        `DTSTAMP:${stamp}`,
         `DTSTART:${fmtUTC(start)}`,
         `DTEND:${fmtUTC(end)}`,
-        `SUMMARY:${a.client_name} — ${a.service_name}`,
-        `DESCRIPTION:${a.client_name}${showContact ? `\\n${a.client_email}${a.client_phone ? "\\n" + a.client_phone : ""}` : ""}${showMoney ? `\\n${fmtAmt(cur, a.service_price)}` : ""}\\nStatus: ${a.status}`,
-        `LOCATION:${salonProfile.business_name}`,
+        `SUMMARY:${esc(`${a.client_name} — ${a.service_name}`)}`,
+        `DESCRIPTION:${esc(desc)}`,
+        `LOCATION:${esc(salonProfile.business_name)}`,
         `STATUS:${icsStatus(a.status)}`,
-        `UID:${a.id}@vellu.cc`,
         "END:VEVENT"
-      ].join("\r\n");
-    });
+      ].map(fold).join("\r\n");
+    }).filter(Boolean);
     const ics = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
       "PRODID:-//Vellu//Beauty Booking//EN",
-      "X-WR-CALNAME:Vellu - " + myStaff.name,
+      fold("X-WR-CALNAME:" + esc("Vellu - " + myStaff.name)),
       ...events,
       "END:VCALENDAR"
     ].join("\r\n");
@@ -686,7 +862,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `vellu-${myStaff.name.toLowerCase().replace(/\s+/g, "-")}-agenda.ics`;
-    a.click(); URL.revokeObjectURL(url);
+    // In het document hangen (Firefox) en de URL pas later vrijgeven: direct
+    // intrekken brak de download op sommige telefoons.
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
   };
 
   // Live telefoon-agenda: de feed-URL met het eigen token van deze medewerker.
@@ -722,7 +903,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       ? "Nieuwe link maken? De oude agenda-link stopt dan met werken op alle apparaten."
       : lang === "es"
       ? "¿Crear un enlace nuevo? El enlace de agenda anterior dejará de funcionar en todos los dispositivos."
-      : "Create a new link? The old calendar link will stop working on all devices.")) return;
+      : "Create a new link? The old calendar link will stop working on all devices.",
+      // Geen verwijderactie: neutrale knop met de echte handeling (S1-23).
+      { tone: "primary", confirmText: L3("Nieuwe link maken", "Create new link", "Crear enlace nuevo") })) return;
     if (await mintCalendarToken()) {
       toast.show(lang === "nl" ? "Nieuwe agenda-link aangemaakt" : lang === "es" ? "Nuevo enlace de calendario creado" : "New calendar link created");
     }
@@ -769,32 +952,91 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   };
 
   const staffSendInvoice = async (id) => {
-    if (processingApptId) return;
+    // Een factuur heeft bedragen nodig; met omzet verborgen verstuurt de salon
+    // hem zelf (de knop staat er dan ook niet, audit S1-06).
+    if (processingApptId || !showMoney) return;
+    const a = appointments.find(x => x.id === id);
+    if (!a) return;
+    // Klantgegevens zichtbaar en geen adres: er is niemand om naar te mailen.
+    // Vroeger ging de mail dan "naar niemand" en stond hij toch op Verstuurd.
+    if (!mayMailClient(a)) {
+      toast.show(L3("Geen e-mailadres bij deze afspraak — factuur niet verstuurd", "No email address on this appointment — invoice not sent", "Esta cita no tiene correo electrónico — factura no enviada"), "error");
+      return;
+    }
     setProcessingApptId(id);
     try {
-    const a = appointments.find(x => x.id === id);
-    if (a) {
-      // Nummer uit de database in plaats van uit invoiceForm: die laatste is een
-      // gecachte waarde, en twee tabbladen stuurden zo twee facturen met
-      // hetzelfde nummer. De RPC hoogt op en geeft terug in één ondeelbare stap.
-      const { data: rpcNum, error: numErr } = await supabase.rpc("next_staff_invoice_number", {
-        p_staff: staffMember.id,
-      });
-      if (numErr || !rpcNum) {
-        // Zonder gegarandeerd uniek nummer gaat er geen factuur uit.
-        console.error("factuurnummer ophalen mislukt:", numErr);
-        toast.show(lang === "nl" ? "Factuurnummer ophalen mislukt — factuur niet verstuurd"
-                 : lang === "es" ? "No se pudo obtener el número de factura — no se envió"
-                 : "Could not get an invoice number — invoice not sent", "error");
-        setProcessingApptId(null);
-        return;
+      // Eigen voorvoegsel (zie effectivePrefix). Stond er nog niets of dat van
+      // de salon in haar instellingen, dan bewaren we het afgeleide meteen,
+      // zodat de reeks vanaf nu vastligt.
+      const prefix = effectivePrefix(invoiceForm.invoice_prefix);
+      const stored = String(myStaff.invoice_prefix || "").trim();
+      if (!stored || stored.toUpperCase() === salonPrefix) {
+        const { error: pErr } = await supabase.from("staff_members").update({ invoice_prefix: prefix }).eq("id", staffMember.id).eq("owner_id", salonProfile.id);
+        if (!pErr) {
+          setMyStaff(s => ({ ...s, invoice_prefix: prefix }));
+          setInvoiceForm(f => ({ ...f, invoice_prefix: prefix }));
+        }
       }
-      const invoiceNumber = `${invoiceForm.invoice_prefix || "INV"}-${String(rpcNum).padStart(4, "0")}`;
-      await sendEmails("invoice", {
-        client_name: a.client_name, client_email: a.client_email,
+      // Een eerder mislukte verzending hield haar nummer al vast: dat nummer
+      // opnieuw gebruiken in plaats van er nog een te verbranden.
+      let invoiceNumber = (a.invoice_number && !a.invoice_sent && String(a.invoice_number).startsWith(`${prefix}-`)) ? a.invoice_number : null;
+      if (!invoiceNumber) {
+        // Nummer uit de database in plaats van uit invoiceForm: die laatste is een
+        // gecachte waarde, en twee tabbladen stuurden zo twee facturen met
+        // hetzelfde nummer. De RPC hoogt op en geeft terug in één ondeelbare stap.
+        const { data: rpcNum, error: numErr } = await supabase.rpc("next_staff_invoice_number", {
+          p_staff: staffMember.id,
+        });
+        if (numErr || !rpcNum) {
+          // Zonder gegarandeerd uniek nummer gaat er geen factuur uit.
+          console.error("factuurnummer ophalen mislukt:", numErr);
+          toast.show(lang === "nl" ? "Factuurnummer ophalen mislukt — factuur niet verstuurd"
+                   : lang === "es" ? "No se pudo obtener el número de factura — no se envió"
+                   : "Could not get an invoice number — invoice not sent", "error");
+          return;
+        }
+        invoiceNumber = `${prefix}-${String(rpcNum).padStart(4, "0")}`;
+        // Eerst het nummer bij de afspraak vastleggen, pas dan mailen. De unieke
+        // index (owner_id, invoice_number) weigert een nummer dat de salon al
+        // gebruikte; vroeger gebeurde dat pas NA de mail, zodat de klant een
+        // factuur kreeg die in Vellu niet bestond (audit S1-11).
+        const { error: resErr } = await supabase.from("appointments")
+          .update({ invoice_number: invoiceNumber })
+          .eq("id", id).eq("owner_id", salonProfile.id);
+        // De teller is al opgehoogd door de RPC; alleen de lokale kopie bijtrekken
+        // zodat het scherm het volgende nummer klopt toont.
+        setInvoiceForm(f => ({ ...f, next_invoice_number: rpcNum + 1 }));
+        if (resErr) {
+          console.error("factuurnummer vastleggen mislukt:", resErr);
+          toast.show(resErr.code === "23505"
+            ? L3(`Factuurnummer ${invoiceNumber} bestaat al in de salon — kies een eigen voorvoegsel onder Instellingen, Facturatie`, `Invoice number ${invoiceNumber} already exists in the salon — choose your own prefix under Settings, Invoicing`, `El número de factura ${invoiceNumber} ya existe en el salón — elige tu propio prefijo en Ajustes, Facturación`)
+            : L3("Factuur niet verstuurd — probeer het opnieuw", "Invoice not sent — please try again", "Factura no enviada — inténtalo de nuevo"), "error");
+          return;
+        }
+        setAppointments(prev => prev.map(ap => ap.id === id ? { ...ap, invoice_number: invoiceNumber } : ap));
+      }
+      // Gedeelde boeking: haar deel van wat er al betaald is, naar rato en nooit
+      // meer dan haar deel. Met paidAmountOf(a) (de hele boeking) beloofde haar
+      // factuur van €58 anders een terugbetaling van €67 (audit S1-03).
+      const total = parseFloat(a.service_price || 0) || 0;
+      const share = myShare(a);
+      const paidAll = paidAmountOf(a);
+      const myPaid = total > 0 ? Math.min(share, Math.round((paidAll * share / total) * 100) / 100) : 0;
+      const pm = a.payment_method ?? null;
+      // "Vooruitbetaald" alleen bij een echte vooruitbetaling, deelbetalingen
+      // op een open post, of als er na een betaling nog iets open staat / te
+      // veel betaald is (prijs later gewijzigd); pin/contant aan de balie
+      // volledig betaald = "Betaald" (paid_in_full). Zelfde regel als de
+      // eigenaarsfactuur (audit O4-06); client_payments is voor medewerkers
+      // niet leesbaar, dus "open post met betaling" staat daarvoor in.
+      const openAll = outstandingOf(a);
+      const sendPaid = pm === "prepaid" || (paidAll > 0 && (OPEN_PAY_METHODS.has(pm) || Math.abs(openAll) > 0.005));
+      const mail = await sendEmails("invoice", {
+        appointment_id: a.id,
+        client_name: a.client_name, client_email: a.client_email || "",
         // Gedeelde boeking: alleen háár behandelingen en haar bedrag; met
         // meerdere eigen behandelingen elk als regel met eigen prijs.
-        service_name: myInvoiceName(a), date: a.date, price: myShare(a),
+        service_name: myInvoiceName(a), date: a.date, price: share,
         items: (() => { const sl = mySlots(a); return sl.length >= 2 && sl.every(s => s.price != null) ? sl.map(s => ({ name: s.label, staff: staffMember.name, price: s.price })) : null; })(),
         salon_name: `${salonProfile.business_name} — ${myStaff.name}`,
         invoice_number: invoiceNumber,
@@ -806,12 +1048,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         // null, of een betaalverzoek/op rekening); de klantkeuze bij het boeken
         // bestaat sinds 25-09-2026 niet meer. Loopt naar de gegevens van DEZE
         // medewerker.
-        payment_request: OPEN_PAY_METHODS.has(a.payment_method ?? null),
+        payment_request: OPEN_PAY_METHODS.has(pm),
         // Al (vooruit)betaald: de factuur trekt het af en vraagt alleen het restant.
-        amount_paid: paidAmountOf(a),
+        amount_paid: sendPaid ? myPaid : 0,
+        paid_in_full: !sendPaid && !OPEN_PAY_METHODS.has(pm) && openAll <= 0.005,
         iban_holder: invoiceForm.iban_holder || myStaff.name || "",
-        // Exact OPEN amount appended for bunq.me/PayPal.Me links.
-        payment_link: getPaymentLinkWithAmount(invoiceForm.payment_link || "", Math.max(0, outstandingOf(a))),
+        // Exact OPEN amount (van háár deel) appended for bunq.me/PayPal.Me links.
+        payment_link: getPaymentLinkWithAmount(invoiceForm.payment_link || "", Math.max(0, Math.round((share - myPaid) * 100) / 100)),
         salon_accent: salonProfile.accent_color || "",
         // Het dienstentarief van de salon. Nooit hardcoded 21: dat is het
         // NL-BTW-tarief en op een eilandsalon (ABB 6%/4%, BBO 7%) simpelweg
@@ -826,32 +1069,141 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         show_tax_line: salonTax.showTax,
         salon_logo: salonProfile.logo_url || "",
         currency: cur, tax_label: tax.label, tax_id_label: tax.idLabel,
-        lang
+        // Taal van de KLANT (vastgelegd bij het boeken), niet de schermtaal
+        // van de medewerker (audit S1-21).
+        lang: a.lang || ownerLangFor(salonProfile.country_code),
       });
-      // Het nummer wordt nu vastgelegd bij de afspraak; daarvoor bestond het
-      // alleen in de verstuurde mail. Een unieke index op (owner_id,
-      // invoice_number) weigert vanaf nu een duplicaat.
-      await supabase.from("appointments")
+      // sendEmails gooit niet maar geeft { success: false }: zonder deze
+      // controle stond een mislukte factuur op Verstuurd (audit S1-07). Het
+      // nummer blijft bij de afspraak; opnieuw versturen gebruikt hetzelfde.
+      if (!mail?.success) {
+        toast.show(L3("Factuur niet verstuurd — probeer het opnieuw", "Invoice not sent — please try again", "Factura no enviada — inténtalo de nuevo"), "error");
+        return;
+      }
+      const { error: sentErr } = await supabase.from("appointments")
         .update({ invoice_sent: true, invoice_number: invoiceNumber })
         .eq("id", id).eq("owner_id", salonProfile.id);
-      // De teller is al opgehoogd door de RPC; alleen de lokale kopie bijtrekken
-      // zodat het scherm het volgende nummer klopt toont.
-      setInvoiceForm(f => ({ ...f, next_invoice_number: rpcNum + 1 }));
+      if (sentErr) {
+        console.error("factuurstatus opslaan mislukt:", sentErr);
+        toast.show(L3("De factuur is gemaild, maar de status kon niet worden opgeslagen. Ververs de pagina.", "The invoice was emailed, but its status could not be saved. Refresh the page.", "La factura se envió por correo, pero no se pudo guardar el estado. Recarga la página."), "error");
+        return;
+      }
       setAppointments(prev => prev.map(ap => ap.id === id ? {...ap, invoice_sent: true, invoice_number: invoiceNumber} : ap));
       toast.show(lang === "nl" ? "Factuur verstuurd" : lang === "es" ? "Factura enviada" : "Invoice sent");
-    }
     } finally { setProcessingApptId(null); }
   };
 
+  // Eerste passende klant op de wachtlijst laten weten dat er een plek vrijkomt
+  // — zelfde regel als OwnerApp.notifyWaitlistSpot en cancel-appointment: de
+  // oudste wachtende inschrijving voor die datum die bij een stylist van de
+  // vrijgekomen afspraak hoort (of bij niemand in het bijzonder) en waarvan de
+  // behandelingen in de vrijgekomen tijd passen. Past er niemand, dan gaat er
+  // geen mail uit. Eerst claimen (status notified), dan mailen; send-emails
+  // accepteert alleen een rij die net zo geclaimd is (waitlist_id).
+  // Retourneert de naam van de gemailde klant, of null.
+  const notifyWaitlistSpot = async (a) => {
+    try {
+      if (salonProfile.waitlist_enabled === false) return null;
+      if (!a?.date || a.date < fmt(salonToday())) return null;
+      const { data: entries, error } = await supabase
+        .from("waitlist").select("*")
+        .eq("owner_id", salonProfile.id)
+        .eq("date", a.date)
+        .eq("status", "waiting")
+        .order("created_at", { ascending: true })
+        .limit(50);
+      if (error || !entries?.length) return null;
+      const freedStaff = new Set([
+        a.staff_id,
+        ...Object.values(a.staff_assignments || {}),
+        ...(Array.isArray(a.service_breakdown) ? a.service_breakdown.map(p => p?.staff_id) : []),
+      ].filter(Boolean));
+      const freedMin = parseInt(a.service_duration) || 60;
+      const durationOf = (ids) => (Array.isArray(ids) ? ids : [])
+        .reduce((s, sid) => s + (parseInt(shareCat.services.find(x => x.id === sid)?.duration) || 0), 0);
+      const entry = entries.find(e => e.client_email && (!e.staff_id || freedStaff.has(e.staff_id)) && durationOf(e.service_ids) <= freedMin);
+      if (!entry) return null;
+      const { data: claimed, error: updErr } = await supabase
+        .from("waitlist")
+        .update({ status: "notified", notified_at: new Date().toISOString() })
+        .eq("id", entry.id).eq("status", "waiting").select("id");
+      if (updErr || !claimed || claimed.length === 0) return null;
+      const mail = await sendEmails("waitlist_spot_open", {
+        waitlist_id: entry.id,
+        client_name: entry.client_name,
+        client_email: entry.client_email,
+        salon_name: salonProfile.business_name,
+        salon_accent: salonProfile.accent_color || "",
+        salon_logo: salonProfile.logo_url || "",
+        salon_slug: salonProfile.slug || "",
+        date: a.date,
+        // Taal van de inschrijving; oudere rijen hebben er geen.
+        lang: entry.lang || ownerLangFor(salonProfile.country_code),
+      });
+      if (!mail?.success) { console.error("wachtlijstmail niet verstuurd:", mail?.error); return null; }
+      return entry.client_name || "";
+    } catch (e) {
+      // Best effort: de annulering zelf is al gelukt.
+      console.error("wachtlijst waarschuwen mislukt:", e);
+      return null;
+    }
+  };
+
+  // Annuleren vanuit de medewerkers-app: zelfde nasleep als OwnerApp.cancelAppt
+  // (audit S1-04). Eerst schreef dit alleen status = cancelled: de klant hoorde
+  // niets en kwam gewoon opdagen, de annuleerlink bleef werken en de wachtlijst
+  // hoorde nooit dat er plek was.
   const cancelAppt = async (id) => {
     if (processingApptId) return;
-    if (!await showConfirm(lang === "nl" ? "Afspraak annuleren?" : lang === "es" ? "¿Cancelar la cita?" : "Cancel appointment?")) return;
+    const a = appointments.find(x => x.id === id);
+    if (!a) return;
+    const msg = L3(
+      `Afspraak van ${a.client_name} annuleren? De klant krijgt hier bericht van en het tijdslot komt weer vrij.`,
+      `Cancel ${a.client_name}'s appointment? The client is notified and the time slot frees up again.`,
+      `¿Cancelar la cita de ${a.client_name}? El cliente recibirá un aviso y el horario vuelve a quedar libre.`);
+    // Knop met de echte handeling i.p.v. de standaard "Verwijderen" (S1-23).
+    // Terug-knop met eigen tekst: "Annuleren" naast "Afspraak annuleren" was
+    // dubbelzinnig (audit S1-04); zelfde teksten als de eigenaars-app.
+    if (!await showConfirm(msg, { tone: "danger", confirmText: L3("Afspraak annuleren", "Cancel appointment", "Cancelar cita"), cancelText: L3("Terug", "Back", "Volver") })) return;
     setProcessingApptId(id);
     try {
       const { error } = await supabase.from("appointments").update({ status: "cancelled" }).eq("id", id).eq("owner_id", salonProfile.id);
       if (error) { toast.show(lang === "nl" ? "Annuleren mislukt" : lang === "es" ? "No se pudo cancelar" : "Cancel failed", "error"); return; }
-      setAppointments(a => a.map(x => x.id === id ? {...x, status: "cancelled"} : x));
-      toast.show(lang === "nl" ? "Afspraak geannuleerd" : lang === "es" ? "Cita cancelada" : "Appointment cancelled");
+      setAppointments(list => list.map(x => x.id === id ? {...x, status: "cancelled"} : x));
+      // Bericht in de taal van de KLANT; de salon zegt af, niet de klant.
+      // send-emails zoekt ontvanger en huisstijl zelf op via appointment_id.
+      if (mayMailClient(a)) {
+        const mail = await sendEmails("booking_cancelled", {
+          appointment_id: a.id,
+          client_name: a.client_name,
+          client_email: a.client_email || "",
+          service_name: a.service_name,
+          date: a.date,
+          time: (a.time || "").slice(0, 5),
+          salon_name: salonProfile.business_name,
+          salon_accent: salonProfile.accent_color || "",
+          salon_logo: salonProfile.logo_url || "",
+          salon_email: salonProfile.salon_email || "",
+          salon_slug: salonProfile.slug || "",
+          cancelled_by: "salon",
+          owner_id: salonProfile.id,
+          lang: a.lang || ownerLangFor(salonProfile.country_code),
+        });
+        if (!mail?.success) console.error("booking_cancelled bericht mislukt:", mail?.error);
+      }
+      // Annuleerlink dichtzetten (`used` mag NULL zijn bij oude rijen). Best
+      // effort: cancel-appointment weigert een geannuleerde afspraak toch al.
+      try {
+        const { error: tokErr } = await supabase.from("cancellation_tokens").update({ used: true })
+          .eq("appointment_id", a.id).not("used", "is", true);
+        if (tokErr) console.error("annuleer-token ongeldig maken mislukt:", tokErr);
+      } catch (e) { console.error("annuleer-token ongeldig maken mislukt:", e); }
+      const notified = await notifyWaitlistSpot(a);
+      toast.show(notified !== null
+        ? L3(`Afspraak geannuleerd — ${notified || "iemand"} van de wachtlijst is gemaild`,
+             `Appointment cancelled — ${notified || "someone"} on the waitlist has been emailed`,
+             `Cita cancelada — se ha avisado por correo a ${notified || "alguien"} de la lista de espera`)
+        : L3("Afspraak geannuleerd", "Appointment cancelled", "Cita cancelada"));
     } finally { setProcessingApptId(null); }
   };
 
@@ -1062,7 +1414,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
           <span className={`badge badge-${a.status}`}>{statusLabelOf(a.status)}</span>
           {/* No-show-vergoeding: bij de statuswissel door de database vastgelegd. */}
-          {a.status === "no_show" && parseFloat(a.no_show_fee) > 0 && (
+          {showMoney && a.status === "no_show" && parseFloat(a.no_show_fee) > 0 && (
             <div data-no-show-fee style={{ fontSize: 10, color: c.danger, marginTop: 3 }}>
               {lang === "nl" ? "vergoeding" : lang === "es" ? "tarifa" : "fee"} {fmtAmt(cur, parseFloat(a.no_show_fee))}
             </div>
@@ -1087,9 +1439,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       {(() => {
         const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
         const canEdit = mine && (a.status === "confirmed" || a.status === "completed" || a.status === "pending_payment");
-        const mail = (a.client_email || "").toLowerCase();
-        const prev = mail ? (appointments || [])
-          .filter(x => x.id !== a.id && (x.client_email || "").toLowerCase() === mail && x.visit_advice && x.status !== "cancelled" && x.status !== "no_show" && (x.date < a.date || (x.date === a.date && (x.time || "") < (a.time || ""))))
+        // Op klant-sleutel i.p.v. alleen e-mail: met klantgegevens uit stript
+        // de RPC het adres en vond "Vorige keer" nooit iets (audit S1-07).
+        const ck = clientKeyOf(a, false);
+        const prev = ck ? (appointments || [])
+          .filter(x => x.id !== a.id && clientKeyOf(x, false) === ck && x.visit_advice && x.status !== "cancelled" && x.status !== "no_show" && (x.date < a.date || (x.date === a.date && (x.time || "") < (a.time || ""))))
           .sort((x, y) => (y.date + (y.time || "")).localeCompare(x.date + (x.time || "")))[0] : null;
         if (!prev && !a.visit_advice && !canEdit) return null;
         const editing = adviceEdit && adviceEdit.id === a.id;
@@ -1160,7 +1514,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         return (
           <div data-appt-actions style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
             <div data-appt-grid style={{ display: "grid", gridTemplateColumns: isMobile ? `repeat(${n}, minmax(0, 1fr))` : `1.5fr ${Array(n).fill("1fr").join(" ")}`, gap: 6 }}>
-              <button className="btn-ghost" data-appt-primary style={{ ...cel, gridColumn: isMobile ? "1 / -1" : "auto", color: accent, borderColor: completeFor === a.id ? accent : `${accent}55`, background: `${accent}12`, fontWeight: 600 }} disabled={dis} onClick={() => (paidAmountOf(a) > 0 && outstandingOf(a) <= 0.005) ? markComplete(a.id, null) : setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Voltooid" : lang === "es" ? "Finalizar" : "Complete")}</button>
+              <button className="btn-ghost" data-appt-primary style={{ ...cel, gridColumn: isMobile ? "1 / -1" : "auto", color: accent, borderColor: completeFor === a.id ? accent : `${accent}55`, background: `${accent}12`, fontWeight: 600 }} disabled={dis} onClick={() => isFullyPaid(a) ? markComplete(a.id, null) : setCompleteFor(v => v === a.id ? null : a.id)}>{processingApptId === a.id ? "..." : (lang === "nl" ? "Voltooid" : lang === "es" ? "Finalizar" : "Complete")}</button>
               {showMoney && (
                 <button className="btn-ghost" style={{ ...cel, ...(priceFor === a.id ? { color: accent, borderColor: accent } : {}) }} disabled={dis}
                   title={lang === "nl" ? "Prijs aanpassen (bv. andere behandeling)" : lang === "es" ? "Ajustar el precio (p. ej. otro tratamiento)" : "Adjust the price (e.g. a different treatment)"}
@@ -1176,7 +1530,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   title: `${a.client_name} — ${a.service_name}`,
                   date: a.date, time: a.time, duration: dur,
                   description: `${a.service_name}\n${a.client_name}${showMoney ? `\n${fmtAmt(cur, a.service_price)}` : ""}`,
-                  location: salonProfile.business_name || ""
+                  location: salonProfile.business_name || "",
+                  // Tijdzone van de salon (ctz), niet die van het toestel (S1-24).
+                  tz: tzFor(salonProfile.country_code),
                 }), "_blank");
               }}><NavIcon name="calendar" size={13} color="currentColor" /></button>
               {showContact && phoneDigits && (
@@ -1225,7 +1581,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           echt afgerond. */}
       {a.status === "confirmed" && mine && completeFor === a.id && (
         <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 12, background: `${accent}0d`, border: `1px solid ${accent}33` }}>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{paidAmountOf(a) > 0 ? (lang === "nl" ? `Nog ${showMoney ? `${fmtAmt(cur, outstandingOf(a))} ` : "een bedrag "}open. Hoe is de rest betaald?` : lang === "es" ? `${showMoney ? `Quedan ${fmtAmt(cur, outstandingOf(a))}` : "Queda un resto"}. ¿Cómo se pagó el resto?` : `${showMoney ? `${fmtAmt(cur, outstandingOf(a))} still open` : "Remainder open"}. How was the rest paid?`) : (lang === "nl" ? "Hoe is er betaald?" : lang === "es" ? "¿Cómo se pagó?" : "How was it paid?")}</div>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{isPartlyPaid(a) ? (lang === "nl" ? `Nog ${showMoney ? `${fmtAmt(cur, outstandingOf(a))} ` : "een bedrag "}open. Hoe is de rest betaald?` : lang === "es" ? `${showMoney ? `Quedan ${fmtAmt(cur, outstandingOf(a))}` : "Queda un resto"}. ¿Cómo se pagó el resto?` : `${showMoney ? `${fmtAmt(cur, outstandingOf(a))} still open` : "Remainder open"}. How was the rest paid?`) : (lang === "nl" ? "Hoe is er betaald?" : lang === "es" ? "¿Cómo se pagó?" : "How was it paid?")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
             {[
               ["cash", payMethodLabel("cash")],
@@ -1241,6 +1597,27 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       {/* Betaalstand (zie OwnerApp): deels betaald → open bedrag + "Restbetaling
           ontvangen"; te veel betaald → terugbetalen; anders "Betaald · wijze". */}
       {(a.status === "completed" || a.status === "confirmed") && (() => {
+        // Omzet verborgen: geen bedragen, geen terugbetaal-blok (dat werd bij
+        // elke betaalde afspraak "te veel betaald", audit S1-06). Alleen de
+        // stand die de RPC als pay_state meestuurt.
+        if (!showMoney) {
+          if (a.pay_state === "partial") return (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 11, color: c.warning, display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
+                <NavIcon name="alerttri" size={11} color={c.warning} />
+                {L3("Vooruitbetaald, restbetaling open", "Paid in advance, remainder open", "Pagado por adelantado, resto pendiente")}
+              </div>
+              {mine && <button className="btn-ghost" style={{ fontSize: 10, padding: "8px 14px", color: accent, borderColor: accent, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => markPrepaid(a)}>{processingApptId === a.id ? "..." : L3("Restbetaling ontvangen", "Remainder received", "Resto recibido")}</button>}
+            </div>
+          );
+          if (a.pay_state !== "paid") return null;
+          return (
+            <div style={{ fontSize: 11, color: c.success, marginTop: 8, display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <NavIcon name="check" size={11} color={c.success} />
+              {L3("Betaald", "Paid", "Pagado")}{payMethodLabel(a.payment_method) ? ` · ${payMethodLabel(a.payment_method)}` : ""}
+            </div>
+          );
+        }
         const paid = paidAmountOf(a), open = outstandingOf(a);
         if (paid <= 0) return null;
         const amt = (n) => showMoney ? `${fmtAmt(cur, n)}` : "";
@@ -1296,7 +1673,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   }, [canInvoice, canEditServices, view, staffSettingsTab]);
 
   // Nieuwe afspraak: kop-knop op desktop en snelle-actie-tegel (restyle 16-09).
-  const openAddAppt = () => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(getToday()), time: "", client_name: "", client_email: "", client_phone: "", client_birthday: "", notify_client: true }); };
+  const openAddAppt = () => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(salonToday()), time: "", client_name: "", client_email: "", client_phone: "", client_birthday: "", notify_client: true, lang: ownerLangFor(salonProfile.country_code) }); };
 
   const navItems = [
     ["dashboard", "dashboard", t.dashboard],
@@ -1410,7 +1787,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
         {/* Main content — desktop uses its own scroll pane so the fixed sidebar
             stays put; mobile inherits the body's natural scroll. */}
-        <div style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "max(16px, env(safe-area-inset-top, 16px)) 14px 100px" : "30px 40px", overflowX: "hidden", ...(isMobile ? { minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" } : { overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }) }}>
+        <div ref={scrollPaneRef} style={{ flex: 1, marginLeft: isMobile ? 0 : 260, padding: isMobile ? "max(16px, env(safe-area-inset-top, 16px)) 14px 100px" : "30px 40px", overflowX: "hidden", ...(isMobile ? { minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" } : { overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }) }}>
           <div style={{ maxWidth: isMobile ? "100%" : 960, margin: "0 auto" }}>
           {!isMobile && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, gap: 16, flexWrap: "wrap" }}>
@@ -1427,7 +1804,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           )}
           {/* DASHBOARD */}
           {view === "dashboard" && (() => {
-            const now = new Date();
+            const now = salonToday();
             const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
             const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
             const prevWeekStart = new Date(now); prevWeekStart.setDate(now.getDate() - 14);
@@ -1520,15 +1897,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 );
                 const weekChip = weekChange !== 0 ? (
                   <div style={{ fontSize: 10, color: weekChange > 0 ? c.success : c.danger, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 6, background: weekChange > 0 ? `${c.success}18` : `${c.danger}18`, border: `1px solid ${weekChange > 0 ? c.success : c.danger}33`, whiteSpace: "nowrap" }}>
-                    {weekChange > 0 ? "↑" : "↓"} {Math.abs(weekChange)}%
+                    {glyph(weekChange > 0 ? "up" : "down", 10)} {Math.abs(weekChange)}%
                   </div>
                 ) : null;
                 const behandelingen = lang === "nl" ? "behandelingen" : lang === "es" ? "tratamientos" : "treatments";
                 return (
                   <div data-dash-tiles style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, minmax(0, 1fr))", gap: isMobile ? 10 : 14, marginBottom: isMobile ? 14 : 18 }}>
-                    {tile({ key: "week", icon: "money", label: lang === "nl" ? "Deze week" : lang === "es" ? "Esta semana" : "This week", sub: lang === "nl" ? "7 dagen" : lang === "es" ? "7 días" : "7 days", value: `${cur}${weekRevenue.toFixed(0)}`, chip: weekChip, body: <div style={{ height: 44 }}>{sparkline(weekDaily, accent)}</div> })}
-                    {tile({ key: "month", icon: "analytics", label: lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month", sub: lang === "nl" ? "30 dagen" : lang === "es" ? "30 días" : "30 days", value: `${cur}${monthRevenue.toFixed(0)}`, body: <div style={{ height: 44 }}>{sparkline(monthDaily, accent)}</div> })}
-                    {tile({ key: "total", icon: "star2", label: t.totalEarnings, sub: lang === "nl" ? "Tot nu toe" : lang === "es" ? "Hasta ahora" : "So far", value: `${cur}${totalEarnings.toFixed(0)}`, valueColor: c.text, style: isMobile ? { gridColumn: "1 / -1" } : undefined,
+                    {tile({ key: "week", icon: "money", label: lang === "nl" ? "Deze week" : lang === "es" ? "Esta semana" : "This week", sub: lang === "nl" ? "7 dagen" : lang === "es" ? "7 días" : "7 days", value: fmtWhole(weekRevenue), chip: weekChip, body: <div style={{ height: 44 }}>{sparkline(weekDaily, accent)}</div> })}
+                    {tile({ key: "month", icon: "analytics", label: lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month", sub: lang === "nl" ? "30 dagen" : lang === "es" ? "30 días" : "30 days", value: fmtWhole(monthRevenue), body: <div style={{ height: 44 }}>{sparkline(monthDaily, accent)}</div> })}
+                    {/* De app laadt 90 dagen terug; "Tot nu toe" beloofde meer (S1-15). */}
+                    {tile({ key: "total", icon: "star2", label: t.totalEarnings, sub: lang === "nl" ? "Laatste 90 dagen" : lang === "es" ? "Últimos 90 días" : "Last 90 days", value: fmtWhole(totalEarnings), valueColor: c.text, style: isMobile ? { gridColumn: "1 / -1" } : undefined,
                       body: <div style={{ height: 44, display: "flex", alignItems: "flex-end", fontSize: 10, color: c.textMuted }}>{completedAppts.length} {behandelingen}</div> })}
                   </div>
                 );
@@ -1551,7 +1929,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     {showMoney && todayAppts.length > 0 && (
                       <div style={{ textAlign: "right" }}>
                         <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Verwacht" : lang === "es" ? "Previsto" : "Expected"}</div>
-                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>{cur}{todayRevenue.toFixed(0)}</div>
+                        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent }}>{fmtWhole(todayRevenue)}</div>
                       </div>
                     )}
                   </div>
@@ -1559,14 +1937,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ textAlign: "center", padding: "18px 0 6px", color: c.textMuted, position: "relative", flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
                       <div style={{ marginBottom: 10, opacity: 0.5 }}><NavIcon name="calendar" size={28} color={c.textMuted} /></div>
                       <div style={{ fontSize: 12 }}>{t.noTodayAppts}</div>
-                      <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 10 }} onClick={() => setView("agenda")}>{lang === "nl" ? "Bekijk agenda →" : lang === "es" ? "Ver agenda →" : "View agenda →"}</div>
+                      <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 10, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => setView("agenda")}>{lang === "nl" ? "Bekijk agenda" : lang === "es" ? "Ver agenda" : "View agenda"} {glyph("right", 10)}</div>
                     </div>
                   ) : (
                     <div style={{ position: "relative" }}>
                       {todayAppts.slice(0, 3).map(a => renderApptCard(a))}
                       {todayAppts.length > 3 && (
-                        <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 8, textAlign: "center" }} onClick={() => setView("agenda")}>
-                          + {todayAppts.length - 3} {lang === "nl" ? "meer · Bekijk alles →" : lang === "es" ? "más · Ver todo →" : "more · View all →"}
+                        <div style={{ fontSize: 11, color: accent, cursor: "pointer", marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }} onClick={() => setView("agenda")}>
+                          + {todayAppts.length - 3} {lang === "nl" ? "meer · Bekijk alles" : lang === "es" ? "más · Ver todo" : "more · View all"} {glyph("right", 10)}
                         </div>
                       )}
                     </div>
@@ -1580,7 +1958,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <div data-dash-right style={{ display: "flex", flexDirection: "column", gap: isMobile ? 14 : 18, minWidth: 0 }}>
                   {(() => {
                     const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
-                    const komend = appointments.filter(a => a.status === "confirmed" && isMineAppt(a));
+                    // Alleen écht komende afspraken (vanaf vandaag op de salonklok):
+                    // de lijst bevat ook 90 dagen terug, en een nooit afgeronde
+                    // afspraak van vorige maand is geen "komende" (S1-26).
+                    const vandaag = fmt(salonToday());
+                    const komend = appointments.filter(a => a.status === "confirmed" && isMineAppt(a) && a.date >= vandaag);
                     const acties = [
                       { key: "add", primary: true, icon: "plus", label: t.addAppointment, onClick: openAddAppt },
                       ...(salonProfile.slug ? [
@@ -1646,7 +2028,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
                                     <span style={{ fontSize: 13, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-                                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{cur}{stats.revenue.toFixed(0)}</span>
+                                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: accent, flexShrink: 0, lineHeight: 1 }}>{fmtWhole(stats.revenue)}</span>
                                   </div>
                                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                     <div style={{ flex: 1, height: 5, borderRadius: 4, background: c.inputBg, overflow: "hidden" }}>
@@ -1715,7 +2097,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                         <div>
                           <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{t.revenueOverTime || (lang === "nl" ? "Omzet over tijd" : lang === "es" ? "Ingresos a lo largo del tiempo" : "Revenue over time")}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1 }}>{cur}{total8w.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, color: c.text, lineHeight: 1 }}>{fmtWhole(total8w)}</div>
                           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "afgelopen 8 weken" : lang === "es" ? "últimas 8 semanas" : "last 8 weeks"}</div>
                         </div>
                       </div>
@@ -1737,14 +2119,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                             <g>
                               <rect x={pts[peakIdx].x - 28} y={pts[peakIdx].y - 26} width="56" height="18" rx="9" fill={c.bg} stroke={accent} strokeWidth="1" />
                               <text x={pts[peakIdx].x} y={pts[peakIdx].y - 13} fontSize="11" fill={accent} textAnchor="middle" fontFamily="'Jost',sans-serif" fontWeight="600">
-                                {cur}{pts[peakIdx].revenue.toFixed(0)}
+                                {fmtWhole(pts[peakIdx].revenue)}
                               </text>
                             </g>
                           )}
                           {pts.map((p, i) => (
                             <g key={i}>
                               <circle cx={p.x} cy={p.y} r={i === pts.length - 1 ? 5 : 3} fill={c.bg} stroke={accent} strokeWidth={i === pts.length - 1 ? 2.5 : 1.8}>
-                                <title>{p.label} · {cur}{p.revenue.toFixed(0)}</title>
+                                <title>{p.label} · {fmtWhole(p.revenue)}</title>
                               </circle>
                               {i === pts.length - 1 && (
                                 <circle cx={p.x} cy={p.y} r="10" fill={accent} opacity="0.15">
@@ -1764,16 +2146,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Beste week" : lang === "es" ? "Mejor semana" : "Best week"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{cur}{pts[peakIdx].revenue.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{fmtWhole(pts[peakIdx].revenue)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>{lang === "nl" ? "Gemiddeld" : lang === "es" ? "Promedio" : "Average"}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{cur}{avgWeek.toFixed(0)}</div>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: c.text }}>{fmtWhole(avgWeek)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 3 }}>Trend</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: trendPct > 0 ? c.success : trendPct < 0 ? c.danger : c.text }}>
-                            {trendPct > 0 ? "↑" : trendPct < 0 ? "↓" : "—"} {Math.abs(trendPct)}%
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: trendPct > 0 ? c.success : trendPct < 0 ? c.danger : c.text, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            {trendPct > 0 ? glyph("up", 11) : trendPct < 0 ? glyph("down", 11) : "—"} {Math.abs(trendPct)}%
                           </div>
                         </div>
                       </div>
@@ -1791,10 +2173,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             const MON_SHORT = lang === "nl" ? MON_NL : lang === "es" ? MON_ES : MON_EN;
             const MON_FULL_NL = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
             const MON_FULL_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-            const MON_FULL = lang === "nl" ? MON_FULL_NL : MON_FULL_EN;
-            const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
-            const todayFmt = fmt(getToday());
-            const todayDate = getToday();
+            const MON_FULL_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+            const MON_FULL = lang === "nl" ? MON_FULL_NL : lang === "es" ? MON_FULL_ES : MON_FULL_EN;
+            const DAY_HEADERS = lang === "nl" ? ["Ma","Di","Wo","Do","Vr","Za","Zo"] : lang === "es" ? ["Lu","Ma","Mi","Ju","Vi","Sá","Do"] : ["Mo","Tu","We","Th","Fr","Sa","Su"];
+            const todayFmt = fmt(salonToday());
+            const todayDate = salonToday();
 
             // Agenda follows the staff-filter chip (scopedAppts); off = own only.
             const filteredAppts = scopedAppts.filter(a => a.status !== "cancelled" && a.status !== "no_show");
@@ -1927,13 +2310,13 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 </div>
                 {showMoney && <div>
                   <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{lang === "nl" ? "Omzet" : lang === "es" ? "Ingresos" : "Revenue"}</div>
-                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>{cur}{periodRevenue.toFixed(0)}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300, color: accent, lineHeight: 1 }}>{fmtWhole(periodRevenue)}</div>
                 </div>}
               </div>
 
               {/* WEEK VIEW */}
               {calViewMode === "week" && (() => {
-                const base = getToday();
+                const base = salonToday();
                 base.setDate(base.getDate() + staffWeekOffset * 7);
                 const dayOfWeek = (base.getDay() + 6) % 7;
                 const weekStart = new Date(base);
@@ -2012,7 +2395,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
               {/* MONTH VIEW */}
               {calViewMode === "month" && (() => {
-                const base = getToday();
+                const base = salonToday();
                 const targetMonth = new Date(base.getFullYear(), base.getMonth() + staffWeekOffset, 1);
                 const year = targetMonth.getFullYear();
                 const month = targetMonth.getMonth();
@@ -2059,7 +2442,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                             setCalViewMode("week");
                             // Calculate week offset: find Monday of clicked week vs Monday of current week
                             const clickedDate = new Date(ds + "T12:00:00");
-                            const today = getToday();
+                            const today = salonToday();
                             const clickedMonday = new Date(clickedDate);
                             clickedMonday.setDate(clickedDate.getDate() - ((clickedDate.getDay() + 6) % 7));
                             const todayMonday = new Date(today);
@@ -2121,9 +2504,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
 
               {/* YEAR VIEW */}
               {calViewMode === "year" && (() => {
-                const baseYear = getToday().getFullYear() + staffWeekOffset;
-                const currentMonth = getToday().getMonth();
-                const currentYear = getToday().getFullYear();
+                const baseYear = salonToday().getFullYear() + staffWeekOffset;
+                const currentMonth = salonToday().getMonth();
+                const currentYear = salonToday().getFullYear();
                 const monthCounts = Array.from({ length: 12 }, (_, mi) => {
                   const monthPrefix = `${baseYear}-${String(mi + 1).padStart(2, "0")}`;
                   return filteredAppts.filter(a => a.date?.startsWith(monthPrefix)).length;
@@ -2138,7 +2521,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       return (
                         <div key={mi} onClick={() => {
                           setCalViewMode("month");
-                          const now = getToday();
+                          const now = salonToday();
                           setStaffWeekOffset((baseYear - now.getFullYear()) * 12 + mi - now.getMonth());
                         }} style={{
                           padding: "16px 18px", borderRadius: 14, cursor: "pointer",
@@ -2173,7 +2556,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 .map(b => {
                   const isTimeBlock = !!b.block_time_start;
                   const svcRow = b.service_id ? (services || []).find(sv => sv.id === b.service_id) : null;
-                  const svcLabel = svcRow ? (lang === "nl" ? (svcRow.name_nl || svcRow.name) : (svcRow.name_en || svcRow.name_nl || svcRow.name)) : null;
+                  const svcLabel = svcRow ? svcNameOf(svcRow) : null;
+                  // De gekozen dag, niet altijd "vandaag" (S1-19).
+                  const dayLbl = calDate === todayFmt
+                    ? L3("vandaag", "today", "hoy")
+                    : (() => { const d = parseDate(calDate); return L3(`op ${d.getDate()} ${MON_SHORT[d.getMonth()]}`, `on ${d.getDate()} ${MON_SHORT[d.getMonth()]}`, `el ${d.getDate()} ${MON_SHORT[d.getMonth()]}`); })();
                   return (
                     <div key={b.id} style={{ marginBottom: 12, padding: "12px 14px", background: `${c.danger}0f`, border: `1px solid ${c.danger}44`, borderRadius: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: "50%", background: `${c.danger}22`, flexShrink: 0 }}>
@@ -2184,14 +2571,15 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           {svcLabel
                             ? (isTimeBlock
                                 ? (lang === "nl" ? `Geen ${svcLabel} ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `Sin ${svcLabel} ${b.block_time_start}–${b.block_time_end}` : `No ${svcLabel} ${b.block_time_start}–${b.block_time_end}`)
-                                : (lang === "nl" ? `Geen ${svcLabel} vandaag` : lang === "es" ? `Sin ${svcLabel} hoy` : `No ${svcLabel} today`))
+                                : (lang === "nl" ? `Geen ${svcLabel} ${dayLbl}` : lang === "es" ? `Sin ${svcLabel} ${dayLbl}` : `No ${svcLabel} ${dayLbl}`))
                             : isTimeBlock
                             ? (lang === "nl" ? `Geblokkeerd ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `Bloqueado ${b.block_time_start}–${b.block_time_end}` : `Blocked ${b.block_time_start}–${b.block_time_end}`)
                             : (lang === "nl" ? "Dag geblokkeerd" : lang === "es" ? "Día bloqueado" : "Day blocked")}
                         </div>
                         {b.weekday != null && (
-                          <div style={{ fontSize: 10, fontWeight: 700, color: c.danger, letterSpacing: "0.04em", marginBottom: 2 }}>
-                            {lang === "nl" ? `↻ elke ${["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"][b.weekday]}` : lang === "es" ? `↻ cada ${["domingo","lunes","martes","miércoles","jueves","viernes","sábado"][b.weekday]}` : `↻ every ${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][b.weekday]}`}
+                          <div style={{ fontSize: 10, fontWeight: 700, color: c.danger, letterSpacing: "0.04em", marginBottom: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                            {glyph("repeat", 10)}
+                            {lang === "nl" ? `elke ${["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"][b.weekday]}` : lang === "es" ? `cada ${["domingo","lunes","martes","miércoles","jueves","viernes","sábado"][b.weekday]}` : `every ${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][b.weekday]}`}
                           </div>
                         )}
                         <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
@@ -2259,24 +2647,29 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             // elke klant de VORIGE dag als laatste bezoek zag staan.
             const fmtDate = (ds) => { if (!ds) return ""; const d = parseDate(ds); return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`; };
             // Aggregate by lowercase email so a repeat client with different
-            // display names still collapses to one row.
+            // display names still collapses to one row. Zonder adres (klant-
+            // gegevens uit: de RPC stript het) op klant-id of naam; eerst sloeg
+            // de lus elke rij over en bleef de lijst leeg (audit S1-07).
             const byEmail = new Map();
-            const nowMs = Date.now();
+            // Salonklok, net als de afspraaktijden zelf (S1-24).
+            const nowMs = salonToday().getTime();
             // Personal (myAppts) — "your clients" stays your own even when the
             // team-agenda feature is on.
             for (const a of myAppts) {
               const email = String(a.client_email || "").toLowerCase();
-              if (!email) continue;
-              let agg = byEmail.get(email);
+              const key = clientKeyOf(a);
+              if (!key) continue;
+              let agg = byEmail.get(key);
               if (!agg) {
-                agg = { email, name: a.client_name || email, phone: a.client_phone || "", appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
-                byEmail.set(email, agg);
+                agg = { key, email, name: a.client_name || email, phone: a.client_phone || "", appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
+                byEmail.set(key, agg);
               }
               if (!agg.phone && a.client_phone) agg.phone = a.client_phone;
               if (a.client_name && a.client_name.length > (agg.name?.length || 0)) agg.name = a.client_name;
               agg.appts.push(a);
               if (a.status === "completed") {
-                agg.totalSpent += parseFloat(a.service_price || 0);
+                // Haar aandeel bij een gedeelde boeking, net als het dashboard (S1-16).
+                agg.totalSpent += myShare(a);
                 agg.visitCount++;
                 if (!agg.lastVisit || a.date > agg.lastVisit) agg.lastVisit = a.date;
               }
@@ -2318,7 +2711,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     value={clientSearch} onChange={e => setClientSearch(e.target.value)}
                     style={{ width: "100%", padding: "12px 40px 12px 16px", fontSize: 12 }} />
                   {clientSearch && (
-                    <button onClick={() => setClientSearch("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", padding: 6, display: "flex", alignItems: "center" }} aria-label="Wissen">
+                    <button onClick={() => setClientSearch("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", padding: 6, display: "flex", alignItems: "center" }} aria-label={L3("Wissen", "Clear", "Borrar")}>
                       <NavIcon name="xmark" size={12} color={c.textMuted} />
                     </button>
                   )}
@@ -2337,7 +2730,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     {list.map((cl, i) => {
                       const note = showContact ? clientNotes[cl.email] : null;
                       return (
-                        <div key={cl.email} onClick={() => setClientView(cl)}
+                        <div key={cl.key} onClick={() => setClientView(cl)}
                           data-client-row style={{ display: "grid", gridTemplateColumns: isMobile ? "auto 1fr auto" : "auto 1fr 1fr auto", gap: 12, padding: "12px 14px", borderRadius: 12, background: c.bgCard, border: `1px solid ${c.border}`, boxShadow: "0 10px 22px -18px rgba(0,0,0,0.35)", cursor: "pointer", alignItems: "center" }}>
                           <div aria-hidden="true" style={{ width: 36, height: 36, borderRadius: 10, background: `${accent}14`, border: `1px solid ${accent}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: accent, flexShrink: 0, letterSpacing: "0.04em" }}>{ini(cl.name)}</div>
                           <div style={{ minWidth: 0 }}>
@@ -2358,7 +2751,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           </div>
                           {!isMobile && (
                             <div style={{ fontSize: 11, color: c.textLabel }}>
-                              {cl.visitCount > 0 ? `${cl.visitCount} ${cl.visitCount === 1 ? (lang === "nl" ? "bezoek" : lang === "es" ? "visita" : "visit") : (lang === "nl" ? "bezoeken" : lang === "es" ? "visitas" : "visits")}${showMoney ? ` · ${cur}${cl.totalSpent.toFixed(0)}` : ""}` : (lang === "nl" ? "Nog geen bezoeken" : lang === "es" ? "Sin visitas todavía" : "No visits yet")}
+                              {cl.visitCount > 0 ? `${cl.visitCount} ${cl.visitCount === 1 ? (lang === "nl" ? "bezoek" : lang === "es" ? "visita" : "visit") : (lang === "nl" ? "bezoeken" : lang === "es" ? "visitas" : "visits")}${showMoney ? ` · ${fmtWhole(cl.totalSpent)}` : ""}` : (lang === "nl" ? "Nog geen bezoeken" : lang === "es" ? "Sin visitas todavía" : "No visits yet")}
                               {cl.lastVisit && <div style={{ fontSize: 10, color: c.textMuted }}>{lang === "nl" ? "Laatste: " : lang === "es" ? "Última: " : "Last: "}{fmtDate(cl.lastVisit)}</div>}
                             </div>
                           )}
@@ -2400,7 +2793,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         </div>
                         {showMoney && <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Besteed" : lang === "es" ? "Gastado" : "Spent"}</div>
-                          <div style={{ fontSize: 18, fontFamily: "'Cormorant Garamond',serif", color: accent }}>{cur}{clientView.totalSpent.toFixed(0)}</div>
+                          <div style={{ fontSize: 18, fontFamily: "'Cormorant Garamond',serif", color: accent }}>{fmtWhole(clientView.totalSpent)}</div>
                         </div>}
                         <div style={{ padding: "8px 10px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, textAlign: "center" }}>
                           <div style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{lang === "nl" ? "Laatste" : lang === "es" ? "Última" : "Last"}</div>
@@ -2426,7 +2819,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                               </div>
                               <div style={{ textAlign: "right", flexShrink: 0 }}>
                                 <span className={`badge badge-${a.status}`} style={{ fontSize: 9 }}>{statusLabelOf(a.status)}</span>
-                                {showMoney && <div style={{ fontSize: 12, color: accent, marginTop: 2 }}>{fmtAmt(cur, parseFloat(a.service_price || 0))}</div>}
+                                {showMoney && <div style={{ fontSize: 12, color: accent, marginTop: 2 }}>{fmtAmt(cur, myShare(a))}</div>}
                               </div>
                             </div>
                           ))}
@@ -2445,7 +2838,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             // Eigen aandeel (myShare): de factuur die zij verstuurt bevat ook
             // alleen haar deel van een gecombineerde boeking.
             const unsentTotal = unsent.reduce((s, a) => s + myShare(a), 0);
-            const thisMonthPrefix = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+            const thisMonthPrefix = fmt(salonToday()).slice(0, 7);
             const thisMonthAppts = completedAppts.filter(a => a.date?.startsWith(thisMonthPrefix));
             const thisMonthTotal = thisMonthAppts.reduce((s, a) => s + myShare(a), 0);
 
@@ -2473,10 +2866,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <div data-invoice-tiles style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : showMoney ? "repeat(4, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))", gap: 10, marginBottom: 14 }}>
                   {[
                     ...(showMoney ? [
-                      ["money", t.totalEarnings, `${cur}${totalEarnings.toFixed(0)}`, `${completedAppts.length} ${t.treatments}`, accent],
-                      ["calendar", lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month", `${cur}${thisMonthTotal.toFixed(0)}`, `${thisMonthAppts.length} ${t.treatments}`, c.text],
+                      // Laatste 90 dagen: verder terug laadt de app niet (S1-15).
+                      ["money", t.totalEarnings, fmtWhole(totalEarnings), `${completedAppts.length} ${t.treatments} · ${L3("laatste 90 dagen", "last 90 days", "últimos 90 días")}`, accent],
+                      ["calendar", lang === "nl" ? "Deze maand" : lang === "es" ? "Este mes" : "This month", fmtWhole(thisMonthTotal), `${thisMonthAppts.length} ${t.treatments}`, c.text],
                     ] : []),
-                    ["send", lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent", unsent.length, showMoney ? `${cur}${unsentTotal.toFixed(0)}` : "", unsent.length > 0 ? c.warning : c.text],
+                    ["send", lang === "nl" ? "Te versturen" : lang === "es" ? "Sin enviar" : "Unsent", unsent.length, showMoney ? fmtWhole(unsentTotal) : "", unsent.length > 0 ? c.warning : c.text],
                     ["check", lang === "nl" ? "Verstuurd" : lang === "es" ? "Enviado" : "Sent", sent.length, `${completedAppts.length > 0 ? Math.round((sent.length / completedAppts.length) * 100) : 0}%`, c.success],
                   ].map(([icon, label, value, sub, color]) => (
                     <div key={label} data-invoice-tile className="vl-card" style={{ padding: isMobile ? 14 : "16px 18px", display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
@@ -2494,7 +2888,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     this stylist (isMine), so fixedStaffName just stamps their
                     name on the PDF and hides the team chips. salonProfile is
                     the raw profiles row, which carries the company block
-                    fields (business_name, address, kvk, btw, iban). */}
+                    fields (business_name, address, kvk, btw, iban).
+                    fetchRange: het rapport haalt zijn HELE periode op; de app
+                    zelf houdt maar 90 dagen vast, dus "Dit jaar" begon anders
+                    in juli zonder dat iemand het zag (S1-05). companyOverride:
+                    haar eigen factuurgegevens, per veld met de salon als
+                    terugval — dezelfde regel als op haar facturen (S1-27). */}
                 {showMoney && <RevenueReportBlock
                   salonData={salonProfile}
                   completedAppts={completedAppts}
@@ -2507,6 +2906,20 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   services={shareCat.services}
                   staff={shareCat.staff}
                   staffEmail={myStaff.email || staffMember.email || ""}
+                  fetchRange={async (from, to) => {
+                    const r = await fetchAllRows(() => supabase.rpc("staff_list_appointments", { p_from: from, p_to: to }));
+                    return r.error ? null : (r.data || []).filter(isMineAppt);
+                  }}
+                  companyOverride={{
+                    // Ruwe eigen waarden: RevenueReportBlock valt zelf per veld
+                    // terug op de salon. Vooraf invullen telde het salonadres als
+                    // "eigen adres" en liet dan postcode en plaats weg.
+                    name: myStaff.name,
+                    address: invoiceForm.address || "",
+                    kvk_number: invoiceForm.kvk_number || "",
+                    btw_id: invoiceForm.btw_id || "",
+                    iban: invoiceForm.iban || "",
+                  }}
                 />}
 
                 {/* Search + filter toolbar */}
@@ -2621,6 +3034,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                             <span style={{ fontSize: 10, color: c.success, display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 8, background: `${c.success}14`, border: `1px solid ${c.success}33`, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
                               <NavIcon name="check" size={10} color={c.success} /> {t.sent}
                             </span>
+                          ) : !showMoney ? (
+                            // Omzet verborgen: een factuur heeft bedragen nodig die
+                            // deze medewerker niet ziet, dus die verstuurt de salon.
+                            <span style={{ fontSize: 10, color: c.textMuted, textAlign: "right", lineHeight: 1.35 }}>{L3("Facturen verstuurt de salon", "The salon sends invoices", "Las facturas las envía el salón")}</span>
                           ) : (
                             <button className="btn-ghost" style={{ padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6, opacity: processingApptId ? 0.5 : 1 }} disabled={!!processingApptId} onClick={() => staffSendInvoice(a.id)}>
                               {isSending ? (
@@ -2793,11 +3210,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         <NavIcon name="calendar" size={14} color={accent} />
                         {lang === "nl" ? "Openen in Apple / iPhone agenda" : lang === "es" ? "Abrir en Calendario de Apple / iPhone" : "Open in Apple / iPhone Calendar"}
                       </a>
-                      <button className="btn-ghost" style={{ width: "100%", fontSize: 11, color: c.textSub, borderColor: c.border }}
+                      <button className="btn-ghost" style={{ width: "100%", fontSize: 11, color: c.textSub, borderColor: c.border, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                         onClick={() => setCalHelpOpen(o => !o)}>
                         {calHelpOpen
-                          ? (lang === "nl" ? "Uitleg verbergen ▲" : lang === "es" ? "Ocultar instrucciones ▲" : "Hide instructions ▲")
-                          : (lang === "nl" ? "Hoe koppel ik dit? ▼" : lang === "es" ? "¿Cómo conecto esto? ▼" : "How do I connect this? ▼")}
+                          ? (lang === "nl" ? "Uitleg verbergen" : lang === "es" ? "Ocultar instrucciones" : "Hide instructions")
+                          : (lang === "nl" ? "Hoe koppel ik dit?" : lang === "es" ? "¿Cómo conecto esto?" : "How do I connect this?")}
+                        {glyph(calHelpOpen ? "chevUp" : "chevDown", 11)}
                       </button>
                       {calHelpOpen && (
                         <div style={{ marginTop: 12, fontSize: 11, color: c.textSub, lineHeight: 1.6 }}>
@@ -2812,10 +3230,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           <div style={{ marginBottom: 12 }}>
                             <div style={{ fontWeight: 600, color: c.text, marginBottom: 4 }}>Android</div>
                             {lang === "nl"
-                              ? "Ga op een computer naar calendar.google.com → naast \"Andere agenda's\" op + → Via URL → plak de gekopieerde link. De afspraken verschijnen daarna vanzelf in de Agenda-app op je Android-telefoon."
+                              ? "Ga op een computer naar calendar.google.com, klik naast \"Andere agenda's\" op +, kies Via URL en plak de gekopieerde link. De afspraken verschijnen daarna vanzelf in de Agenda-app op je Android-telefoon."
                               : lang === "es"
-                              ? "Desde un ordenador entra en calendar.google.com → junto a «Otros calendarios» pulsa + → Desde una URL → pega el enlace copiado. Las citas aparecerán solas en la app Calendario de tu Android."
-                              : "On a computer go to calendar.google.com → next to \"Other calendars\" click + → From URL → paste the copied link. The appointments then show up automatically in the Calendar app on your Android phone."}
+                              ? "Desde un ordenador entra en calendar.google.com, pulsa + junto a «Otros calendarios», elige Desde una URL y pega el enlace copiado. Las citas aparecerán solas en la app Calendario de tu Android."
+                              : "On a computer go to calendar.google.com, click + next to \"Other calendars\", choose From URL and paste the copied link. The appointments then show up automatically in the Calendar app on your Android phone."}
                           </div>
                           <div style={{ padding: "8px 10px", background: c.inputBg, borderRadius: 10, color: c.textMuted, fontSize: 10 }}>
                             {lang === "nl"
@@ -2872,11 +3290,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <div>
                         <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.invoicePrefix}</div>
                         <input className="input-field" value={invoiceForm.invoice_prefix} onChange={e => setInvoiceForm(f => ({...f, invoice_prefix: e.target.value}))} style={{ width: "100%", fontFamily: "monospace", textTransform: "uppercase" }} />
+                        {effectivePrefix(invoiceForm.invoice_prefix) !== String(invoiceForm.invoice_prefix || "").trim() && (
+                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>
+                            {L3(`Leeg of gelijk aan dat van de salon (${salonPrefix}) kan niet; jouw facturen krijgen ${derivedPrefix}.`, `It can't be empty or the salon's own (${salonPrefix}); your invoices get ${derivedPrefix}.`, `No puede estar vacío ni ser el del salón (${salonPrefix}); tus facturas llevan ${derivedPrefix}.`)}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Volgend nummer" : lang === "es" ? "Siguiente número" : "Next number"}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", background: c.inputBg, borderRadius: 14, border: `1px solid ${c.inputBorder}` }}>
-                          <span style={{ fontFamily: "monospace", fontSize: 13, color: accent, fontWeight: 600 }}>{invoiceForm.invoice_prefix}-{String(invoiceForm.next_invoice_number || 1).padStart(4, "0")}</span>
+                          <span style={{ fontFamily: "monospace", fontSize: 13, color: accent, fontWeight: 600 }}>{effectivePrefix(invoiceForm.invoice_prefix)}-{String(invoiceForm.next_invoice_number || 1).padStart(4, "0")}</span>
                         </div>
                       </div>
                     </div>
@@ -2908,13 +3331,19 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     </div>
                   </div>
                   <button className="btn-primary" style={{ marginTop: 14, padding: "12px 24px", fontSize: 12 }} onClick={async () => {
-                    const { error } = await supabase.from("staff_members").update({
+                    // Zonder next_invoice_number: die teller hoogt alleen de RPC op.
+                    // Uit de (mogelijk verouderde) formulierkopie zette hij de reeks
+                    // na verzendingen op een ander toestel terug (audit S1-11).
+                    const fields = {
                       address: invoiceForm.address || null, kvk_number: invoiceForm.kvk_number || null,
                       btw_id: invoiceForm.btw_id || null, iban: invoiceForm.iban || null,
                       iban_holder: invoiceForm.iban_holder || null, payment_link: invoiceForm.payment_link || null,
-                      invoice_prefix: invoiceForm.invoice_prefix || "INV", next_invoice_number: invoiceForm.next_invoice_number || 1
-                    }).eq("id", staffMember.id).eq("owner_id", salonProfile.id);
+                      invoice_prefix: effectivePrefix(invoiceForm.invoice_prefix),
+                    };
+                    const { error } = await supabase.from("staff_members").update(fields).eq("id", staffMember.id).eq("owner_id", salonProfile.id);
                     if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
+                    setMyStaff(s => ({ ...s, ...fields }));
+                    setInvoiceForm(f => ({ ...f, invoice_prefix: fields.invoice_prefix }));
                     setInvoiceSaved(true); setTimeout(() => setInvoiceSaved(false), 2000);
                   }}>{invoiceSaved ? <><NavIcon name="check" size={13} color={c.btnOnDark} /> {lang === "nl" ? "Opgeslagen" : lang === "es" ? "Guardado" : "Saved"}</> : t.saveChanges}</button>
                 </div>
@@ -2930,7 +3359,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   {services.length === 0 && (
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 14 }}>
                       <div style={{ opacity: 0.4 }}><NavIcon name="diensten" size={32} color={c.textMuted} /></div>
-                      <div style={{ fontSize: 12, color: c.textSub }}>{t.noServices}</div>
+                      <div style={{ fontSize: 12, color: c.textSub }}>{t.noServices || L3("Je hebt nog geen diensten", "No services yet", "Todavía no hay servicios")}</div>
                     </div>
                   )}
                   {services.map(s => {
@@ -3184,7 +3613,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <SL>{t.selectServiceFor}</SL>
                     <select className="input-field" value={addApptForm.service_id} onChange={e => setAddApptForm(f => ({...f, service_id: e.target.value, variant_id: ""}))} style={{ fontSize: 12 }}>
                       <option value="" style={{ background: c.selectBg }}>—</option>
-                      {services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{lang === "nl" ? s.name_nl : s.name_en} — {fmtAmt(cur, parseFloat(s.price))}</option>)}
+                      {/* Haar teamprijs, zoals de boekingspagina rekent (S1-14). */}
+                      {services.map(s => <option key={s.id} value={s.id} style={{ background: c.selectBg }}>{svcNameOf(s)} — {fmtAmt(cur, myPriceOf(s, null))}</option>)}
                     </select>
                   </div>
                   {(() => {
@@ -3195,7 +3625,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         <SL>{lang === "nl" ? "Variant" : lang === "es" ? "Variante" : "Variant"}</SL>
                         <select className="input-field" value={addApptForm.variant_id || ""} onChange={e => setAddApptForm(f => ({...f, variant_id: e.target.value}))} style={{ fontSize: 12 }}>
                           <option value="" style={{ background: c.selectBg }}>—</option>
-                          {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{v.name_nl} — {fmtAmt(cur, parseFloat(v.price))}</option>)}
+                          {selSvc.variants.map(v => <option key={v.id} value={v.id} style={{ background: c.selectBg }}>{v.name_nl} — {fmtAmt(cur, myPriceOf(selSvc, v))}</option>)}
                         </select>
                       </div>
                     );
@@ -3223,7 +3653,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>
                             {t.birthday} ({t.allergiesOptional})
                           </div>
-                          <input className="input-field" type="date" max={fmt(getToday())} value={addApptForm.client_birthday || ""} onChange={e => setAddApptForm(f => ({...f, client_birthday: e.target.value}))} style={{ fontSize: 12, width: "100%" }} />
+                          <input className="input-field" type="date" max={fmt(salonToday())} value={addApptForm.client_birthday || ""} onChange={e => setAddApptForm(f => ({...f, client_birthday: e.target.value}))} style={{ fontSize: 12, width: "100%" }} />
                         </div>
                       )}
                     </div>
@@ -3233,6 +3663,20 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <input type="checkbox" checked={addApptForm.notify_client !== false} onChange={e => setAddApptForm(f => ({...f, notify_client: e.target.checked}))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0 }} />
                       {lang === "nl" ? "Stuur bevestiging naar de klant" : lang === "es" ? "Enviar confirmación al cliente" : "Send confirmation to the client"}
                     </label>
+                    {/* Taal van de klant: bevestiging nu en herinneringen/annuleringen
+                        later gaan in deze taal, niet in de schermtaal (S1-21). */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 12, color: c.textSub }}>{L3("Taal van de klant", "Client's language", "Idioma del cliente")}</span>
+                      <div role="radiogroup" aria-label={L3("Taal van de klant", "Client's language", "Idioma del cliente")} style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 8, border: `1px solid ${c.inputBorder}` }}>
+                        {[["nl", "NL"], ["en", "EN"], ["es", "ES"]].map(([code, label]) => {
+                          const on = (addApptForm.lang || ownerLangFor(salonProfile.country_code)) === code;
+                          return (
+                            <button key={code} type="button" role="radio" aria-checked={on} onClick={() => setAddApptForm(f => ({ ...f, lang: code }))}
+                              style={{ padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", fontFamily: "'Jost',sans-serif", background: on ? accent : "transparent", color: on ? c.btnOnDark : c.textSub }}>{label}</button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <button className="btn-primary" style={{ marginTop: 16 }} disabled={addApptLoading || !addApptForm.service_id || !addApptForm.date || !addApptForm.time || !addApptForm.client_name || !addApptForm.client_email}
@@ -3240,8 +3684,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     setAddApptLoading(true);
                     const svc = services.find(s => s.id === addApptForm.service_id);
                     const variant = svc?.variants?.find(v => v.id === addApptForm.variant_id);
-                    const svcLabel = svc ? (lang === "nl" ? svc.name_nl : svc.name_en) + (variant ? " — " + variant.name_nl : "") + ` (${myStaff.name})` : "";
-                    const price = variant ? variant.price : (svc?.price || 0);
+                    const svcLabel = svc ? svcNameOf(svc) + (variant ? " — " + variant.name_nl : "") + ` (${myStaff.name})` : "";
+                    // Haar teamprijs als de eigenaar die heeft ingesteld (S1-14).
+                    const price = svc ? myPriceOf(svc, variant) : 0;
+                    const apptLang = addApptForm.lang || ownerLangFor(salonProfile.country_code);
                     const duration = variant ? variant.duration : (svc?.duration || 60);
                     const email = addApptForm.client_email.toLowerCase().trim();
                     // Vorm-check: een "." of "geen" als adres ging tot nu toe door
@@ -3270,7 +3716,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       date: addApptForm.date, time: addApptForm.time,
                       client_name: addApptForm.client_name, client_email: email, client_phone: addApptForm.client_phone || null,
                       payment_method: "on-arrival", status: "confirmed", invoice_sent: false,
-                      staff_id: staffMember.id, staff_name: myStaff.name
+                      staff_id: staffMember.id, staff_name: myStaff.name,
+                      lang: apptLang,
                     };
                     const { data: appt, error: apptError } = await supabase.from("appointments").insert(apptData).select("*").single();
                     if (apptError || !appt) {
@@ -3278,7 +3725,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       setAddApptLoading(false);
                       return;
                     }
-                    setAppointments(a => [appt, ...a]);
+                    // Dezelfde velden eraf als de RPC wegstript (schakelaars van de eigenaar).
+                    setAppointments(a => [stripRow(appt), ...a]);
                     // Client confirmation — skipped when "notify client" is
                     // unticked (e.g. back-filling a phone booking). The
                     // cancellation token only feeds this email's cancel button,
@@ -3292,18 +3740,22 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       // medewerker (die kan op reis of in een ander land zitten).
                       const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time, salonProfile.country_code);
                       await sendEmails("booking_confirmation", {
+                        appointment_id: appt.id,
                         client_name: addApptForm.client_name, client_email: email,
                         service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
                         payment: "on-arrival", price, salon_name: salonProfile.business_name, owner_email: null,
-                        salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang, currency: cur,
+                        salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang: apptLang, currency: cur,
                         cancel_url: cancelUrl || null,
                         // Zelfde termijn als cancel-appointment handhaaft.
                         cancel_deadline_hours: salonProfile.cancel_deadline_hours ?? 0
                       });
                     }
-                    // Notify owner about new booking
+                    // Notify owner about new booking. Geen owner_email meer: het
+                    // adres van de eigenaar vult send-emails zelf in (en
+                    // staff_salon_profile levert het niet meer).
                     await sendEmails("booking_notification", {
-                      owner_email: salonProfile.email || null, staff_emails: [],
+                      appointment_id: appt.id,
+                      staff_emails: [],
                       client_name: addApptForm.client_name, client_phone: addApptForm.client_phone || null,
                       service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
                       price, salon_name: salonProfile.business_name,
@@ -3349,13 +3801,15 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     : "One treatment becomes temporarily unbookable with you — the rest of your agenda stays open.")
                   : (lang === "nl"
                     ? "Klanten kunnen dan geen afspraak bij jou boeken in dit tijdvak of op deze dag."
+                    : lang === "es"
+                    ? "Los clientes no podrán reservar contigo en esta franja horaria ni en este día."
                     : "Clients won't be able to book you during this window or on this day.")}
               </div>
               {!blockEditId && (
               <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
                 {[
-                  { key: "time", nl: "Tijdvak", en: "Time window" },
-                  { key: "day", nl: "Hele dag", en: "Whole day" },
+                  { key: "time", nl: "Tijdvak", en: "Time window", es: "Franja horaria" },
+                  { key: "day", nl: "Hele dag", en: "Whole day", es: "Todo el día" },
                 ].map(opt => {
                   const active = blockForm.mode === opt.key;
                   return (
@@ -3369,7 +3823,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         border: `1px solid ${active ? `${c.danger}4d` : c.inputBorder}`,
                         fontFamily: "'Jost', sans-serif",
                       }}
-                    >{lang === "nl" ? opt.nl : opt.en}</button>
+                    >{lang === "nl" ? opt.nl : lang === "es" ? opt.es : opt.en}</button>
                   );
                 })}
               </div>
@@ -3432,7 +3886,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <select className="input-field" value={blockForm.service_id || ""} onChange={e => setBlockForm(f => ({ ...f, service_id: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
                       <option value="">{lang === "nl" ? "Kies een behandeling…" : lang === "es" ? "Elige un tratamiento…" : "Choose a treatment…"}</option>
                       {(services || []).map(sv => (
-                        <option key={sv.id} value={sv.id}>{lang === "nl" ? (sv.name_nl || sv.name) : (sv.name_en || sv.name_nl || sv.name)}</option>
+                        <option key={sv.id} value={sv.id}>{svcNameOf(sv)}</option>
                       ))}
                     </select>
                     {blockForm.service_id && (
@@ -3473,6 +3927,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18, lineHeight: 1.5 }}>
                 {lang === "nl"
                   ? "Werk eenmalig op een dag (of tijden) buiten je vaste rooster. Klanten kunnen je dan gewoon boeken — ook als een collega diezelfde dag een eigen uitzondering heeft."
+                  : lang === "es"
+                  ? "Trabaja una vez fuera de tu horario semanal. Los clientes pueden reservar contigo con normalidad — aunque una compañera tenga su propia excepción ese mismo día."
                   : "Work once outside your weekly schedule. Clients can book you as normal — even if a teammate has her own exception that same day."}
               </div>
               {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
