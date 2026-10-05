@@ -16859,7 +16859,14 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           {hasBreak && (
                             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
                               <span style={{ fontSize: 9.5, color: c.textLabel, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Pauze" : lang === "es" ? "Pausa" : "Break"}</span>
-                              <select value={hours.break_start} onChange={e => setDay({ break_start: e.target.value, break_end: hours.break_end <= e.target.value ? (hourOpts.find(x => x > e.target.value && x < hours.close) || hours.break_end) : hours.break_end })} style={selStyle}>
+                              <select value={hours.break_start} onChange={e => {
+                                // Ligt het eind niet meer ná de nieuwe start, dan schuift
+                                // het mee naar een half uur later (twee kwartierstappen,
+                                // zoals vroeger met TIMES); past dat niet vóór sluiten,
+                                // dan het eerstvolgende kwartier.
+                                const later = hourOpts.filter(x => x > e.target.value && x < hours.close);
+                                setDay({ break_start: e.target.value, break_end: hours.break_end <= e.target.value ? (later[1] || later[0] || hours.break_end) : hours.break_end });
+                              }} style={selStyle}>
                                 {timeOptionsWith(hourOpts.filter(x => x > hours.open && x < hours.close), hours.break_start).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
                               </select>
                               <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
@@ -17302,24 +17309,45 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       één medewerker en tijdvakken, zoveel per datum als nodig.
                       Rijen uit één opslagactie delen created_at en vormen samen
                       één regel. Dienst- en wekelijkse blokkades staan in de
-                      agenda en blijven daar. */}
+                      agenda en blijven daar.
+                    Een groep kan gaten hebben: losse medewerkerdagen (bv. 19,
+                    20, 21 en 23 oktober) die bij een salonbrede sluiting samen
+                    naar rijen verhuizen, delen created_at; een oude reeks mist
+                    een later overschreven dag. Daarom één regel per reeks
+                    aaneengesloten dagen, met alleen de sleutels/rijen van die
+                    reeks. Anders toonde de lijst "19 – 23" en vulde bewerken
+                    de 22e erbij in. */}
                 {(() => {
                   const groups = new Map();
                   for (const [date, v] of Object.entries(salonData.day_overrides || {})) {
                     if (!v || v.type !== "blocked") continue;
                     const gk = v.block_time_start ? `json|t|${date}` : `json|d|${v.from || date}|${v.to || ""}|${v.staff_id || ""}`;
-                    if (!groups.has(gk)) groups.set(gk, { key: gk, source: "json", dates: [], ids: [], v });
-                    groups.get(gk).dates.push(date);
+                    if (!groups.has(gk)) groups.set(gk, { key: gk, source: "json", items: [], v });
+                    groups.get(gk).items.push({ date, id: null });
                   }
                   for (const r of (salonData.staff_blocks || [])) {
                     if (r.service_id || r.weekday != null || (r.kind && r.kind !== "block")) continue;
                     const gk = ["rows", r.staff_id || "", r.block_time_start || "", r.block_time_end || "", r.reason || "", r.created_at || r.id].join("|");
-                    if (!groups.has(gk)) groups.set(gk, { key: gk, source: "rows", dates: [], ids: [], v: { staff_id: r.staff_id || null, reason: r.reason || "", block_time_start: r.block_time_start || null, block_time_end: r.block_time_end || null } });
-                    const g = groups.get(gk);
-                    g.dates.push(r.date); g.ids.push(r.id);
+                    if (!groups.has(gk)) groups.set(gk, { key: gk, source: "rows", items: [], v: { staff_id: r.staff_id || null, reason: r.reason || "", block_time_start: r.block_time_start || null, block_time_end: r.block_time_end || null } });
+                    groups.get(gk).items.push({ date: r.date, id: r.id });
                   }
-                  const all = [...groups.values()].map(g => ({ ...g, dates: [...g.dates].sort() }))
-                    .sort((a, b) => (a.dates[0] < b.dates[0] ? -1 : a.dates[0] > b.dates[0] ? 1 : 0));
+                  // parseDate = lokale middernacht, dus +1 is altijd de volgende kalenderdag.
+                  const nextDay = (ds) => { const d = parseDate(ds); d.setDate(d.getDate() + 1); return fmt(d); };
+                  const all = [];
+                  for (const g of groups.values()) {
+                    const items = [...g.items].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+                    let run = null;
+                    for (const it of items) {
+                      const prev = run ? run.dates[run.dates.length - 1] : null;
+                      if (!run || (it.date !== prev && it.date !== nextDay(prev))) {
+                        run = { key: `${g.key}|${it.date}`, source: g.source, dates: [], ids: [], v: g.v };
+                        all.push(run);
+                      }
+                      if (it.date !== prev) run.dates.push(it.date);
+                      if (it.id) run.ids.push(it.id);
+                    }
+                  }
+                  all.sort((a, b) => (a.dates[0] < b.dates[0] ? -1 : a.dates[0] > b.dates[0] ? 1 : 0));
                   return all.map(g => {
                   const v = g.v;
                   const date = g.dates[0];
