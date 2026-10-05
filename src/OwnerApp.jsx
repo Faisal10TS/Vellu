@@ -3233,6 +3233,10 @@ function csvRowsToClients(rows) {
 function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [], cur = "€", birthdayOn = false, loyalty = null, countryCode = "NL", onOpenReceivables = null }) {
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState([]);
+  // Verborgen klanten ("Klant verwijderen" bij een klant met afspraken):
+  // apart bewaard, zodat de eigenaar ze kan terugzien en terugzetten.
+  const [hiddenClients, setHiddenClients] = useState([]);
+  const [showHidden, setShowHidden] = useState(false);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -3273,6 +3277,13 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   // Open stempelkaartcodes per e-mailadres (kind = 'loyalty', ongebruikt,
   // niet verlopen) — voor de klantkaart.
   const [loyaltyCodes, setLoyaltyCodes] = useState({});
+  // Aantal stempelkaartcodes dat ooit is uitgegeven per "email|staff_id"
+  // (gebruikt en verlopen tellen mee) — de trigger geeft pas een nieuwe code
+  // als floor(bezoeken / nodig) daarboven komt.
+  const [loyaltyIssued, setLoyaltyIssued] = useState({});
+  // Stempelkaart-schakelaars: één tik tegelijk, anders maakte een dubbele tik
+  // twee schaduwrijen voor dezelfde klant.
+  const [loyaltyBusy, setLoyaltyBusy] = useState(false);
   const copyText = async (s, done) => {
     try { await navigator.clipboard.writeText(s); }
     catch {
@@ -3282,14 +3293,33 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     }
     toast.show(done);
   };
+  // Klanten zonder e-mailadres (inloop, telefonisch, Kassa): de kaart krijgt
+  // als sleutel het telefoonnummer in internationale cijfers, anders de naam.
+  // Zonder dit vielen zulke afspraken buiten elke klantkaart — geen kaart,
+  // lege historie en open posten die nergens te zien waren.
+  const telKeyOf = (p) => { const d = waDigits(p, countryCode); return d.length >= 8 ? `tel:${d}` : ""; };
+  const nameKeyOf = (n) => {
+    const s = String(n || "").trim();
+    if (!s || s === "—") return "";
+    const norm = s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    return `naam:${norm || s.toLowerCase()}`;
+  };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       // Appointment-derived clients + owner's manually-added contacts + waitlist + waitlist setting, in parallel.
+      // "Vandaag/nu" op de klok van de salon, niet die van het toestel: een
+      // Bonairiaanse salon die vanaf een Nederlandse telefoon kijkt zag anders
+      // de afspraak van vanmiddag al als voorbij.
+      const salonToday = fmt(salonNow(countryCode));
       const [{ data: appts }, { data: manual }, { data: wl }, { data: prof }, { data: lcodes }] = await Promise.all([
-        supabase
+        // Alle afspraken (fetchAllRows, vaste volgorde op id): PostgREST geeft
+        // er per verzoek hooguit 1000, en daarboven vielen de oudste stilletjes
+        // weg (bezoeken, stempels en open posten te laag). Op datum sorteren
+        // gebeurt hieronder in de browser.
+        fetchAllRows(() => supabase
           .from("appointments")
           // staff_id/staff_assignments/service_breakdown: nodig voor de
           // stempelkaart per teamlid (apptInvolvesStaff), anders telt niets.
@@ -3297,10 +3327,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           // (wat staat er per klant nog open — isOpenReceivable).
           .select("id, is_sale, service_id, service_duration, products, date, time, service_name, service_price, status, invoice_sent, payment_method, paid_at, amount_paid, invoice_view_state, client_email, client_name, client_phone, staff_id, staff_assignments, service_breakdown, clients(id, first_name, last_name, email, phone, birthday)")
           .eq("owner_id", ownerId)
-          .order("date", { ascending: false }),
+          .order("id")),
         fetchAllRows(() => supabase
           .from("manual_clients")
-          .select("id, name, email, phone, notes, hidden, birthday, loyalty_opt_in, loyalty_staff_off, is_business, contact_name")
+          .select("id, name, email, phone, notes, hidden, birthday, loyalty_opt_in, loyalty_staff_off, is_business, contact_name, created_at")
           .eq("owner_id", ownerId)
           .order("id")),
         supabase
@@ -3310,7 +3340,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           .in("status", ["waiting", "notified"])
           // Een dag die voorbij is telt niet meer (Faisal 16-09): de rij verdwijnt
           // hier meteen uit beeld; de nachtelijke cron-job ruimt hem écht op.
-          .gte("date", fmt(getToday()))
+          .gte("date", salonToday)
           .order("created_at", { ascending: false }),
         supabase
           .from("profiles")
@@ -3318,9 +3348,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           .eq("id", ownerId)
           .maybeSingle(),
         // Stempelkaartcodes (RLS: alleen eigen rijen). Alleen als de actie
-        // aanstaat, anders een lege lijst zonder query.
+        // aanstaat, anders een lege lijst zonder query. Álle codes, ook
+        // gebruikte en verlopen: die tellen mee voor wanneer de trigger de
+        // volgende code geeft (loyaltyIssued); de open codes filteren we hier.
         loyalty?.enabled
-          ? supabase.from("birthday_discount_codes").select("code, client_email, discount_pct, expires_on, used_at, visits_at, staff_id").eq("kind", "loyalty").is("used_at", null).gte("expires_on", fmt(getToday()))
+          ? fetchAllRows(() => supabase.from("birthday_discount_codes").select("id, code, client_email, discount_pct, expires_on, used_at, visits_at, staff_id").eq("owner_id", ownerId).eq("kind", "loyalty").order("id"))
           : Promise.resolve({ data: [] }),
       ]);
       if (!cancelled) {
@@ -3328,13 +3360,23 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         setWaitlistEnabled(prof?.waitlist_enabled !== false);
         // Sleutel "email|staff_id" — salonbrede codes hebben een lege staff.
         const byMail = {};
-        for (const r of lcodes || []) { const k = `${String(r.client_email || "").toLowerCase()}|${r.staff_id || ""}`; if (!byMail[k] || r.expires_on > byMail[k].expires_on) byMail[k] = r; }
+        const issued = {};
+        for (const r of lcodes || []) {
+          const k = `${String(r.client_email || "").toLowerCase()}|${r.staff_id || ""}`;
+          issued[k] = (issued[k] || 0) + 1;
+          if (r.used_at || !r.expires_on || r.expires_on < salonToday) continue;
+          if (!byMail[k] || r.expires_on > byMail[k].expires_on) byMail[k] = r;
+        }
         setLoyaltyCodes(byMail);
+        setLoyaltyIssued(issued);
       }
       if (cancelled) return;
-      const nowMs = Date.now();
+      const nowMs = salonNow(countryCode).getTime();
+      // Nieuwste afspraak eerst (de query loopt op id voor het bladeren).
+      const apptsSorted = (appts || []).slice().sort((x, y) => String(y.date || "").localeCompare(String(x.date || "")) || String(y.time || "").localeCompare(String(x.time || "")));
+      // Klanten zonder e-mailadres: zie telKeyOf/nameKeyOf hierboven.
       const byEmail = new Map();
-      for (const a of appts || []) {
+      for (const a of apptsSorted) {
         // Sleutel = het e-mailadres OP DE AFSPRAAK. Dat is wat de salon ziet
         // en bewerkt, waar de mails heen gaan en wat Samenvoegen herschrijft.
         // De gedeelde clients-rij (client_id) kan een ander, ouder adres
@@ -3343,12 +3385,16 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         // omdat de groepering op dat oude adres hing. Alleen terugvallen op
         // de clients-rij als de afspraak zelf geen adres heeft.
         const email = String(a.client_email || a.clients?.email || "").trim().toLowerCase();
-        if (!email) continue;
-        let agg = byEmail.get(email);
+        // Zonder adres: op nummer, anders op naam — behalve een Kassa-verkoop
+        // zonder klant ("Losse verkoop"): die hoort bij niemand.
+        const anonSale = ["losse verkoop", "venta directa", "walk-in sale"].includes(String(a.client_name || "").trim().toLowerCase());
+        const key = email || telKeyOf(a.clients?.phone || a.client_phone) || (anonSale ? "" : nameKeyOf(a.client_name));
+        if (!key) continue;
+        let agg = byEmail.get(key);
         if (!agg) {
-          const fullName = (a.client_name || `${a.clients?.first_name || ""} ${a.clients?.last_name || ""}`.trim() || email);
-          agg = { key: email, email, name: fullName, phone: a.clients?.phone || a.client_phone || "", notes: "", manualId: null, clientId: null, birthday: null, loyaltyOptIn: false, isBusiness: false, contactName: "", outstanding: 0, openItems: [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
-          byEmail.set(email, agg);
+          const fullName = (a.client_name || `${a.clients?.first_name || ""} ${a.clients?.last_name || ""}`.trim() || email || "—");
+          agg = { key, email, name: fullName, phone: a.clients?.phone || a.client_phone || "", notes: "", manualId: null, manualIds: [], clientId: null, birthday: null, loyaltyOptIn: false, loyaltyStaffOff: [], isBusiness: false, contactName: "", outstanding: 0, openItems: [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
+          byEmail.set(key, agg);
         }
         if (!agg.phone && (a.clients?.phone || a.client_phone)) agg.phone = a.clients?.phone || a.client_phone;
         // Verjaardag + id van de gedeelde clients-rij: die vult de klant zelf in
@@ -3356,9 +3402,16 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         // toegevoegde afspraken zonder e-mail hebben er geen), dus vullen zolang
         // het veld nog leeg is. manual_clients wint hieronder alsnog.
         if (!agg.clientId && a.clients?.id) agg.clientId = a.clients.id;
-        if (!agg.birthday && a.clients?.birthday) agg.birthday = a.clients.birthday;
+        // bookingBirthday onthoudt die datum apart: de salon kan hem niet wissen
+        // (UPDATE op clients is dicht), dus Bewerken legt dat uit.
+        if (!agg.birthday && a.clients?.birthday) agg.birthday = agg.bookingBirthday = a.clients.birthday;
         agg.appts.push(a);
-        if (a.status === "completed") { agg.totalSpent += parseFloat(a.service_price || 0); agg.visitCount++; if (!agg.lastVisit || a.date > agg.lastVisit) agg.lastVisit = a.date; }
+        // Besteed telt alles (ook Kassa-verkopen); Bezoeken en Laatst alleen
+        // echte afspraken — wie alleen een nagelolie kocht was niet op bezoek.
+        if (a.status === "completed") {
+          agg.totalSpent += parseFloat(a.service_price || 0);
+          if (!isSaleRow(a)) { agg.visitCount++; if (!agg.lastVisit || a.date > agg.lastVisit) agg.lastVisit = a.date; }
+        }
         // Klantenrekening: wat deze klant nog moet betalen (op rekening,
         // betaalverzoek, "later / factuur"), voor de badge en de kaart.
         if (isOpenReceivable(a)) { agg.outstanding = Math.round((agg.outstanding + outstandingOf(a)) * 100) / 100; agg.openItems.push(a); }
@@ -3368,36 +3421,74 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       // for non-empty fields — the owner explicitly edited them, so they
       // represent the latest intent. The `hidden` flag is carried through so
       // the display can soft-hide clients whose appointments we can't remove.
+      // Een klant zonder e-mailadres hangt aan de afspraken met hetzelfde
+      // telefoonnummer (of, zonder nummer, dezelfde naam). Meerdere rijen voor
+      // één klant (oude dubbelingen: zelfde adres ÉN zelfde naam) komen op één
+      // kaart; manualIds houdt ze allemaal bij, zodat bewerken, verbergen en de
+      // stempelkaart ze samen bijwerken en een gewist veld niet uit een oudere
+      // rij terugkomt.
+      // Eén adres is niet altijd één persoon: bij TTB staan tot 22 mensen op
+      // één organisatieadres en gezinnen op één hotmail. Een klantrij komt dus
+      // alleen op een bestaande kaart als die nog geen klantrij heeft (de kaart
+      // uit de afspraken, zoals altijd) of als de klantrij daar dezelfde naam
+      // draagt (manualNameKey). Anders krijgt ze haar eigen kaart, zodat
+      // bewerken, verwijderen en samenvoegen nooit de rijen van een ander
+      // raken. Oudste rij eerst (created_at), zodat een later toegevoegd
+      // gezinslid de kaart uit de afspraken niet overneemt; heeft een rij
+      // precies de naam van die afspraken, dan gaat zij voor.
       const extra = [];
-      for (const m of manual || []) {
-        const email = String(m.email || "").toLowerCase();
-        const existing = email ? byEmail.get(email) : null;
+      const byMailName = new Map(); // `${email}|${naamsleutel}` → kaart
+      const manualSorted = (manual || []).slice().sort((x, y) => String(x.created_at || "").localeCompare(String(y.created_at || "")) || String(x.id).localeCompare(String(y.id)));
+      for (const m of manualSorted) {
+        const email = String(m.email || "").trim().toLowerCase();
+        const card = email ? byEmail.get(email) : null;
+        if (card && card.manualNameKey === undefined && nameKeyOf(m.name) && nameKeyOf(m.name) === nameKeyOf(card.name)) card.manualNameKey = nameKeyOf(m.name);
+      }
+      for (const m of manualSorted) {
+        const email = String(m.email || "").trim().toLowerCase();
+        const nk = nameKeyOf(m.name);
+        const base = email ? byEmail.get(email) : (byEmail.get(telKeyOf(m.phone)) || byEmail.get(nameKeyOf(m.name)));
+        const fits = (cl) => !!cl && (cl.manualNameKey === undefined || cl.manualNameKey === nk);
+        const existing = (email && byMailName.get(`${email}|${nk}`)) || (fits(base) ? base : null);
+        const staffOff = Array.isArray(m.loyalty_staff_off) ? m.loyalty_staff_off : [];
         if (existing) {
+          const first = !(existing.manualIds || []).length;
+          existing.manualNameKey = nk;
           if (m.name && m.name.trim()) existing.name = m.name;
           if (m.phone) existing.phone = m.phone;
           if (m.notes) existing.notes = m.notes;
           if (m.birthday) existing.birthday = m.birthday;
           existing.manualId = m.id;
-          existing.hidden = !!m.hidden;
-          existing.loyaltyOptIn = !!m.loyalty_opt_in;
-          existing.loyaltyStaffOff = Array.isArray(m.loyalty_staff_off) ? m.loyalty_staff_off : [];
+          existing.manualIds = [...(existing.manualIds || []), m.id];
+          // Verborgen alleen als ÁLLE rijen achter de kaart verborgen zijn —
+          // anders besliste de volgorde van de rijen of de klant zichtbaar was.
+          existing.hidden = first ? !!m.hidden : (!!existing.hidden && !!m.hidden);
+          if (email) byMailName.set(`${email}|${nk}`, existing);
+          // Zelfde regel als de trigger: één rij met het vinkje is genoeg, en
+          // uitgezette stylisten tellen over alle rijen samen.
+          existing.loyaltyOptIn = !!existing.loyaltyOptIn || !!m.loyalty_opt_in;
+          existing.loyaltyStaffOff = [...new Set([...(existing.loyaltyStaffOff || []), ...staffOff])];
           existing.isBusiness = !!m.is_business;
           existing.contactName = m.contact_name || "";
         } else {
-          extra.push({ key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, clientId: null, hidden: !!m.hidden, loyaltyOptIn: !!m.loyalty_opt_in, loyaltyStaffOff: Array.isArray(m.loyalty_staff_off) ? m.loyalty_staff_off : [], isBusiness: !!m.is_business, contactName: m.contact_name || "", outstanding: 0, openItems: [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null });
+          const card = { key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, manualIds: [m.id], manualNameKey: nk, clientId: null, hidden: !!m.hidden, loyaltyOptIn: !!m.loyalty_opt_in, loyaltyStaffOff: staffOff, isBusiness: !!m.is_business, contactName: m.contact_name || "", outstanding: 0, openItems: [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
+          extra.push(card);
+          // Een volgende rij met hetzelfde adres én dezelfde naam komt op deze
+          // kaart; een andere naam op hetzelfde adres krijgt een eigen kaart.
+          if (email) byMailName.set(`${email}|${nk}`, card);
         }
       }
-      const list = [...Array.from(byEmail.values()), ...extra]
-        .filter((cl) => !cl.hidden)
+      const list = [...new Set([...byEmail.values(), ...extra])]
         .map((cl) => {
           const upcoming = cl.appts
             .filter((a) => a.status !== "cancelled" && a.status !== "no_show" && !isSaleRow(a) && new Date(`${a.date}T${a.time || "00:00"}:00`).getTime() >= nowMs)
             .sort((a, b) => `${a.date}T${a.time || ""}`.localeCompare(`${b.date}T${b.time || ""}`));
           cl.next = upcoming[0] || null;
           // Stempels: zelfde telling als de trigger appointments_loyalty_stamp
-          // (afgerond, geen kassaverkoop, sinds loyalty_since).
-          const stampAppts = loyalty?.enabled
-            ? cl.appts.filter((a) => a.status === "completed" && !isSaleRow(a) && (!loyalty.since || a.date >= loyalty.since))
+          // (afgerond, geen kassaverkoop, sinds loyalty_since, en alleen
+          // afspraken met precies dit e-mailadres — zonder adres geen stempels).
+          const stampAppts = loyalty?.enabled && cl.email
+            ? cl.appts.filter((a) => a.status === "completed" && !isSaleRow(a) && String(a.client_email || "").trim().toLowerCase() === cl.email && (!loyalty.since || a.date >= loyalty.since))
             : [];
           cl.loyaltyVisits = stampAppts.length;
           // Per teamlid: stempels per stylist (bezoek telt bij elke stylist die
@@ -3408,28 +3499,63 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           return cl;
         });
       list.sort((a, b) => a.name.localeCompare(b.name));
-      setClients(list);
+      setClients(list.filter((cl) => !cl.hidden));
+      setHiddenClients(list.filter((cl) => cl.hidden));
       setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [ownerId, refreshKey]);
 
+  // Afspraken van één klant herschrijven, op id en in porties van 100 (een
+  // lange id-lijst past anders niet in één verzoek). Alleen rijen van deze
+  // salon (owner_id). Geeft de eerste fout terug, of null.
+  const updateApptsByIds = async (ids, patch) => {
+    for (let i = 0; i < ids.length; i += 100) {
+      const { error } = await supabase.from("appointments").update(patch).eq("owner_id", ownerId).in("id", ids.slice(i, i + 100));
+      if (error) return error;
+    }
+    return null;
+  };
+  // Alle klantrijen (manual_clients) achter een kaart.
+  const manualIdsOf = (cl) => (cl?.manualIds?.length ? cl.manualIds : (cl?.manualId ? [cl.manualId] : []));
+
   const addCustomer = async () => {
     const name = addForm.name.trim();
-    if (!name) return;
+    if (!name || saving) return;
+    const email = addForm.email.trim();
+    const phone = addForm.phone.trim();
+    const notes = addForm.notes.trim();
+    // Staat deze klant (zelfde e-mailadres ÉN dezelfde naam) al met een eigen
+    // klantrij in de lijst (ook verborgen)? Dan die bijwerken in plaats van een
+    // tweede rij — dubbele rijen lieten gewiste velden terugkomen en een
+    // uitgezette stempelkaart gewoon doorlopen. Een andere naam op hetzelfde
+    // adres (gezinslid, collega op een organisatieadres) is een andere klant
+    // en krijgt een nieuwe rij.
+    const known = email ? [...clients, ...hiddenClients].find((cl) => cl.email === email.toLowerCase() && manualIdsOf(cl).length > 0 && cl.manualNameKey === nameKeyOf(name)) : null;
     setSaving(true);
-    const { error } = await supabase.from("manual_clients").insert({
-      owner_id: ownerId,
-      name,
-      email: addForm.email.trim() || null,
-      phone: addForm.phone.trim() || null,
-      notes: addForm.notes.trim() || null,
-      is_business: !!addForm.isBusiness,
-      contact_name: addForm.isBusiness ? (addForm.contactName.trim() || null) : null,
-    });
+    let error;
+    if (known) {
+      const patch = { name, hidden: false };
+      if (phone) patch.phone = phone;
+      if (notes) patch.notes = notes;
+      if (addForm.isBusiness) { patch.is_business = true; patch.contact_name = addForm.contactName.trim() || null; }
+      ({ error } = await supabase.from("manual_clients").update(patch).eq("owner_id", ownerId).in("id", manualIdsOf(known)));
+    } else {
+      ({ error } = await supabase.from("manual_clients").insert({
+        owner_id: ownerId,
+        name,
+        email: email || null,
+        phone: phone || null,
+        notes: notes || null,
+        is_business: !!addForm.isBusiness,
+        contact_name: addForm.isBusiness ? (addForm.contactName.trim() || null) : null,
+      }));
+    }
     setSaving(false);
     if (error) { toast.show(lang === "nl" ? "Toevoegen mislukt — probeer opnieuw" : lang === "es" ? "Error al añadir — inténtalo de nuevo" : "Failed to add — try again", "error"); return; }
-    toast.show(lang === "nl" ? "Klant toegevoegd" : lang === "es" ? "Cliente añadido" : "Customer added");
+    toast.show(known
+      ? (lang === "nl" ? "Deze klant stond al in je lijst — gegevens bijgewerkt" : lang === "es" ? "Este cliente ya estaba en tu lista — datos actualizados" : "This client was already in your list — details updated")
+      : (lang === "nl" ? "Klant toegevoegd" : lang === "es" ? "Cliente añadido" : "Customer added"));
     setAddForm({ name: "", email: "", phone: "", notes: "", isBusiness: false, contactName: "" });
     setAddOpen(false);
     setLastAddedClient(name);
@@ -3456,37 +3582,72 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       toast.show(lang === "nl" ? "Naam is verplicht" : lang === "es" ? "El nombre es obligatorio" : "Name is required", "error");
       return;
     }
+    const newEmail = editForm.email.trim();
+    const newPhone = editForm.phone.trim();
+    const ids = (editing.appts || []).map((a) => a.id).filter(Boolean);
+    const emailChanged = newEmail.toLowerCase() !== String(editing.email || "").toLowerCase();
+    // Afspraken hangen aan hun e-mailadres (zonder adres: aan het
+    // telefoonnummer, anders de naam). Verandert die sleutel, dan gaan de
+    // afspraken mee — anders viel de klant uiteen in twee kaarten: de oude met
+    // alle historie en open posten, en een lege nieuwe met de bewerkte gegevens.
+    let apptPatch = null;
+    if (ids.length > 0) {
+      if (editing.email && !newEmail) {
+        toast.show(lang === "nl" ? "Een klant met afspraken houdt een e-mailadres. Pas het aan of laat het staan." : lang === "es" ? "Un cliente con citas conserva su correo. Cámbialo o déjalo como está." : "A client with appointments keeps an email address. Change it or leave it as it is.", "error");
+        return;
+      }
+      // Kleingeschreven, zoals Samenvoegen en de Kassa: de crons zoeken met een
+      // hoofdlettergevoelige .eq op client_email.
+      if (newEmail && emailChanged) apptPatch = { client_email: newEmail.toLowerCase() };
+      else if (!newEmail && (telKeyOf(newPhone) || nameKeyOf(name)) !== editing.key) apptPatch = { client_name: name, client_phone: newPhone || null };
+    }
+    // Hoort het nieuwe adres (of, zonder adres, het nummer/de naam) al bij een
+    // andere kaart? Dan niet stilzwijgend samenvoegen maar naar Samenvoegen
+    // verwijzen. Afspraken hangen alleen aan het adres, dus met afspraken aan
+    // een van beide kanten is hetzelfde adres altijd een botsing. Tussen twee
+    // klanten ZONDER afspraken alleen bij dezelfde naam: een andere naam op
+    // een gedeeld adres (gezin, organisatie) houdt bij het laden haar eigen
+    // kaart.
+    const clashMail = newEmail && emailChanged ? newEmail.toLowerCase() : "";
+    const clashKey = !newEmail ? (telKeyOf(newPhone) || nameKeyOf(name)) : "";
+    const other = (clashMail || clashKey)
+      ? [...clients, ...hiddenClients].find((cl) => cl.key !== editing.key && (clashMail
+          ? cl.email === clashMail && (ids.length > 0 || (cl.appts || []).length > 0 || cl.manualNameKey === nameKeyOf(name))
+          : cl.key === clashKey))
+      : null;
+    if (other) {
+      toast.show(lang === "nl" ? `Deze gegevens horen al bij ${other.name}. Gebruik Samenvoegen om de twee kaarten samen te voegen.` : lang === "es" ? `Estos datos ya pertenecen a ${other.name}. Usa Combinar para unir las dos fichas.` : `These details already belong to ${other.name}. Use Merge to combine the two cards.`, "error");
+      return;
+    }
     setEditSaving(true);
     const payload = {
       name,
-      email: editForm.email.trim() || null,
-      phone: editForm.phone.trim() || null,
+      email: newEmail || null,
+      phone: newPhone || null,
       notes: editForm.notes.trim() || null,
       // Empty string → null so the DB doesn't try to parse "" as a date.
       birthday: editForm.birthday && /^\d{4}-\d{2}-\d{2}$/.test(editForm.birthday) ? editForm.birthday : null,
       is_business: !!editForm.isBusiness,
       contact_name: editForm.isBusiness ? (editForm.contactName.trim() || null) : null,
     };
-    // Update existing manual_clients row if one already backs this client;
-    // otherwise create one so future loads pick the override up.
-    let error;
-    if (editing.manualId) {
-      ({ error } = await supabase.from("manual_clients").update(payload).eq("id", editing.manualId).eq("owner_id", ownerId));
-    } else {
-      ({ error } = await supabase.from("manual_clients").insert({ owner_id: ownerId, ...payload }));
-    }
-    // De verjaardag staat op twee plekken: manual_clients (wat de salon zelf
-    // noteert) en clients.birthday (wat de klant bij het boeken invulde). De
-    // verjaardagscron leest ze allebei, dus moeten ze hier gelijk lopen —
-    // anders blijft een verjaardag die de eigenaar hier wist tóch een mail
-    // sturen, en ziet hij een hier ingevulde datum niet terug als hij later
-    // zelf een afspraak voor deze klant aanmaakt (die leest clients.birthday).
-    // Alleen bij een echte wijziging, en alleen op de rij die aan een afspraak
-    // van dit salon hangt — de policy clients_update_visited_salon laat de rest
-    // sowieso niet toe.
-    if (!error && editing.clientId && (editing.birthday || "") !== (payload.birthday || "")) {
-      const { error: bErr } = await supabase.from("clients").update({ birthday: payload.birthday }).eq("id", editing.clientId);
-      if (bErr) console.error("Verjaardag synchroniseren met clients mislukt:", bErr);
+    // Eerst de afspraken (gaat dat mis, dan is er nog niets veranderd), dan
+    // de klantrij(en). Mislukt de tweede stap, dan blijft het venster open en
+    // zet nog een keer Opslaan alles recht (de afspraken-stap is herhaalbaar).
+    let error = apptPatch ? await updateApptsByIds(ids, apptPatch) : null;
+    // Update every manual_clients row behind this client (old duplicates
+    // included); otherwise create one so future loads pick the override up.
+    // De verjaardag staat alleen hier: manual_clients is wat de salon zelf
+    // noteert en wint voor deze salon van clients.birthday (wat de klant bij
+    // het boeken invulde). Die gedeelde rij is van alle salons samen en wordt
+    // hier niet meer aangeraakt — de verjaardagscron en "+ Afspraak" lezen de
+    // salonrij eerst.
+    if (!error) {
+      const mids = manualIdsOf(editing);
+      if (mids.length > 0) {
+        ({ error } = await supabase.from("manual_clients").update(payload).eq("owner_id", ownerId).in("id", mids));
+      } else {
+        ({ error } = await supabase.from("manual_clients").insert({ owner_id: ownerId, ...payload }));
+      }
     }
     setEditSaving(false);
     if (error) {
@@ -3502,21 +3663,26 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   const deleteClient = async () => {
     if (!editing) return;
     const hasHistory = (editing.appts || []).length > 0;
+    // Verborgen klanten blijven terug te vinden (en terug te zetten) onder
+    // "Verborgen klanten"; met een e-mailadres zet een nieuwe afspraak haar
+    // vanzelf terug (trigger appointments_unhide_client).
     const confirmMsg = hasHistory
       ? (lang === "nl"
-          ? `Klant verwijderen? ${editing.appts.length} afspra(a)k(en) blijven in je agenda en klanthistorie staan; de klant verdwijnt alleen uit deze lijst.`
+          ? `Klant verwijderen? ${editing.appts.length} afspra(a)k(en) blijven in je agenda en klanthistorie staan; de klant verdwijnt alleen uit deze lijst. Je vindt haar terug onder Verborgen klanten${editing.email ? "; bij een nieuwe afspraak komt ze vanzelf terug" : ""}.`
           : lang === "es"
-          ? `¿Eliminar el cliente? Sus ${editing.appts.length} cita(s) siguen en tu agenda y en el historial; el cliente solo desaparece de esta lista.`
-          : `Delete client? ${editing.appts.length} appointment(s) stay in your agenda and history; the client is only hidden from this list.`)
+          ? `¿Eliminar el cliente? Sus ${editing.appts.length} cita(s) siguen en tu agenda y en el historial; el cliente solo desaparece de esta lista. Lo encontrarás en Clientes ocultos${editing.email ? "; con una nueva cita vuelve solo a la lista" : ""}.`
+          : `Delete client? ${editing.appts.length} appointment(s) stay in your agenda and history; the client is only hidden from this list. You can find them under Hidden clients${editing.email ? "; a new appointment brings them back automatically" : ""}.`)
       : (lang === "nl" ? "Klant definitief verwijderen?" : lang === "es" ? "¿Eliminar este cliente de forma permanente?" : "Permanently delete this client?");
     if (!window.confirm(confirmMsg)) return;
     setDeleting(true);
     let error;
+    const mids = manualIdsOf(editing);
     if (hasHistory) {
-      // Soft-hide via manual_clients. Insert a shadow row if one doesn't
-      // exist yet — the merge logic checks the hidden flag on load.
-      if (editing.manualId) {
-        ({ error } = await supabase.from("manual_clients").update({ hidden: true }).eq("id", editing.manualId).eq("owner_id", ownerId));
+      // Soft-hide via manual_clients (every row behind this card). Insert a
+      // shadow row if one doesn't exist yet — the merge logic checks the
+      // hidden flag on load.
+      if (mids.length > 0) {
+        ({ error } = await supabase.from("manual_clients").update({ hidden: true }).eq("owner_id", ownerId).in("id", mids));
       } else {
         ({ error } = await supabase.from("manual_clients").insert({
           owner_id: ownerId,
@@ -3527,8 +3693,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           hidden: true,
         }));
       }
-    } else if (editing.manualId) {
-      ({ error } = await supabase.from("manual_clients").delete().eq("id", editing.manualId).eq("owner_id", ownerId));
+    } else if (mids.length > 0) {
+      ({ error } = await supabase.from("manual_clients").delete().eq("owner_id", ownerId).in("id", mids));
     }
     setDeleting(false);
     if (error) {
@@ -3541,21 +3707,41 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     setRefreshKey((k) => k + 1);
   };
 
+  // Verborgen klant terugzetten in de lijst (alle klantrijen achter de kaart).
+  const restoreClient = async (cl) => {
+    const mids = manualIdsOf(cl);
+    if (!cl || mids.length === 0) return;
+    const { error } = await supabase.from("manual_clients").update({ hidden: false }).eq("owner_id", ownerId).in("id", mids);
+    if (error) { toast.show(lang === "nl" ? "Terugzetten mislukt" : lang === "es" ? "Error al restaurar" : "Restore failed", "error"); return; }
+    toast.show(lang === "nl" ? "Klant staat weer in je lijst" : lang === "es" ? "El cliente vuelve a estar en tu lista" : "Client is back in your list");
+    // Laatste verborgen klant terug: terug naar de gewone lijst, anders sprong
+    // de volgende "Klant verwijderen" meteen naar de verborgen weergave.
+    if (hiddenClients.length <= 1) setShowHidden(false);
+    setSelected(null);
+    setRefreshKey((k) => k + 1);
+  };
+
   // Stempelkaart alleen voor gekozen klanten: het vinkje per klant staat op
   // de salon-eigen klantrij (manual_clients). Geen rij? Dan een schaduwrij
   // aanmaken, net als bij verbergen. De trigger leest hetzelfde vinkje.
+  // loyaltyBusy: één wijziging tegelijk — een dubbele tik terwijl de eerste
+  // nog liep maakte twee schaduwrijen.
   const setLoyaltyOptIn = async (cl, on) => {
-    if (!cl) return;
+    if (!cl || loyaltyBusy) return;
+    const mids = manualIdsOf(cl);
     let error, newId = cl.manualId || null;
-    if (cl.manualId) {
-      ({ error } = await supabase.from("manual_clients").update({ loyalty_opt_in: on }).eq("id", cl.manualId).eq("owner_id", ownerId));
+    if (mids.length > 0) {
+      setLoyaltyBusy(true);
+      ({ error } = await supabase.from("manual_clients").update({ loyalty_opt_in: on }).eq("owner_id", ownerId).in("id", mids));
     } else {
       if (!cl.email) { toast.show(lang === "nl" ? "Deze klant heeft geen e-mailadres en kan niet sparen" : lang === "es" ? "Este cliente no tiene correo y no puede acumular" : "This client has no email address and cannot collect stamps", "error"); return; }
+      setLoyaltyBusy(true);
       const { data, error: e } = await supabase.from("manual_clients").insert({ owner_id: ownerId, name: cl.name || cl.email, email: cl.email, phone: cl.phone || null, loyalty_opt_in: on }).select("id").maybeSingle();
       error = e; newId = data?.id || null;
     }
+    setLoyaltyBusy(false);
     if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
-    setSelected(s => s && s.key === cl.key ? { ...s, loyaltyOptIn: on, manualId: newId } : s);
+    setSelected(s => s && s.key === cl.key ? { ...s, loyaltyOptIn: on, manualId: newId, manualIds: mids.length > 0 ? mids : (newId ? [newId] : []) } : s);
     toast.show(on ? (lang === "nl" ? "Stempelkaart aan voor deze klant" : lang === "es" ? "Tarjeta activada para este cliente" : "Loyalty card on for this client") : (lang === "nl" ? "Stempelkaart uit voor deze klant" : lang === "es" ? "Tarjeta desactivada para este cliente" : "Loyalty card off for this client"));
     setRefreshKey((k) => k + 1);
   };
@@ -3565,36 +3751,63 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   // deze klant NIET spaart; de trigger slaat die stylisten over. Geen eigen
   // klantrij? Dan een schaduwrij, net als bij het vinkje hierboven.
   const setLoyaltyStaffOff = async (cl, staffId, off) => {
-    if (!cl || !staffId) return;
+    if (!cl || !staffId || loyaltyBusy) return;
     const huidig = Array.isArray(cl.loyaltyStaffOff) ? cl.loyaltyStaffOff : [];
     const next = off ? [...new Set([...huidig, staffId])] : huidig.filter((id) => id !== staffId);
+    const mids = manualIdsOf(cl);
     let error, newId = cl.manualId || null;
-    if (cl.manualId) {
-      ({ error } = await supabase.from("manual_clients").update({ loyalty_staff_off: next }).eq("id", cl.manualId).eq("owner_id", ownerId));
+    if (mids.length > 0) {
+      setLoyaltyBusy(true);
+      ({ error } = await supabase.from("manual_clients").update({ loyalty_staff_off: next }).eq("owner_id", ownerId).in("id", mids));
     } else {
       if (!cl.email) { toast.show(lang === "nl" ? "Deze klant heeft geen e-mailadres en kan niet sparen" : lang === "es" ? "Este cliente no tiene correo y no puede acumular" : "This client has no email address and cannot collect stamps", "error"); return; }
+      setLoyaltyBusy(true);
       const { data, error: e } = await supabase.from("manual_clients").insert({ owner_id: ownerId, name: cl.name || cl.email, email: cl.email, phone: cl.phone || null, loyalty_staff_off: next }).select("id").maybeSingle();
       error = e; newId = data?.id || null;
     }
+    setLoyaltyBusy(false);
     if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
-    setSelected((s) => s && s.key === cl.key ? { ...s, loyaltyStaffOff: next, manualId: newId } : s);
+    setSelected((s) => s && s.key === cl.key ? { ...s, loyaltyStaffOff: next, manualId: newId, manualIds: mids.length > 0 ? mids : (newId ? [newId] : []) } : s);
     const naam = (staffList.find((s) => s.id === staffId) || {}).name || "";
     toast.show(off ? (lang === "nl" ? `Stempelkaart uit bij ${naam}` : lang === "es" ? `Tarjeta desactivada con ${naam}` : `Loyalty card off with ${naam}`) : (lang === "nl" ? `Stempelkaart aan bij ${naam}` : lang === "es" ? `Tarjeta activada con ${naam}` : `Loyalty card on with ${naam}`));
     setRefreshKey((k) => k + 1);
   };
 
+  // Welke kaart blijft er bij samenvoegen over? De afspraken van de bron gaan
+  // naar het e-mailadres van de doelkaart; zonder adres kan die ze niet
+  // overnemen (dan bleef alles staan terwijl er "Samengevoegd" verscheen).
+  // Heeft alleen de bron een adres, of heeft alleen de bron afspraken, dan
+  // blijft de bron staan. Hebben beide afspraken en geen van beide een adres,
+  // dan kan het niet: eerst een e-mailadres invullen via Bewerken.
+  const mergePlan = (source, target) => {
+    const hasAppts = (cl) => (cl?.appts || []).length > 0;
+    if (!target.email && source.email) return { source: target, target: source, swapped: true, blocked: false };
+    if (!target.email && hasAppts(source)) {
+      if (!hasAppts(target)) return { source: target, target: source, swapped: true, blocked: false };
+      return { source, target, swapped: false, blocked: true };
+    }
+    return { source, target, swapped: false, blocked: false };
+  };
+  const mergeBlockedText = () => (lang === "nl"
+    ? "Beide kaarten hebben afspraken maar geen e-mailadres. Geef eerst een van beide een e-mailadres (Bewerken) en voeg daarna samen."
+    : lang === "es"
+    ? "Las dos fichas tienen citas pero ningún correo. Añade primero un correo a una de ellas (Editar) y combínalas después."
+    : "Both cards have appointments but no email address. First give one of them an email address (Edit), then merge.");
+  // Uitleg in de bevestiging als de andere kaart blijft dan gekozen.
+  const mergeSwapText = (keep) => keep.email
+    ? (lang === "nl" ? `${keep.name} blijft staan: alleen die kaart heeft een e-mailadres.` : lang === "es" ? `${keep.name} se conserva: solo esa ficha tiene correo.` : `${keep.name} stays: only that card has an email address.`)
+    : (lang === "nl" ? `${keep.name} blijft staan: daar staan de afspraken op.` : lang === "es" ? `${keep.name} se conserva: esa ficha tiene las citas.` : `${keep.name} stays: that card holds the appointments.`);
+
   // Merge source client INTO target: rewrite all of source's appointments
   // to point at target's email/client_id, carry over notes/phone/birthday
-  // from source's manual_clients row when target lacks them, then drop the
-  // source manual_clients row so it disappears from the aggregation.
-  const mergeClientInto = async (source, target) => {
-    if (!source || !target) return;
-    // Reject only same-row merges. Same-email duplicates ARE valid: they
-    // typically come from two manual_clients rows entered separately for
-    // the same person, and the whole point of Samenvoegen is to collapse
-    // them into one.
-    if (source.manualId && source.manualId === target.manualId) return;
-    if (!source.manualId && !target.manualId && source.email && source.email === target.email && source.key === target.key) return;
+  // when target lacks them, then drop the source manual_clients rows so the
+  // source disappears from the aggregation. Every write is checked; the
+  // success toast only shows when all of them went through.
+  const mergeClientInto = async (src, tgt) => {
+    if (!src || !tgt || src.key === tgt.key) return;
+    const plan = mergePlan(src, tgt);
+    if (plan.blocked) { toast.show(mergeBlockedText(), "error"); return; }
+    const { source, target } = plan;
     setMerging(true);
     try {
       // 1. Rewrite the source's appointments → target's email (+ target's
@@ -3607,34 +3820,52 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       if (ids.length > 0 && target.email && source.email !== target.email) {
         const patch = { client_email: target.email };
         if (target.clientId) patch.client_id = target.clientId;
-        const { error: apptErr } = await supabase
-          .from("appointments")
-          .update(patch)
-          .eq("owner_id", ownerId)
-          .in("id", ids);
+        const apptErr = await updateApptsByIds(ids, patch);
         if (apptErr) throw apptErr;
       }
 
       // 2. Merge manual_clients rows. If source has notes/phone/birthday
       //    that target doesn't, move them over so nothing is lost.
-      if (source.manualId) {
-        const patch = {};
-        if (source.notes && !target.notes) patch.notes = source.notes;
-        if (source.phone && !target.phone) patch.phone = source.phone;
-        if (source.birthday && !target.birthday) patch.birthday = source.birthday;
-        // Stempelkaart-vinkje gaat mee: wie meedeed, blijft meedoen.
-        if (source.loyaltyOptIn && !target.loyaltyOptIn) patch.loyalty_opt_in = true;
-        // Per teamlid uitgezette stylisten: samenvoegen (uit blijft uit).
-        if ((source.loyaltyStaffOff || []).length > 0) patch.loyalty_staff_off = [...new Set([...(target.loyaltyStaffOff || []), ...source.loyaltyStaffOff])];
-        if (Object.keys(patch).length > 0) {
-          if (target.manualId) {
-            await supabase.from("manual_clients").update(patch).eq("id", target.manualId).eq("owner_id", ownerId);
-          } else if (target.email) {
-            await supabase.from("manual_clients").insert({ owner_id: ownerId, email: target.email, name: target.name, ...patch });
-          }
+      const patch = {};
+      if (source.notes && !target.notes) patch.notes = source.notes;
+      // Een kaart zonder e-mailadres met afspraken hangt aan haar eigen
+      // nummer/naam; een ander nummer erbij zou haar klantrij aan een andere
+      // kaart hangen.
+      if (source.phone && !target.phone && (target.email || !(target.appts || []).length)) patch.phone = source.phone;
+      // Verjaardag gaat altijd mee als de doelkaart er geen heeft, ook als die
+      // van de bron uit een boeking kwam (clients.birthday): na het
+      // samenvoegen hangen haar afspraken aan de doelkaart en verdween die
+      // datum anders (geen felicitatie meer). Opslag in de salonrij.
+      if (source.birthday && !target.birthday) patch.birthday = source.birthday;
+      // Stempelkaart-vinkje gaat mee: wie meedeed, blijft meedoen.
+      if (source.loyaltyOptIn && !target.loyaltyOptIn) patch.loyalty_opt_in = true;
+      // Per teamlid uitgezette stylisten: samenvoegen (uit blijft uit).
+      if ((source.loyaltyStaffOff || []).length > 0) patch.loyalty_staff_off = [...new Set([...(target.loyaltyStaffOff || []), ...source.loyaltyStaffOff])];
+      // Zakelijke klant blijft zakelijk.
+      if (source.isBusiness && !target.isBusiness) { patch.is_business = true; if (source.contactName && !target.contactName) patch.contact_name = source.contactName; }
+      // Blijft een verborgen kaart over (de andere kaart had als enige een
+      // e-mailadres of afspraken), dan komt die terug in de lijst — anders
+      // verdween de samengevoegde klant.
+      if (target.hidden) patch.hidden = false;
+      if (Object.keys(patch).length > 0) {
+        const tids = manualIdsOf(target);
+        let err;
+        if (tids.length > 0) {
+          ({ error: err } = await supabase.from("manual_clients").update(patch).eq("owner_id", ownerId).in("id", tids));
+        } else {
+          // Zonder e-mailadres hangt de nieuwe rij via het nummer of de naam
+          // aan de kaart, dus die gaan dan mee.
+          const row = { owner_id: ownerId, email: target.email || null, name: target.name, ...patch };
+          if (!target.email && target.phone && !row.phone) row.phone = target.phone;
+          ({ error: err } = await supabase.from("manual_clients").insert(row));
         }
-        // Remove source's manual row so it stops showing up in the list.
-        await supabase.from("manual_clients").delete().eq("id", source.manualId).eq("owner_id", ownerId);
+        if (err) throw err;
+      }
+      // Remove source's manual rows so it stops showing up in the list.
+      const sids = manualIdsOf(source);
+      if (sids.length > 0) {
+        const { error: delErr } = await supabase.from("manual_clients").delete().eq("owner_id", ownerId).in("id", sids);
+        if (delErr) throw delErr;
       }
       toast.show(lang === "nl" ? `Samengevoegd met ${target.name}` : lang === "es" ? `Combinado con ${target.name}` : `Merged into ${target.name}`);
       setMergeSource(null);
@@ -3678,7 +3909,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         const id = [sorted[0].key, sorted[i].key].sort().join("|");
         if (seen.has(id)) continue;
         seen.add(id);
-        pairs.push({ survivor: sorted[0], source: sorted[i] });
+        // Waarom dit paar: zelfde nummer, of (alleen) dezelfde naam — de kop in
+        // de dialoog zei altijd "Telefoon:", ook bij een naammatch.
+        const d0 = waDigits(sorted[0].phone, countryCode);
+        const byTel = d0.length >= 8 && d0 === waDigits(sorted[i].phone, countryCode);
+        pairs.push({ survivor: sorted[0], source: sorted[i], byTel });
       }
     }
     return pairs;
@@ -3773,14 +4008,38 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       return;
     }
     try {
-      const text = await file.text();
+      // Nederlandse Excel bewaart "CSV (gescheiden door lijstscheidingsteken)"
+      // als Windows-1252, niet als UTF-8: "Zoë" werd dan onleesbaar. Eerst streng
+      // UTF-8 proberen, bij een ongeldige reeks terugvallen op Windows-1252.
+      const buf = await file.arrayBuffer();
+      let text;
+      try { text = new TextDecoder("utf-8", { fatal: true }).decode(buf); }
+      catch { text = new TextDecoder("windows-1252").decode(buf); }
       const rows = parseCSV(text);
       const { records, skipped } = csvRowsToClients(rows);
       if (records.length === 0) {
         toast.show(lang === "nl" ? "Geen klanten in dit bestand. Check de kolomnamen (naam/email/telefoon)." : lang === "es" ? "No se encontraron clientes en este archivo. Revisa los nombres de las columnas (name/email/phone)." : "No clients found in this file. Check column names (name/email/phone).", "error");
         return;
       }
-      setImportPreview({ rows: records, skipped, fileName: file.name });
+      // Hoeveel ingevulde verjaardagen konden we niet lezen (bijv. 12/31/1990)?
+      // Die klanten komen zonder verjaardag binnen; de preview zegt het erbij.
+      // Alleen regels die ook echt een klant worden: zonder naam, voor-/
+      // achternaam én e-mail slaat csvRowsToClients de regel over (zelfde
+      // kolomnamen als daar).
+      const head = (rows[0] || []).map((h) => String(h || "").trim().toLowerCase());
+      const col = (...names) => names.map((n) => head.indexOf(n)).find((i) => i !== -1);
+      const iBday = col("birthday", "verjaardag", "geboortedatum", "date of birth", "dob", "birth date");
+      const iWho = [
+        col("name", "naam", "klant", "client", "customer", "full name", "volledige naam"),
+        col("first_name", "first name", "voornaam", "given name"),
+        col("last_name", "last name", "achternaam", "surname", "family name"),
+        col("email", "e-mail", "e_mail", "mail", "emailadres", "e-mailadres"),
+      ].filter((i) => i !== undefined);
+      const badBirthdays = iBday === undefined ? 0 : rows.slice(1).filter((r) => {
+        const raw = String(r[iBday] || "").trim();
+        return raw && !parseBirthday(raw) && iWho.some((i) => String(r[i] || "").trim());
+      }).length;
+      setImportPreview({ rows: records, skipped, badBirthdays, fileName: file.name });
     } catch (err) {
       console.error("CSV parse error:", err);
       toast.show(lang === "nl" ? "Bestand kon niet gelezen worden" : lang === "es" ? "No se pudo leer el archivo" : "Could not read file", "error");
@@ -3791,15 +4050,40 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     if (!importPreview) return;
     setImporting(true);
     // Dedupe against existing manual_clients on email to avoid duplicate
-    // entries when an owner imports the same export twice.
+    // entries when an owner imports the same export twice — and against the
+    // clients known from bookings (de geladen lijst, ook verborgen): een
+    // geïmporteerde rij voor een boekende klant overschreef anders haar naam,
+    // telefoon en notities op de kaart. Dubbele regels in het bestand zelf
+    // (zelfde e-mailadres ÉN zelfde naam) gaan er één keer in; verschillende
+    // mensen op één adres (gezin, organisatie — bij TTB tot 22 op één adres)
+    // komen er allemaal in. Zonder e-mailadres: zelfde naam + nummer telt als
+    // bekend (anders zette een tweede import na een afgebroken eerste alle
+    // e-mailloze contacten er nog eens in).
     const emails = importPreview.rows.map(r => r.email).filter(Boolean).map(e => e.toLowerCase());
-    let existingEmails = new Set();
+    const known = [...clients, ...hiddenClients];
+    const existingEmails = new Set(known.map(cl => cl.email).filter(Boolean));
     if (emails.length > 0) {
       const { data: existing } = await fetchAllRows(() => supabase.from("manual_clients").select("email").eq("owner_id", ownerId).not("email", "is", null).order("id"));
-      existingEmails = new Set((existing || []).map(r => (r.email || "").toLowerCase()).filter(Boolean));
+      for (const r of existing || []) { const e = String(r.email || "").trim().toLowerCase(); if (e) existingEmails.add(e); }
     }
+    const contactKey = (name, phone) => `${nameKeyOf(name)}|${waDigits(phone, countryCode)}`;
+    const existingContacts = new Set(known.filter(cl => !cl.email).map(cl => contactKey(cl.name, cl.phone)));
+    const seenInFile = new Set(); // `${email}|${naamsleutel}` uit dit bestand
     const toInsert = importPreview.rows
-      .filter(r => !r.email || !existingEmails.has(r.email.toLowerCase()))
+      .filter(r => {
+        if (r.email) {
+          const e = r.email.trim().toLowerCase();
+          if (existingEmails.has(e)) return false;
+          const k = `${e}|${nameKeyOf(r.name)}`;
+          if (seenInFile.has(k)) return false;
+          seenInFile.add(k);
+          return true;
+        }
+        const k = contactKey(r.name, r.phone);
+        if (existingContacts.has(k)) return false;
+        existingContacts.add(k);
+        return true;
+      })
       .map(r => ({ owner_id: ownerId, name: r.name, email: r.email, phone: r.phone, notes: r.notes, birthday: r.birthday || null }));
     const duplicates = importPreview.rows.length - toInsert.length;
     if (toInsert.length === 0) {
@@ -3835,21 +4119,52 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     setRefreshKey(k => k + 1);
   };
 
+  // Zoeken op naam, e-mail of telefoon. Een nummer staat er in allerlei
+  // vormen ("+31 6 1234 5678", "0612345678", "795 1501"); lijkt de zoekterm
+  // op een nummer (minstens 4 cijfers), dan vergelijken we ook de cijfers
+  // zelf en het nummer in internationale vorm (waDigits).
+  const matchesSearch = (cl, term) => {
+    if (!term) return true;
+    if (cl.name.toLowerCase().includes(term) || (cl.email || "").toLowerCase().includes(term) || (cl.phone || "").toLowerCase().includes(term)) return true;
+    const qd = term.replace(/\D/g, "");
+    if (qd.length < 4 || !/^[\d\s()+\-./]+$/.test(term) || !cl.phone) return false;
+    return String(cl.phone).replace(/\D/g, "").includes(qd) || waDigits(cl.phone, countryCode).includes(waDigits(term, countryCode));
+  };
   const q = search.trim().toLowerCase();
-  const filtered = q
-    ? clients.filter((cl) => cl.name.toLowerCase().includes(q) || (cl.email || "").toLowerCase().includes(q) || (cl.phone || "").toLowerCase().includes(q))
-    : clients;
+  // "Verborgen klanten" toont alleen de verborgen kaarten (om terug te zetten).
+  const viewingHidden = showHidden && hiddenClients.length > 0;
+  const baseList = viewingHidden ? hiddenClients : clients;
+  const filtered = q ? baseList.filter((cl) => matchesSearch(cl, q)) : baseList;
 
   const initials = (name) => (name || "?").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
   const fmtDate = (ds) => { try { return new Date(ds + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch { return ds; } };
   const fmtNext = (a) => { try { const d = new Date(a.date + "T12:00:00"); const wd = d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long" }); const ds = d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short" }); return `${wd} ${ds}${a.time ? ` · ${a.time}` : ""}`; } catch { return a.date; } };
+  // Voluit ("31 december 2026") — voor de WhatsApp-tekst aan de klant.
+  const fmtLong = (ds) => { try { const d = new Date(ds + "T12:00:00"); return isNaN(d) ? ds : d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long", year: "numeric" }); } catch { return ds; } };
+  // WhatsApp-aanhef: de voornaam van de klant; bij een zakelijke klant die van
+  // de contactpersoon (de naam is daar de bedrijfsnaam), en anders geen naam.
+  const greetFirst = (cl) => { const f = String((cl?.isBusiness ? cl.contactName : cl?.name) || "").trim().split(/\s+/)[0] || ""; return f === "—" ? "" : f; };
+  const hiText = (cl) => { const f = greetFirst(cl); return lang === "nl" ? `Hoi${f ? ` ${f}` : ""}! ` : lang === "es" ? `¡Hola${f ? ` ${f}` : ""}! ` : `Hi${f ? ` ${f}` : ""}! `; };
+  // Stand van één stempelkaart, met dezelfde regel als de trigger: een code
+  // komt er zodra floor(bezoeken / nodig) groter is dan het aantal codes dat
+  // al is uitgegeven (gebruikt en verlopen tellen mee). Daardoor kan de kaart
+  // vol zijn terwijl er nog geen code is (vinkje later aangezet): dan komt de
+  // code bij het volgende afgeronde bezoek.
+  const stampState = (visits, need, issued, code) => {
+    if (Math.floor(visits / need) > issued) return { full: true, filled: need, left: 0 };
+    const left = Math.max(1, (issued + 1) * need - visits);
+    const filled = (code && visits > 0 && visits % need === 0) ? need : Math.max(0, need - left);
+    return { full: false, filled, left };
+  };
+  // "Nu" op de klok van de salon (zie het laden hierboven).
+  const nowSalonMs = salonNow(countryCode).getTime();
 
   const statusBadge = (a) => {
     if (a.status === "cancelled") return { label: lang === "nl" ? "Geannuleerd" : lang === "es" ? "Cancelada" : "Cancelled", bg: `${c.danger}1a`, color: c.danger };
     if (a.status === "no_show") return { label: "No-show", bg: `${c.danger}1a`, color: c.danger };
     if (a.status === "pending_payment") return { label: lang === "nl" ? "Wacht op betaling" : lang === "es" ? "Pendiente de pago" : "Awaiting payment", bg: `${c.warning}1a`, color: c.warning };
     if (a.status === "completed") return { label: lang === "nl" ? "Voltooid" : lang === "es" ? "Completada" : "Completed", bg: `${accent}1a`, color: accent };
-    if (new Date(`${a.date}T${a.time || "00:00"}:00`).getTime() >= Date.now()) return { label: lang === "nl" ? "Aankomend" : lang === "es" ? "Próxima" : "Upcoming", bg: `${accent}1a`, color: accent };
+    if (new Date(`${a.date}T${a.time || "00:00"}:00`).getTime() >= nowSalonMs) return { label: lang === "nl" ? "Aankomend" : lang === "es" ? "Próxima" : "Upcoming", bg: `${accent}1a`, color: accent };
     return { label: lang === "nl" ? "Bevestigd" : lang === "es" ? "Confirmada" : "Confirmed", bg: c.inputBg, color: c.textSub };
   };
 
@@ -3878,7 +4193,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           className="btn-ghost"
           onClick={() => fileInputRef.current?.click()}
           style={{ width: "auto", padding: "0 14px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, color: accent, borderColor: `${accent}55` }}
-          title={lang === "nl" ? "Importeer CSV/Excel" : lang === "es" ? "Importar CSV/Excel" : "Import CSV/Excel"}
+          title={lang === "nl" ? "Importeer CSV (bewaar je Excel-bestand eerst als CSV)" : lang === "es" ? "Importar CSV (guarda antes tu archivo de Excel como CSV)" : "Import CSV (save your Excel file as CSV first)"}
         >
           <NavIcon name="download" size={14} color="currentColor" /> {lang === "nl" ? "Importeer" : lang === "es" ? "Importar" : "Import"}
         </button>
@@ -3888,8 +4203,22 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         </button>
       </div>
 
-      <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12 }}>
-        {filtered.length} {filtered.length === 1 ? (lang === "nl" ? "klant" : lang === "es" ? "cliente" : "client") : (lang === "nl" ? "klanten" : lang === "es" ? "clientes" : "clients")}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", fontSize: 11, color: c.textMuted, marginBottom: 12 }}>
+        <span>
+          {filtered.length} {viewingHidden
+            ? (filtered.length === 1 ? (lang === "nl" ? "verborgen klant" : lang === "es" ? "cliente oculto" : "hidden client") : (lang === "nl" ? "verborgen klanten" : lang === "es" ? "clientes ocultos" : "hidden clients"))
+            : (filtered.length === 1 ? (lang === "nl" ? "klant" : lang === "es" ? "cliente" : "client") : (lang === "nl" ? "klanten" : lang === "es" ? "clientes" : "clients"))}
+        </span>
+        {/* Verborgen klanten ("Klant verwijderen" bij een klant met afspraken)
+            zijn hier terug te zien en terug te zetten. */}
+        {hiddenClients.length > 0 && (
+          <button type="button" data-clients-hidden-toggle onClick={() => { setShowHidden((v) => !v); setClientsShown(CLIENTS_FOLD); }}
+            style={{ background: "none", border: "none", padding: 0, fontSize: 11, color: accent, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}>
+            {viewingHidden
+              ? (lang === "nl" ? "Terug naar alle klanten" : lang === "es" ? "Volver a todos los clientes" : "Back to all clients")
+              : (lang === "nl" ? `Verborgen klanten (${hiddenClients.length})` : lang === "es" ? `Clientes ocultos (${hiddenClients.length})` : `Hidden clients (${hiddenClients.length})`)}
+          </button>
+        )}
       </div>
 
       {/* Waitlist banner — only shown when the feature is enabled AND there
@@ -3937,7 +4266,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
 
       {filtered.length === 0 ? (
         <div style={{ textAlign: "center", padding: "48px 0", color: c.textMuted, fontSize: 13 }}>
-          {clients.length === 0
+          {baseList.length === 0 && !viewingHidden
             ? (lang === "nl" ? "Nog geen klanten — ze verschijnen hier zodra iemand een afspraak boekt." : lang === "es" ? "Aún no hay clientes — aparecerán aquí cuando alguien reserve una cita." : "No clients yet — they appear here once someone books an appointment.")
             : (lang === "nl" ? "Geen klant gevonden." : lang === "es" ? "No se encontró ningún cliente." : "No customer found.")}
         </div>
@@ -3949,11 +4278,17 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         return (<>
         <div data-client-list className={box ? "vl-scroll" : undefined} style={{ display: "flex", flexDirection: "column", gap: 8, ...(box ? { maxHeight: "clamp(360px, calc(100vh - 330px), 760px)", overflowY: "auto", paddingRight: 6, paddingBottom: 10 } : {}) }}>
           {shown.map((cl) => (
-            <div key={cl.key} data-client-row onClick={() => setSelected(cl)} style={{ display: "flex", alignItems: "center", flexShrink: 0, gap: 14, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, boxShadow: "0 10px 22px -18px rgba(0,0,0,0.35)", cursor: "pointer" }}>
+            <div key={cl.key} data-client-row role="button" tabIndex={0} onClick={() => setSelected(cl)}
+              onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setSelected(cl); } }}
+              style={{ display: "flex", alignItems: "center", flexShrink: 0, gap: 14, padding: "12px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, boxShadow: "0 10px 22px -18px rgba(0,0,0,0.35)", cursor: "pointer" }}>
               <div style={{ width: 42, height: 42, borderRadius: 10, background: `${accent}1a`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{initials(cl.name)}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.name}</div>
+                {/* Op de telefoon staan de labels onder de naam: naast elkaar
+                    drukten "Zakelijk" + "€ 1.234,56 open" de naam weg tot 0 px
+                    en schoof het label over het WhatsApp-icoon. */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: isMobile ? "wrap" : "nowrap", rowGap: 3 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flex: isMobile ? "1 1 100%" : "0 1 auto" }}>{cl.name}</div>
+                  {cl.hidden && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 6, background: c.inputBg, color: c.textSub, border: `1px solid ${c.border}`, letterSpacing: "0.06em", textTransform: "uppercase", flexShrink: 0 }}>{lang === "nl" ? "Verborgen" : lang === "es" ? "Oculto" : "Hidden"}</span>}
                   {/* Klantenrekening (25-09-2026): zakelijke klant en wat er nog openstaat. */}
                   {cl.isBusiness && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 6, background: `${accent}18`, color: accent, border: `1px solid ${accent}33`, letterSpacing: "0.06em", textTransform: "uppercase", flexShrink: 0 }}>{lang === "nl" ? "Zakelijk" : lang === "es" ? "Empresa" : "Business"}</span>}
                   {cl.outstanding > 0.005 && <span data-client-open style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 6, background: `${c.warning}1f`, color: c.warning, border: `1px solid ${c.warning}44`, whiteSpace: "nowrap", flexShrink: 0 }}>{fmtAmt(cur, cl.outstanding)} {lang === "nl" ? "open" : lang === "es" ? "pendiente" : "open"}</span>}
@@ -3968,21 +4303,24 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                   const need = Math.max(1, parseInt(loyalty.visits) || 10);
                   const mail = String(cl.email || "").toLowerCase();
                   // Eén kaart (salon) of één per stylist; alleen kaarten met stempels/code.
+                  // Per teamlid: zoals de kaart zelf alleen actieve stylisten, en
+                  // geen stand bij een stylist bij wie deze klant uitgezet is.
+                  const staffOff = Array.isArray(cl.loyaltyStaffOff) ? cl.loyaltyStaffOff : [];
                   const cards = loyalty.perStaff
-                    ? staffList.map((s) => ({ name: s.name, visits: cl.loyaltyByStaff?.[s.id] || 0, code: loyaltyCodes[`${mail}|${s.id}`] })).filter((x) => x.visits > 0 || x.code)
-                    : [{ name: "", visits: cl.loyaltyVisits || 0, code: loyaltyCodes[`${mail}|`] }].filter((x) => x.visits > 0 || x.code);
+                    ? staffList.filter((s) => s.active !== false && !staffOff.includes(s.id)).map((s) => ({ name: s.name, visits: cl.loyaltyByStaff?.[s.id] || 0, code: loyaltyCodes[`${mail}|${s.id}`], issued: loyaltyIssued[`${mail}|${s.id}`] || 0 })).filter((x) => x.visits > 0 || x.code)
+                    : [{ name: "", visits: cl.loyaltyVisits || 0, code: loyaltyCodes[`${mail}|`], issued: loyaltyIssued[`${mail}|`] || 0 }].filter((x) => x.visits > 0 || x.code);
                   if (cards.length === 0) return null;
                   const anyCode = cards.some((x) => x.code);
                   return (
                     <div style={{ fontSize: 10, color: anyCode ? accent : c.textLabel, marginTop: 2, fontVariantNumeric: "tabular-nums", display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                       <NavIcon name="tag" size={10} color="currentColor" />
-                      {cards.map((x) => { const inCycle = x.visits % need; const filled = (inCycle === 0 && x.code) ? need : inCycle; return `${x.name ? `${x.name} ` : ""}${filled}/${need}${x.code ? ` · ${x.code.code}` : ""}`; }).join(" · ")}
+                      {cards.map((x) => { const st = stampState(x.visits, need, x.issued, x.code); return `${x.name ? `${x.name} ` : ""}${st.filled}/${need}${x.code ? ` · ${x.code.code}` : ""}`; }).join(" · ")}
                     </div>
                   );
                 })()}
               </div>
               {cl.phone && (
-                <a href={getWhatsAppUrl(cl.phone, lang === "nl" ? `Hoi ${(cl.name || "").split(" ")[0]}! ` : lang === "es" ? `¡Hola ${(cl.name || "").split(" ")[0]}! ` : `Hi ${(cl.name || "").split(" ")[0]}! `, countryCode)}
+                <a href={getWhatsAppUrl(cl.phone, hiText(cl), countryCode)}
                   target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
                   aria-label="WhatsApp" style={{ flexShrink: 0, width: 38, height: 38, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <svg width="19" height="19" viewBox="0 0 24 24" fill={accent}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>
@@ -4052,6 +4390,18 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               </button>
             </div>
 
+            {/* Verborgen klant: terugzetten in de lijst. */}
+            {selected.hidden && (
+              <div data-client-hidden style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 12px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 180px", fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
+                  {lang === "nl" ? "Deze klant is verborgen en staat niet in je klantenlijst." : lang === "es" ? "Este cliente está oculto y no aparece en tu lista de clientes." : "This client is hidden and not shown in your client list."}
+                </div>
+                <button className="btn-ghost" data-client-restore onClick={() => restoreClient(selected)} style={{ width: "auto", fontSize: 11, padding: "8px 12px", color: accent, borderColor: `${accent}55` }}>
+                  {lang === "nl" ? "Terugzetten in de lijst" : lang === "es" ? "Restaurar en la lista" : "Restore to the list"}
+                </button>
+              </div>
+            )}
+
             {/* Contact */}
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
               {selected.email && (
@@ -4065,7 +4415,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 </a>
               )}
               {selected.phone && (
-                <a href={getWhatsAppUrl(selected.phone, lang === "nl" ? `Hoi ${(selected.name || "").split(" ")[0]}! ` : lang === "es" ? `¡Hola ${(selected.name || "").split(" ")[0]}! ` : `Hi ${(selected.name || "").split(" ")[0]}! `, countryCode)}
+                <a href={getWhatsAppUrl(selected.phone, hiText(selected), countryCode)}
                   target="_blank" rel="noopener noreferrer"
                   style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: accent, textDecoration: "none" }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill={accent}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg> WhatsApp
@@ -4092,7 +4442,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
                 const need = Math.max(1, parseInt(loyalty.visits) || 10);
                 const mail = String(selected.email || "").toLowerCase();
-                const first = (selected.name || "").split(" ")[0];
+                // Aanhef: voornaam (zakelijk: contactpersoon), anders geen naam.
+                const first = greetFirst(selected);
+                const hi = first ? ` ${first}` : "";
                 // Eén kaart voor de salon, of per teamlid één kaart per stylist
                 // (alleen stylisten met stempels of een open code).
                 // Per teamlid: élke actieve stylist krijgt een regel met een
@@ -4100,12 +4452,14 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 // te zetten); uitgezette stylisten staan onderaan.
                 const staffOff = Array.isArray(selected.loyaltyStaffOff) ? selected.loyaltyStaffOff : [];
                 const cards = loyalty.perStaff
-                  ? staffList.filter((s) => s.active !== false).map((s) => ({ id: s.id, name: s.name, visits: selected.loyaltyByStaff?.[s.id] || 0, code: loyaltyCodes[`${mail}|${s.id}`] || null, off: staffOff.includes(s.id) })).sort((a, b) => (a.off ? 1 : 0) - (b.off ? 1 : 0))
-                  : [{ id: null, name: "", visits: selected.loyaltyVisits || 0, code: loyaltyCodes[`${mail}|`] || null, off: false }];
+                  ? staffList.filter((s) => s.active !== false).map((s) => ({ id: s.id, name: s.name, visits: selected.loyaltyByStaff?.[s.id] || 0, code: loyaltyCodes[`${mail}|${s.id}`] || null, issued: loyaltyIssued[`${mail}|${s.id}`] || 0, off: staffOff.includes(s.id) })).sort((a, b) => (a.off ? 1 : 0) - (b.off ? 1 : 0))
+                  : [{ id: null, name: "", visits: selected.loyaltyVisits || 0, code: loyaltyCodes[`${mail}|`] || null, issued: loyaltyIssued[`${mail}|`] || 0, off: false }];
                 const waMsg = (card) => card.code ? L(
-                  `Hoi ${first}! 🎉 Je stempelkaart${card.name ? ` bij ${card.name}` : ""} bij ${loyalty.salonName} is vol: ${card.code.discount_pct}% korting op je volgende afspraak${card.name ? ` bij ${card.name}` : ""} met code ${card.code.code}, geldig tot ${card.code.expires_on}. Boek: https://vellu.cc/${loyalty.slug}`,
-                  `Hi ${first}! 🎉 Your loyalty card${card.name ? ` with ${card.name}` : ""} at ${loyalty.salonName} is full: ${card.code.discount_pct}% off your next appointment${card.name ? ` with ${card.name}` : ""} with code ${card.code.code}, valid until ${card.code.expires_on}. Book: https://vellu.cc/${loyalty.slug}`,
-                  `¡Hola ${first}! 🎉 Tu tarjeta${card.name ? ` con ${card.name}` : ""} en ${loyalty.salonName} está completa: ${card.code.discount_pct}% de descuento en tu próxima cita${card.name ? ` con ${card.name}` : ""} con el código ${card.code.code}, válido hasta ${card.code.expires_on}. Reserva: https://vellu.cc/${loyalty.slug}`) : "";
+                  `Hoi${hi}! 🎉 Je stempelkaart${card.name ? ` bij ${card.name}` : ""} bij ${loyalty.salonName} is vol: ${card.code.discount_pct}% korting op je volgende afspraak${card.name ? ` bij ${card.name}` : ""} met code ${card.code.code}, geldig tot ${fmtLong(card.code.expires_on)}. Boek: https://vellu.cc/${loyalty.slug}`,
+                  `Hi${hi}! 🎉 Your loyalty card${card.name ? ` with ${card.name}` : ""} at ${loyalty.salonName} is full: ${card.code.discount_pct}% off your next appointment${card.name ? ` with ${card.name}` : ""} with code ${card.code.code}, valid until ${fmtLong(card.code.expires_on)}. Book: https://vellu.cc/${loyalty.slug}`,
+                  `¡Hola${hi}! 🎉 Tu tarjeta${card.name ? ` con ${card.name}` : ""} en ${loyalty.salonName} está completa: ${card.code.discount_pct}% de descuento en tu próxima cita${card.name ? ` con ${card.name}` : ""} con el código ${card.code.code}, válido hasta ${fmtLong(card.code.expires_on)}. Reserva: https://vellu.cc/${loyalty.slug}`) : "";
+                // Schakelaar met het toetsenbord: Enter of spatie.
+                const switchKeys = (fn) => (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } };
                 // Alleen gekozen klanten: schakelaar op de kaart; zonder vinkje
                 // geen stempels (de trigger slaat haar bezoeken over).
                 const takesPart = !loyalty.selectedOnly || !!selected.loyaltyOptIn;
@@ -4114,9 +4468,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                       <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, display: "inline-flex", alignItems: "center", gap: 6 }}><NavIcon name="tag" size={11} color={accent} /> {L("Stempelkaart", "Loyalty card", "Tarjeta de fidelidad")}{loyalty.perStaff ? ` · ${L("per teamlid", "per team member", "por miembro")}` : ""}</div>
                       {loyalty.selectedOnly && (
-                        <div role="switch" aria-checked={takesPart} data-loyalty-switch="1" onClick={() => setLoyaltyOptIn(selected, !takesPart)}
+                        <div role="switch" aria-checked={takesPart} aria-disabled={loyaltyBusy} tabIndex={0} data-loyalty-switch="1" onClick={() => setLoyaltyOptIn(selected, !takesPart)}
+                          onKeyDown={switchKeys(() => setLoyaltyOptIn(selected, !takesPart))}
+                          aria-label={L("Stempelkaart voor deze klant", "Loyalty card for this client", "Tarjeta de fidelidad para este cliente")}
                           title={takesPart ? L("Doet mee. Tik om uit te zetten.", "Takes part. Tap to turn off.", "Participa. Toca para desactivar.") : L("Doet niet mee. Tik om aan te zetten.", "Not taking part. Tap to turn on.", "No participa. Toca para activar.")}
-                          style={{ width: 34, height: 20, borderRadius: 100, position: "relative", background: takesPart ? accent : c.inputBorder, transition: "background 0.2s", flexShrink: 0, cursor: "pointer" }}>
+                          style={{ width: 34, height: 20, borderRadius: 100, position: "relative", background: takesPart ? accent : c.inputBorder, transition: "background 0.2s", flexShrink: 0, cursor: loyaltyBusy ? "wait" : "pointer", opacity: loyaltyBusy ? 0.6 : 1 }}>
                           <div style={{ position: "absolute", top: 2, left: takesPart ? 16 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
                         </div>
                       )}
@@ -4128,10 +4484,14 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                           : L("Doet niet mee. Zet aan om deze klant te laten sparen; eerdere bezoeken tellen dan meteen mee.", "Not taking part. Turn on to let this client collect stamps; earlier visits count right away.", "No participa. Actívalo para que acumule sellos; las visitas anteriores cuentan de inmediato.")}
                       </div>
                     )}
-                    {takesPart && cards.length === 0 && <div style={{ fontSize: 11, color: c.textSub, marginTop: 6 }}>{L("Nog geen stempels", "No stamps yet", "Aún sin sellos")}</div>}
-                    {takesPart && cards.map((card) => {
-                      const inCycle = card.visits % need;
-                      const filled = (inCycle === 0 && card.visits > 0 && card.code) ? need : inCycle;
+                    {/* Stempels hangen aan het e-mailadres (de trigger telt per adres). */}
+                    {!selected.email && <div style={{ fontSize: 11, color: c.textSub, marginTop: 6 }}>{L("Deze klant heeft geen e-mailadres en kan niet sparen", "This client has no email address and cannot collect stamps", "Este cliente no tiene correo y no puede acumular")}</div>}
+                    {selected.email && takesPart && cards.length === 0 && <div style={{ fontSize: 11, color: c.textSub, marginTop: 6 }}>{L("Nog geen stempels", "No stamps yet", "Aún sin sellos")}</div>}
+                    {selected.email && takesPart && cards.map((card) => {
+                      // Zelfde regel als de trigger (stampState): ook een volle
+                      // kaart zonder code (vinkje later aangezet) klopt nu.
+                      const st = stampState(card.visits, need, card.issued, card.code);
+                      const filled = st.filled;
                       const staffOn = !card.off;
                       return (
                         <div key={card.id || "salon"} data-loyalty-card={card.id || "salon"} style={{ marginTop: 8, paddingTop: card.id && cards[0] !== card ? 8 : 0, borderTop: card.id && cards[0] !== card ? `1px solid ${c.border}` : "none" }}>
@@ -4142,9 +4502,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                               {/* Per teamlid: per stylist aan of uit voor deze klant (Faisal
                                   16-09, verzoek TTNB) — uit = geen stempels en geen code bij haar. */}
                               {card.id && (
-                                <div role="switch" aria-checked={staffOn} data-loyalty-staff-switch={card.id} onClick={() => setLoyaltyStaffOff(selected, card.id, staffOn)}
+                                <div role="switch" aria-checked={staffOn} aria-disabled={loyaltyBusy} tabIndex={0} data-loyalty-staff-switch={card.id} onClick={() => setLoyaltyStaffOff(selected, card.id, staffOn)}
+                                  onKeyDown={switchKeys(() => setLoyaltyStaffOff(selected, card.id, staffOn))}
+                                  aria-label={L(`Stempelkaart bij ${card.name}`, `Loyalty card with ${card.name}`, `Tarjeta con ${card.name}`)}
                                   title={staffOn ? L(`Spaart bij ${card.name}. Tik om uit te zetten.`, `Collects with ${card.name}. Tap to turn off.`, `Acumula con ${card.name}. Toca para desactivar.`) : L(`Spaart niet bij ${card.name}. Tik om aan te zetten.`, `Does not collect with ${card.name}. Tap to turn on.`, `No acumula con ${card.name}. Toca para activar.`)}
-                                  style={{ width: 34, height: 20, borderRadius: 100, position: "relative", background: staffOn ? accent : c.inputBorder, transition: "background 0.2s", flexShrink: 0, cursor: "pointer" }}>
+                                  style={{ width: 34, height: 20, borderRadius: 100, position: "relative", background: staffOn ? accent : c.inputBorder, transition: "background 0.2s", flexShrink: 0, cursor: loyaltyBusy ? "wait" : "pointer", opacity: loyaltyBusy ? 0.6 : 1 }}>
                                   <div style={{ position: "absolute", top: 2, left: staffOn ? 16 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
                                 </div>
                               )}
@@ -4160,8 +4522,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                           </div>
                           <div style={{ fontSize: 11, color: card.code ? c.text : c.textSub, marginTop: 6, lineHeight: 1.4 }}>
                             {card.code
-                              ? L(`Open code: ${card.code.code} — ${card.code.discount_pct}% korting${card.name ? ` bij ${card.name}` : ""}, geldig tot ${card.code.expires_on}`, `Open code: ${card.code.code} — ${card.code.discount_pct}% off${card.name ? ` with ${card.name}` : ""}, valid until ${card.code.expires_on}`, `Código abierto: ${card.code.code} — ${card.code.discount_pct}% de descuento${card.name ? ` con ${card.name}` : ""}, válido hasta ${card.code.expires_on}`)
-                              : L(`Nog ${need - inCycle} ${need - inCycle === 1 ? "bezoek" : "bezoeken"} tot ${loyalty.pct}% korting`, `${need - inCycle} more ${need - inCycle === 1 ? "visit" : "visits"} to ${loyalty.pct}% off`, `${need - inCycle} ${need - inCycle === 1 ? "visita" : "visitas"} más para ${loyalty.pct}% de descuento`)}
+                              ? L(`Open code: ${card.code.code} — ${card.code.discount_pct}% korting${card.name ? ` bij ${card.name}` : ""}, geldig tot ${fmtDate(card.code.expires_on)}`, `Open code: ${card.code.code} — ${card.code.discount_pct}% off${card.name ? ` with ${card.name}` : ""}, valid until ${fmtDate(card.code.expires_on)}`, `Código abierto: ${card.code.code} — ${card.code.discount_pct}% de descuento${card.name ? ` con ${card.name}` : ""}, válido hasta ${fmtDate(card.code.expires_on)}`)
+                              : st.full
+                              ? L(`Kaart vol: de code komt bij het volgende afgeronde bezoek${card.name ? ` bij ${card.name}` : ""}.`, `Card full: the code comes with the next completed visit${card.name ? ` with ${card.name}` : ""}.`, `Tarjeta completa: el código llega con la próxima visita completada${card.name ? ` con ${card.name}` : ""}.`)
+                              : L(`Nog ${st.left} ${st.left === 1 ? "bezoek" : "bezoeken"} tot ${loyalty.pct}% korting`, `${st.left} more ${st.left === 1 ? "visit" : "visits"} to ${loyalty.pct}% off`, `${st.left} ${st.left === 1 ? "visita" : "visitas"} más para ${loyalty.pct}% de descuento`)}
                           </div>
                           {card.code && (
                             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
@@ -4265,7 +4629,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       {/* Add customer modal */}
       {addOpen && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => !saving && setAddOpen(false)}>
-          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: 24, maxWidth: 420, width: "100%", color: c.text }} onClick={(e) => e.stopPropagation()}>
+          {/* maxHeight + eigen scroll, zoals de klantkaart: op een telefoon was
+              dit venster hoger dan het scherm en niet te scrollen. */}
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: 24, maxWidth: 420, width: "100%", maxHeight: "88vh", overflowY: "auto", color: c.text }} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>{lang === "nl" ? "Klant toevoegen" : lang === "es" ? "Añadir cliente" : "Add customer"}</div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>{lang === "nl" ? "Voeg handmatig een klant toe aan je lijst." : lang === "es" ? "Añade un cliente a tu lista manualmente." : "Manually add a client to your list."}</div>
             {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
@@ -4310,6 +4676,13 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 ? `${importPreview.rows.length} clientes encontrados en ${importPreview.fileName}`
                 : `${importPreview.rows.length} clients found in ${importPreview.fileName}`}
               {importPreview.skipped > 0 && (lang === "nl" ? ` · ${importPreview.skipped} regels overgeslagen (geen naam/email)` : lang === "es" ? ` · ${importPreview.skipped} filas omitidas (sin nombre/correo)` : ` · ${importPreview.skipped} rows skipped (no name/email)`)}
+              {/* Verjaardagen die we niet konden lezen (bijv. 12/31/1990): die
+                  klanten komen wel binnen, maar zonder verjaardag. */}
+              {importPreview.badBirthdays > 0 && (
+                <span data-import-bad-birthdays style={{ color: c.warning }}>
+                  {(() => { const n = importPreview.badBirthdays; return lang === "nl" ? ` · ${n} ${n === 1 ? "verjaardag" : "verjaardagen"} niet herkend (gebruik dd-mm-jjjj); die klanten komen erin zonder verjaardag` : lang === "es" ? ` · ${n} ${n === 1 ? "cumpleaños no reconocido" : "cumpleaños no reconocidos"} (usa dd-mm-aaaa); esos clientes se importan sin cumpleaños` : ` · ${n} ${n === 1 ? "birthday" : "birthdays"} not recognised (use dd-mm-yyyy); those clients are imported without a birthday`; })()}
+                </span>
+              )}
             </div>
             <div style={{ flex: 1, overflowY: "auto", border: `1px solid ${c.border}`, borderRadius: 12, marginBottom: 14 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
@@ -4338,10 +4711,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             </div>
             <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
               {lang === "nl"
-                ? "Klanten met een e-mail die al in je lijst staat worden overgeslagen (geen dubbele entries)."
+                ? "Klanten die al in je lijst staan (zelfde e-mail, of zonder e-mail: zelfde naam en telefoon) en dubbele regels in het bestand worden overgeslagen."
                 : lang === "es"
-                ? "Los clientes con un correo que ya está en tu lista se omiten (sin duplicados)."
-                : "Clients with an email already in your list are skipped (no duplicates)."}
+                ? "Se omiten los clientes que ya están en tu lista (mismo correo o, sin correo, mismo nombre y teléfono) y las filas repetidas del archivo."
+                : "Clients already in your list (same email, or without email: same name and phone) and repeated rows in the file are skipped."}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn-primary" disabled={importing} onClick={confirmImport} style={{ flex: 1 }}>
@@ -4373,9 +4746,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 360, overflowY: "auto" }}>
               {(() => {
                 const q = mergeSearch.trim().toLowerCase();
+                // Elke andere kaart (op sleutel, niet op e-mail: anders verdwenen
+                // bij een bron zonder adres alle andere kaarten zonder adres).
                 const candidates = clients
-                  .filter(cl => cl.email !== mergeSource.email)
-                  .filter(cl => !q || cl.name.toLowerCase().includes(q) || (cl.email || "").toLowerCase().includes(q) || (cl.phone || "").toLowerCase().includes(q))
+                  .filter(cl => cl.key !== mergeSource.key)
+                  .filter(cl => matchesSearch(cl, q))
                   .slice(0, 25);
                 if (candidates.length === 0) return (
                   <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "16px 0" }}>
@@ -4385,18 +4760,25 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 return candidates.map(cl => (
                   <button key={cl.key} type="button" disabled={merging}
                     onClick={() => {
+                      // Kan de gekozen kaart de afspraken niet overnemen (geen
+                      // e-mailadres), dan blijft de andere staan — dat staat
+                      // dan ook in de vraag.
+                      const plan = mergePlan(mergeSource, cl);
+                      if (plan.blocked) { toast.show(mergeBlockedText(), "error"); return; }
+                      const from = plan.source, into = plan.target;
+                      const why = plan.swapped ? ` ${mergeSwapText(into)}` : "";
                       if (!window.confirm(lang === "nl"
-                        ? `${mergeSource.name} samenvoegen met ${cl.name}? Dit kan niet worden teruggedraaid.`
+                        ? `${from.name} samenvoegen met ${into.name}?${why} Dit kan niet worden teruggedraaid.`
                         : lang === "es"
-                        ? `¿Combinar ${mergeSource.name} con ${cl.name}? Esto no se puede deshacer.`
-                        : `Merge ${mergeSource.name} into ${cl.name}? This can't be undone.`)) return;
-                      mergeClientInto(mergeSource, cl);
+                        ? `¿Combinar ${from.name} con ${into.name}?${why} Esto no se puede deshacer.`
+                        : `Merge ${from.name} into ${into.name}?${why} This can't be undone.`)) return;
+                      mergeClientInto(from, into);
                     }}
                     style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, cursor: merging ? "wait" : "pointer", textAlign: "left", color: c.text, opacity: merging ? 0.5 : 1 }}>
                     <div style={{ width: 36, height: 36, borderRadius: "50%", background: `${accent}1a`, color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{initials(cl.name)}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 500 }}>{cl.name}</div>
-                      <div style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cl.email}{cl.phone ? ` · ${cl.phone}` : ""}</div>
+                      <div style={{ fontSize: 10, color: c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[cl.email, cl.phone].filter(Boolean).join(" · ")}</div>
                     </div>
                     <div style={{ fontSize: 10, color: c.textLabel, flexShrink: 0 }}>{cl.visitCount || 0}×</div>
                   </button>
@@ -4431,22 +4813,40 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {dupePairs.map((p, i) => (
+                {dupePairs.map((p, i) => {
+                  // Alleen knoppen die echt kunnen: een kaart zonder e-mailadres
+                  // kan de afspraken van de ander niet overnemen (mergePlan).
+                  const keepSurvivor = mergePlan(p.source, p.survivor);
+                  const keepSource = mergePlan(p.survivor, p.source);
+                  const canKeepSurvivor = !keepSurvivor.blocked && !keepSurvivor.swapped;
+                  const canKeepSource = !keepSource.blocked && !keepSource.swapped;
+                  // Knoplabel met het e-mailadres (of nummer): bij een naammatch
+                  // stond er anders twee keer hetzelfde "Behoud Anna Jansen".
+                  const keepLabel = (cl) => { const id = cl.email || cl.phone || ""; const nm = `${cl.name}${id ? ` (${id})` : ""}`; return lang === "nl" ? `Behoud ${nm}` : lang === "es" ? `Conservar ${nm}` : `Keep ${nm}`; };
+                  const btnStyle = { flex: 1, fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55`, whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.3 };
+                  return (
                   <div key={i} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 12 }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textMuted, marginBottom: 8 }}>
-                      {lang === "nl" ? "Telefoon: " : lang === "es" ? "Teléfono: " : "Phone: "}{p.survivor.phone}
+                      {p.byTel
+                        ? <>{lang === "nl" ? "Zelfde telefoon: " : lang === "es" ? "Mismo teléfono: " : "Same phone: "}{p.survivor.phone}</>
+                        : (lang === "nl" ? "Zelfde naam" : lang === "es" ? "Mismo nombre" : "Same name")}
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                       {[p.survivor, p.source].map((cl, j) => (
                         <div key={j} style={{ padding: "8px 10px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10 }}>
                           <div style={{ fontSize: 12, fontWeight: 600 }}>{cl.name}</div>
-                          <div style={{ fontSize: 10, color: c.textMuted, wordBreak: "break-word" }}>{cl.email}</div>
+                          <div style={{ fontSize: 10, color: c.textMuted, wordBreak: "break-word" }}>{cl.email || (lang === "nl" ? "geen e-mailadres" : lang === "es" ? "sin correo" : "no email")}</div>
+                          {cl.phone && <div style={{ fontSize: 10, color: c.textMuted, wordBreak: "break-word" }}>{cl.phone}</div>}
                           <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{cl.visitCount || 0} {lang === "nl" ? "bezoeken" : lang === "es" ? "visitas" : "visits"}</div>
                         </div>
                       ))}
                     </div>
+                    {!canKeepSurvivor && !canKeepSource ? (
+                      <div style={{ fontSize: 11, color: c.textSub, marginTop: 10, lineHeight: 1.4 }}>{mergeBlockedText()}</div>
+                    ) : (
                     <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-                      <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55` }} disabled={merging}
+                      {canKeepSurvivor && (
+                      <button className="btn-ghost" style={btnStyle} disabled={merging}
                         onClick={() => {
                           if (!window.confirm(lang === "nl"
                             ? `${p.source.name} samenvoegen met ${p.survivor.name}?`
@@ -4456,9 +4856,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                           mergeClientInto(p.source, p.survivor);
                           setShowDupes(false);
                         }}>
-                        {lang === "nl" ? `Behoud ${p.survivor.name}` : lang === "es" ? `Conservar ${p.survivor.name}` : `Keep ${p.survivor.name}`}
+                        {keepLabel(p.survivor)}
                       </button>
-                      <button className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: "8px", color: accent, borderColor: `${accent}55` }} disabled={merging}
+                      )}
+                      {canKeepSource && (
+                      <button className="btn-ghost" style={btnStyle} disabled={merging}
                         onClick={() => {
                           if (!window.confirm(lang === "nl"
                             ? `${p.survivor.name} samenvoegen met ${p.source.name}?`
@@ -4468,11 +4870,14 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                           mergeClientInto(p.survivor, p.source);
                           setShowDupes(false);
                         }}>
-                        {lang === "nl" ? `Behoud ${p.source.name}` : lang === "es" ? `Conservar ${p.source.name}` : `Keep ${p.source.name}`}
+                        {keepLabel(p.source)}
                       </button>
+                      )}
                     </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             <button className="btn-ghost" style={{ width: "100%", marginTop: 14 }} onClick={() => setShowDupes(false)}>
@@ -4513,6 +4918,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                   const multi = g.entries.length > 1;
                   const open = !!waitlistOpen[g.key];
                   const fmtD = (d) => { try { return new Date(d + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short" }); } catch { return d; } };
+                  // Met weekdag, voor de losse voorkeursdata (stond er als 2026-10-12).
+                  const fmtDW = (d) => { try { const x = new Date(d + "T12:00:00"); return isNaN(x) ? d : x.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short" }); } catch { return d; } };
+                  // Klikbare tekst ook met het toetsenbord (Enter of spatie).
+                  const keyAct = (fn) => (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } };
                   return (
                     <div key={g.key} style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 14, padding: 12 }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, gap: 8 }}>
@@ -4532,7 +4941,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                           onClick={() => setWaitlistOpen(s => ({ ...s, [g.key]: !s[g.key] }))}
                           onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setWaitlistOpen(s => ({ ...s, [g.key]: !s[g.key] })); } }}
                           style={{ fontSize: 11, color: accent, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
-                          <span style={{ display: "inline-block", transform: open ? "rotate(90deg)" : "none", transition: "transform .2s" }}>›</span>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "block", flexShrink: 0, transform: open ? "rotate(90deg)" : "none", transition: "transform .2s" }}><polyline points="9 18 15 12 9 6" /></svg>
                           {lang === "nl"
                             ? `${g.entries.length} voorkeursdata${open ? "" : ` — vanaf ${fmtD(g.firstDate)}`}`
                             : lang === "es"
@@ -4554,7 +4963,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
 
                       {!multi && (
                         <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 4 }}>
-                          {lang === "nl" ? "Voorkeursdatum: " : lang === "es" ? "Fecha preferida: " : "Preferred date: "}<b>{g.entries[0].date}</b>
+                          {lang === "nl" ? "Voorkeursdatum: " : lang === "es" ? "Fecha preferida: " : "Preferred date: "}<b>{fmtDW(g.entries[0].date)}</b>
                         </div>
                       )}
 
@@ -4569,21 +4978,24 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                             <div key={w.id} style={multi ? { background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "8px 10px" } : undefined}>
                               {multi && (
                                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                                  <div style={{ fontSize: 11, color: c.text }}><b>{w.date}</b></div>
+                                  <div style={{ fontSize: 11, color: c.text }}><b>{fmtDW(w.date)}</b></div>
                                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                                     {/* Imperative verb, not a bare "Contacted" —
                                         the label sits on every WAITING row, so a
                                         status-sounding word read as "already done". */}
                                     {w.status === "waiting" ? (
-                                      <span onClick={() => markWaitlistNotified(w.id)} style={{ fontSize: 9, color: accent, cursor: "pointer", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                                      <span role="button" tabIndex={0} onClick={() => markWaitlistNotified(w.id)} onKeyDown={keyAct(() => markWaitlistNotified(w.id))} style={{ fontSize: 9, color: accent, cursor: "pointer", letterSpacing: "0.04em", textTransform: "uppercase" }}>
                                         {lang === "nl" ? "Markeer benaderd" : lang === "es" ? "Marcar como contactado" : "Mark contacted"}
                                       </span>
                                     ) : (
-                                      <span style={{ fontSize: 9, color: c.success || accent, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                                        ✓ {lang === "nl" ? "Benaderd" : lang === "es" ? "Contactado" : "Contacted"}
+                                      <span style={{ fontSize: 9, color: c.success || accent, letterSpacing: "0.04em", textTransform: "uppercase", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "block", flexShrink: 0 }}><polyline points="20 6 9 17 4 12" /></svg>
+                                        {lang === "nl" ? "Benaderd" : lang === "es" ? "Contactado" : "Contacted"}
                                       </span>
                                     )}
-                                    <span onClick={() => { if (window.confirm(lang === "nl" ? "Verwijder deze datum?" : lang === "es" ? "¿Eliminar esta fecha?" : "Delete this date?")) deleteWaitlistEntry(w.id); }}
+                                    <span role="button" tabIndex={0}
+                                      onClick={() => { if (window.confirm(lang === "nl" ? "Verwijder deze datum?" : lang === "es" ? "¿Eliminar esta fecha?" : "Delete this date?")) deleteWaitlistEntry(w.id); }}
+                                      onKeyDown={keyAct(() => { if (window.confirm(lang === "nl" ? "Verwijder deze datum?" : lang === "es" ? "¿Eliminar esta fecha?" : "Delete this date?")) deleteWaitlistEntry(w.id); })}
                                       style={{ fontSize: 9, color: c.danger, cursor: "pointer", letterSpacing: "0.04em", textTransform: "uppercase" }}>
                                       {lang === "nl" ? "Verwijder" : lang === "es" ? "Eliminar" : "Delete"}
                                     </span>
@@ -4653,7 +5065,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           `hidden` flag so their appointment history is preserved. */}
       {editing && createPortal((
         <div style={{ position: "fixed", inset: 0, background: c.overlay, backdropFilter: "blur(8px)", zIndex: 320, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Jost', sans-serif", color: c.text }} onClick={() => !editSaving && !deleting && setEditing(null)}>
-          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: 24, maxWidth: 420, width: "100%", color: c.text }} onClick={(e) => e.stopPropagation()}>
+          {/* maxHeight + eigen scroll: met verjaardag en "Zakelijke klant" was
+              dit venster op een telefoon ~800 px hoog — titel en "Klant
+              verwijderen" vielen buiten beeld en het scrolde niet. */}
+          <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: 24, maxWidth: 420, width: "100%", maxHeight: "88vh", overflowY: "auto", color: c.text }} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 4 }}>{lang === "nl" ? "Klant bewerken" : lang === "es" ? "Editar cliente" : "Edit customer"}</div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 18 }}>
               {(editing.appts || []).length > 0
@@ -4688,6 +5103,19 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                       : lang === "es" ? "Para la acción de cumpleaños — este cliente recibirá ese día su felicitación con código de descuento."
                       : "For the birthday campaign — this client gets their birthday wish and discount code on that day."}
                   </div>
+                  {/* Een verjaardag die de klant zelf bij het boeken invulde
+                      (clients.birthday) kan de salon niet wissen: die rij is van
+                      alle salons samen en UPDATE erop is dicht. Leeg opslaan wist
+                      alleen de eigen datum; daarna staat de boekingsdatum weer op
+                      de kaart en telt die voor de verjaardagsmail. Zeg dat hier,
+                      anders lijkt het opslaan mislukt. */}
+                  {editing.bookingBirthday && !editForm.birthday && (
+                    <div data-client-booking-birthday style={{ fontSize: 10, color: c.warning, marginTop: 4, lineHeight: 1.4 }}>
+                      {lang === "nl" ? `Deze klant vulde bij het boeken zelf een verjaardag in (${fmtDate(editing.bookingBirthday)}). Die kun je hier wel aanpassen, maar niet wissen: na opslaan staat die datum weer op de kaart en geldt hij voor de verjaardagsactie.`
+                        : lang === "es" ? `Este cliente indicó su cumpleaños al reservar (${fmtDate(editing.bookingBirthday)}). Aquí puedes cambiarlo, pero no borrarlo: al guardar, esa fecha vuelve a la ficha y se usa para la acción de cumpleaños.`
+                        : `This client entered their own birthday when booking (${fmtDate(editing.bookingBirthday)}). You can change it here, but not remove it: after saving, that date is back on the card and is used for the birthday campaign.`}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
