@@ -14738,7 +14738,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const out = { ...form };
                 for (const p of pairs) {
                   const velden = { nl: p.nl, en: p.en, es: p.nl.replace(/_nl$/, "_es") };
-                  if (tekstVan(form[velden[bronTaal]]) === tekstVan(stored[velden[bronTaal]])) continue;
+                  // Eerste keer ingevuld in de eigen taal (was leeg) is geen
+                  // hernoeming: de bestaande vertalingen blijven dan staan.
+                  if (!tekstVan(stored[velden[bronTaal]]) || tekstVan(form[velden[bronTaal]]) === tekstVan(stored[velden[bronTaal]])) continue;
                   for (const lg of ["nl", "en", "es"]) {
                     if (lg !== bronTaal && tekstVan(form[velden[lg]]) === tekstVan(stored[velden[lg]])) out[velden[lg]] = "";
                   }
@@ -16608,11 +16610,15 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 };
                 const inviteKnop = (m) => {
                   const st = staffInvite[m.id] || {};
+                  // Al een geldige uitnodiging onderweg (ook die StaffAdder meteen
+                  // na het toevoegen mailde)? Dan "Opnieuw mailen": een nieuwe
+                  // link maakt de vorige ongeldig.
+                  const alGemaild = st.mailed || (m.invite_expires_at && new Date(m.invite_expires_at) > new Date());
                   return (
                     <button type="button" className="btn-ghost" disabled={!!st.mailing} onClick={() => mailStaffInvite(m, m.email)}
                       style={{ fontSize: 10, padding: "6px 12px", color: accent, borderColor: `${accent}44`, display: "inline-flex", alignItems: "center", gap: 6, opacity: st.mailing ? 0.6 : 1, cursor: st.mailing ? "wait" : "pointer" }}>
                       <NavIcon name="mail" size={11} color="currentColor" />
-                      {st.mailed
+                      {alGemaild
                         ? (lang === "nl" ? "Opnieuw mailen" : lang === "es" ? "Enviar de nuevo" : "Send again")
                         : (lang === "nl" ? "Uitnodiging mailen" : lang === "es" ? "Enviar invitación" : "Send invitation")}
                     </button>
@@ -16623,12 +16629,24 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 // maar haar afspraken, omzet en rapporten per medewerker blijven.
                 const zetActief = async (m, actief) => {
                   if (!actief) {
-                    const msg = (lang === "nl"
+                    // Haar komende afspraken blijven op haar naam staan (herinneringen
+                    // gaan gewoon uit). Alleen voor de melding: lukt de telling niet,
+                    // dan valt die zin weg. Kassaverkopen tellen niet als afspraak.
+                    const { count: komend } = await supabase.from("appointments").select("id", { count: "exact", head: true })
+                      .eq("owner_id", salonData.owner_id).eq("staff_id", m.id).gte("date", fmt(salonNow(salonData.country_code)))
+                      .in("status", ["confirmed", "pending_payment"]).or("is_sale.is.null,is_sale.eq.false");
+                    const k = komend || 0;
+                    // Een gekoppelde login houdt (nog) toegang: dat moet de eigenaar
+                    // als eerste lezen, niet achteraan de zin.
+                    const msg = (m.user_id ? (lang === "nl" ? "Let op: haar eigen login houdt toegang tot je agenda en klantgegevens tot je haar definitief verwijdert. " : lang === "es" ? "Atención: su propio acceso sigue dando entrada a tu agenda y a los datos de tus clientes hasta que la elimines definitivamente. " : "Note: her own login keeps access to your agenda and client details until you delete her permanently. ") : "")
+                      + (lang === "nl"
                       ? `${m.name} deactiveren? Klanten kunnen haar dan niet meer kiezen. Haar afspraken en omzet blijven bewaard en je kunt haar later weer activeren.`
                       : lang === "es"
                       ? `¿Desactivar a ${m.name}? Los clientes ya no podrán elegirla. Sus citas e ingresos se conservan y puedes volver a activarla más tarde.`
                       : `Deactivate ${m.name}? Clients can no longer choose her. Her appointments and revenue are kept and you can reactivate her later.`)
-                      + (m.user_id ? (lang === "nl" ? " Haar eigen login blijft werken tot je haar definitief verwijdert." : lang === "es" ? " Su acceso propio sigue funcionando hasta que la elimines definitivamente." : " Her own login keeps working until you delete her permanently.") : "");
+                      + (k > 0 ? (lang === "nl" ? ` Ze heeft nog ${k} komende ${k === 1 ? "afspraak" : "afspraken"}; die blijven op haar naam staan.` : lang === "es" ? ` Aún tiene ${k} ${k === 1 ? "cita próxima" : "citas próximas"}; se quedan a su nombre.` : ` She still has ${k} upcoming ${k === 1 ? "appointment" : "appointments"}; those stay in her name.`) : "")
+                      // Starter: het maximum van 3 telt inactieve teamleden mee.
+                      + (isStarter && (salonData.staff || []).length >= 3 ? (lang === "nl" ? " Op Starter telt ze nog mee voor het maximum van 3 teamleden; verwijder haar definitief om iemand anders toe te voegen." : lang === "es" ? " En Starter sigue contando para el máximo de 3 miembros del equipo; elimínala definitivamente para añadir a otra persona." : " On Starter she still counts towards the maximum of 3 team members; delete her permanently to add someone else.") : "");
                     if (!await showConfirm(msg, { tone: "primary", confirmText: lang === "nl" ? "Deactiveren" : lang === "es" ? "Desactivar" : "Deactivate" })) return;
                   }
                   const { error } = await supabase.from("staff_members").update({ active: actief }).eq("id", m.id).eq("owner_id", salonData.owner_id);
@@ -16646,10 +16664,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 const verwijderDefinitief = async (m) => {
                   // Alleen voor de telling in de waarschuwing; de koppeling gaat er
                   // hieronder sowieso bij alle afspraken af.
-                  const vandaag = fmt(getToday());
+                  // Kassaverkopen (is_sale) tellen niet als afspraak in de melding.
+                  const vandaag = fmt(salonNow(salonData.country_code));
                   const [alle, komend] = await Promise.all([
-                    supabase.from("appointments").select("id", { count: "exact", head: true }).eq("owner_id", salonData.owner_id).eq("staff_id", m.id),
-                    supabase.from("appointments").select("id", { count: "exact", head: true }).eq("owner_id", salonData.owner_id).eq("staff_id", m.id).gte("date", vandaag).in("status", ["confirmed", "pending_payment"]),
+                    supabase.from("appointments").select("id", { count: "exact", head: true }).eq("owner_id", salonData.owner_id).eq("staff_id", m.id).or("is_sale.is.null,is_sale.eq.false"),
+                    supabase.from("appointments").select("id", { count: "exact", head: true }).eq("owner_id", salonData.owner_id).eq("staff_id", m.id).gte("date", vandaag).in("status", ["confirmed", "pending_payment"]).or("is_sale.is.null,is_sale.eq.false"),
                   ]);
                   if (alle.error || komend.error) { toast.show(t.somethingWrong, "error"); return; }
                   const n = alle.count || 0, k = komend.count || 0;
@@ -16659,13 +16678,13 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     ? `¿Eliminar a ${m.name} definitivamente?` + (n > 0 ? ` Tiene ${n} ${n === 1 ? "cita" : "citas"}${k > 0 ? `, de las cuales ${k} ${k === 1 ? "está pendiente" : "están pendientes"} (después quedan sin profesional)` : ""}. Se conservan con su nombre, pero ya no cuentan en los informes por profesional.` : "") + (m.user_id ? " Su acceso ya no le dará entrada a tu salón." : "")
                     : `Delete ${m.name} permanently?` + (n > 0 ? ` She is on ${n} ${n === 1 ? "appointment" : "appointments"}${k > 0 ? `, ${k} of them upcoming (those will no longer have a staff member)` : ""}. They are kept with her name, but no longer count in per-staff reports.` : "") + (m.user_id ? " Her login will no longer give access to your salon." : "");
                   if (!await showConfirm(msg)) return;
-                  if (n > 0) {
-                    // Naam vastleggen waar die nog ontbrak, dan pas de koppeling eraf.
-                    const { error: naamErr } = await supabase.from("appointments").update({ staff_name: m.name }).eq("owner_id", salonData.owner_id).eq("staff_id", m.id).is("staff_name", null);
-                    if (naamErr) { toast.show(t.somethingWrong, "error"); return; }
-                    const { error: losErr } = await supabase.from("appointments").update({ staff_id: null }).eq("owner_id", salonData.owner_id).eq("staff_id", m.id);
-                    if (losErr) { toast.show(t.somethingWrong, "error"); return; }
-                  }
+                  // Altijd, ook als n = 0: de telling slaat kassaverkopen over, maar
+                  // ook die rijen houden haar staff_id vast (FK).
+                  // Naam vastleggen waar die nog ontbrak, dan pas de koppeling eraf.
+                  const { error: naamErr } = await supabase.from("appointments").update({ staff_name: m.name }).eq("owner_id", salonData.owner_id).eq("staff_id", m.id).is("staff_name", null);
+                  if (naamErr) { toast.show(t.somethingWrong, "error"); return; }
+                  const { error: losErr } = await supabase.from("appointments").update({ staff_id: null }).eq("owner_id", salonData.owner_id).eq("staff_id", m.id);
+                  if (losErr) { toast.show(t.somethingWrong, "error"); return; }
                   // staff_services, prijzen, uitsluitingen en blokken gaan via ON DELETE CASCADE mee.
                   const { error } = await supabase.from("staff_members").delete().eq("id", m.id).eq("owner_id", salonData.owner_id);
                   if (error) { toast.show(t.somethingWrong, "error"); return; }
@@ -16732,7 +16751,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                               <input className="input-field" value={editStaffForm.role} onChange={e => setEditStaffForm(f => ({...f, role: e.target.value}))} style={{ fontSize: 12, padding: "7px 10px", flex: 1 }} placeholder={t.staffRole} />
                             </div>
                             <input className="input-field" type="email" value={editStaffForm.email || ""} onChange={e => setEditStaffForm(f => ({...f, email: e.target.value}))} placeholder={lang === "nl" ? "E-mail voor login (optioneel)" : lang === "es" ? "Correo de acceso (opcional)" : "Login email (optional)"} style={{ fontSize: 12, padding: "7px 10px" }} />
-                            {salonData.account_type === "team" && !m.user_id && (
+                            {salonData.account_type === "team" && !m.user_id && m.active !== false && (
                               <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.45, marginTop: -2 }}>
                                 {lang === "nl" ? "Bij een nieuw of gewijzigd adres krijgt ze na opslaan een link per e-mail om zelf haar login te maken."
                                   : lang === "es" ? "Si la dirección es nueva o cambia, al guardar recibe un enlace por correo para crear su propio acceso."
@@ -16942,8 +16961,17 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Leeg = alle diensten" : lang === "es" ? "Vacío = todos los servicios" : "Empty = all services"}</div>
                           </div>
                         )}
+                        {/* Inactief teamlid: geen uitnodiging of login (die zou haar
+                            weer toegang geven); eerst activeren. */}
+                        {salonData.account_type === "team" && !m.user_id && m.active === false && (
+                          <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.45, marginBottom: 8 }}>
+                            {lang === "nl" ? "Ze is inactief. Activeer haar eerst als ze een login moet krijgen."
+                              : lang === "es" ? "Está inactiva. Actívala primero si necesita un acceso."
+                              : "She is inactive. Activate her first if she needs a login."}
+                          </div>
+                        )}
                         {/* Uitnodiging per e-mail: op elk plan (zie mailStaffInvite). */}
-                        {salonData.account_type === "team" && !m.user_id && (
+                        {salonData.account_type === "team" && !m.user_id && m.active !== false && (
                           <div style={{ padding: "12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 12, marginBottom: 8 }}>
                             <div style={{ fontSize: 10, fontWeight: 600, color: accent, marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}><NavIcon name="mail" size={10} color={accent} /> {lang === "nl" ? "Uitnodiging per e-mail" : lang === "es" ? "Invitación por correo" : "Invitation by e-mail"}</div>
                             <div style={{ fontSize: 10, color: c.textSub, lineHeight: 1.45, marginBottom: m.email ? 8 : 0 }}>
@@ -16955,13 +16983,13 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           </div>
                         )}
                         {/* Zelf een login met wachtwoord aanmaken is Professional. */}
-                        {salonData.account_type === "team" && !m.user_id && isStarter && (
+                        {salonData.account_type === "team" && !m.user_id && m.active !== false && isStarter && (
                           <div style={{ padding: "12px", background: `${accent}08`, border: `1px dashed ${accent}33`, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                             <div style={{ fontSize: 10, color: c.textSub }}><NavIcon name="key" size={10} color={accent} /> {lang === "nl" ? "Zelf een login met wachtwoord aanmaken zit in Professional." : lang === "es" ? "Crear tú un acceso con contraseña es una función de Professional." : "Creating a login with a password yourself is a Professional feature."}</div>
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: accent, borderColor: `${accent}44` }} onClick={goUpgrade}>{lang === "nl" ? "Upgraden" : lang === "es" ? "Mejorar plan" : "Upgrade"}</button>
                           </div>
                         )}
-                        {salonData.account_type === "team" && !m.user_id && !isStarter && (
+                        {salonData.account_type === "team" && !m.user_id && m.active !== false && !isStarter && (
                           <div style={{ padding: "12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 12 }}>
                             <div style={{ fontSize: 10, fontWeight: 600, color: accent, marginBottom: 6 }}><NavIcon name="key" size={10} color={accent} /> {t.inviteStaffDesc}</div>
                             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -17047,6 +17075,10 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 ) : (
                 <StaffAdder ownerId={salonData.owner_id} services={salonData.services} lang={lang} t={t} accent={accent} salonHours={salonData.business_hours} onAdd={(member) => {
                   update(d => { d.staff = [...(d.staff || []), member]; return d; });
+                  // StaffAdder mailt in een teamsalon meteen de uitnodiging; de knop
+                  // op de kaart zegt dan "Opnieuw mailen" (een nieuwe link maakt
+                  // die eerste ongeldig).
+                  if (salonData.account_type === "team" && member?.email) setStaffInvite(prev => ({ ...prev, [member.id]: { ...(prev[member.id] || {}), mailed: true } }));
                 }} />
                 )}
               </div>
