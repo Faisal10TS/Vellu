@@ -22,6 +22,7 @@ import {
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf, staffScopedRow, partLabelOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, isOpenReceivable, receivableKeyOf, ageLabel, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
   useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars, fetchAllRows,
+  RESERVED_SLUGS, salonNow, tzFor, localToUtc,
 } from "./shared.jsx";
 import Kasboek from "./Kasboek.jsx";
 import { paymentsAsCashRows } from "./reportData.js";
@@ -492,6 +493,13 @@ const referralPromoText = (salonData, lang, promo) => {
 };
 // Zonder nummer: WhatsApp vraagt zelf aan wie — de eigenaar kiest de collega.
 const referralWhatsAppUrl = (text) => `https://wa.me/?text=${encodeURIComponent(text)}`;
+// Loopt de actie nog? useReferralPromo onthoudt de actie per sessie, dus een
+// dashboard dat de nacht van de einddatum openstaat bleef "1 maand gratis"
+// beloven terwijl de server al weer 2 weken gaf. Na ends_at gedragen kaart en
+// teksten zich alsof er geen actie is (days null = de vaste beloning).
+const livePromo = (promo) => (promo?.promo && promo.endsAt && Date.now() < new Date(promo.endsAt).getTime())
+  ? promo
+  : { ...(promo || {}), days: null, endsAt: null, promo: false };
 
 function ReferralBlock({ salonData, lang, c, accent, toast }) {
   const [copied, setCopied] = useState(false);
@@ -509,7 +517,7 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
   // link erin: een persoonlijke aanbeveling deelt makkelijker en de eigenaar
   // hoeft zelf niets te typen. Zelfde tekst voor Kopieer en Delen, zodat het
   // bericht overal identiek aankomt.
-  const promo = useReferralPromo();
+  const promo = livePromo(useReferralPromo());
   const promoText = referralPromoText(salonData, lang, promo);
 
   const copy = async () => {
@@ -543,11 +551,14 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
             {lang === "nl" ? `Actie t/m ${promoEndLabel(promo.endsAt, lang)}` : lang === "es" ? `Promoción hasta el ${promoEndLabel(promo.endsAt, lang)}` : `Offer until ${promoEndLabel(promo.endsAt, lang)}`}
           </span>
         )}
+        {/* Het tegoed voor de verwijzer volgt pas op de eerste betaling van de
+            nieuwe salon (grant_referral_credit vanuit de Mollie-webhook), niet
+            meer op de aanmelding zelf. */}
         {lang === "nl"
-          ? `Deel je link met een andere salon. Als zij zich aanmelden krijgen jullie allebei ${rewardLabel(promo.days, lang)} gratis${promo.promo ? " (normaal 2 weken)" : ""}.`
+          ? `Deel je link met een andere salon. Zij krijgen ${rewardLabel(promo.days, lang)} gratis bij hun aanmelding${promo.promo ? " (normaal 2 weken)" : ""}; jij krijgt ${rewardLabel(promo.days, lang)} tegoed zodra zij hun eerste betaling hebben gedaan.`
           : lang === "es"
-          ? `Comparte tu enlace con otro salón. Si se registran, ambos conseguís ${rewardLabel(promo.days, lang)} gratis${promo.promo ? " (normalmente 2 semanas)" : ""}.`
-          : `Share your link with another salon. If they sign up, you both get ${rewardLabel(promo.days, lang)} free${promo.promo ? " (normally 2 weeks)" : ""}.`}
+          ? `Comparte tu enlace con otro salón. Ellos reciben ${rewardLabel(promo.days, lang)} gratis al registrarse${promo.promo ? " (normalmente 2 semanas)" : ""}; tú recibes ${rewardLabel(promo.days, lang)} de crédito cuando hagan su primer pago.`
+          : `Share your link with another salon. They get ${rewardLabel(promo.days, lang)} free when they sign up${promo.promo ? " (normally 2 weeks)" : ""}; you get ${rewardLabel(promo.days, lang)} of credit once they make their first payment.`}
       </div>
 
       {/* Stats row */}
@@ -625,7 +636,7 @@ function ReferralBlock({ salonData, lang, c, accent, toast }) {
 // gewoon weer tevoorschijn. Na de einddatum verdwijnt de kaart vanzelf en
 // geldt weer de vaste 2 weken.
 function ReferralEventCard({ salonData, lang, c, accent, toast, isMobile }) {
-  const promo = useReferralPromo();
+  const promo = livePromo(useReferralPromo());
   const hideKey = promo.endsAt ? `vellu_refpromo_hide_${String(promo.endsAt).slice(0, 10)}` : "";
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -660,13 +671,15 @@ function ReferralEventCard({ salonData, lang, c, accent, toast, isMobile }) {
         </span>
       </div>
       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: isMobile ? 22 : 26, fontWeight: 400, lineHeight: 1.15, color: c.text, marginBottom: 6 }}>
-        {L(`Nodig een salon uit: jullie krijgen allebei ${reward} gratis`, `Invite a salon: you both get ${reward} free`, `Invita a un salón: ambos recibís ${reward} gratis`)}
+        {L(`Nodig een salon uit: zij krijgen ${reward} gratis, jij ${reward} tegoed`, `Invite a salon: they get ${reward} free, you get ${reward} of credit`, `Invita a un salón: ellos reciben ${reward} gratis y tú ${reward} de crédito`)}
       </div>
+      {/* Het tegoed voor de verwijzer volgt pas op de eerste betaling van de
+          nieuwe salon (mollie-webhook), niet meer bij de aanmelding. */}
       <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.55, marginBottom: 14, maxWidth: 620 }}>
         {L(
-          `Normaal is dat 2 weken. Meldt iemand zich tot en met ${until} aan met jouw uitnodigingscode, dan krijg jij ${reward} tegoed, verrekend bij je volgende afschrijving, en begint de nieuwe salon met ${reward} gratis in plaats van 2 weken. Zo vaak als je wilt.`,
-          `Normally it is 2 weeks. If someone signs up using your referral code by ${until}, you get ${reward} of credit, settled at your next payment, and the new salon starts with ${reward} free instead of 2 weeks. As often as you like.`,
-          `Normalmente son 2 semanas. Si alguien se registra con tu código de invitación hasta el ${until}, tú recibes ${reward} de crédito, que se descuenta en tu próximo cobro, y el nuevo salón empieza con ${reward} gratis en lugar de 2 semanas. Tantas veces como quieras.`
+          `Normaal is dat 2 weken. Meldt iemand zich tot en met ${until} aan met jouw uitnodigingscode, dan begint de nieuwe salon met ${reward} gratis in plaats van 2 weken, en krijg jij ${reward} tegoed zodra zij hun eerste betaling hebben gedaan, verrekend bij je volgende afschrijving. Zo vaak als je wilt.`,
+          `Normally it is 2 weeks. If someone signs up using your referral code by ${until}, the new salon starts with ${reward} free instead of 2 weeks, and you get ${reward} of credit once they make their first payment, settled at your next payment. As often as you like.`,
+          `Normalmente son 2 semanas. Si alguien se registra con tu código de invitación hasta el ${until}, el nuevo salón empieza con ${reward} gratis en lugar de 2 semanas, y tú recibes ${reward} de crédito cuando hagan su primer pago, que se descuenta en tu próximo cobro. Tantas veces como quieras.`
         )}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -699,17 +712,48 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix, salonName, sl
   // RLS) voor de WhatsApp-knop: de codetabel zelf kent alleen het e-mailadres.
   const [contact, setContact] = useState({});
   const lookupContacts = async (emails) => {
-    const list = [...new Set((emails || []).map(e => String(e || "").toLowerCase()).filter(Boolean))];
+    const list = [...new Set((emails || []).map(e => String(e || "").trim().toLowerCase()).filter(Boolean))];
     if (!list.length) return;
-    const [{ data: m }, { data: cl }] = await Promise.all([
-      supabase.from("manual_clients").select("email, name, phone").in("email", list),
-      supabase.from("clients").select("email, first_name, phone").in("email", list),
-    ]);
+    const want = new Set(list);
+    // Hoofdletterongevoelig: .in("email", …) is dat niet, en 141 eigen
+    // contacten stonden als "Anna@Gmail.com" opgeslagen — die kregen nooit een
+    // WhatsApp-knop. Daarom een or() van ilike's (waarden tussen aanhalings-
+    // tekens: punten, komma's en haakjes zijn dan veilig) en achteraf exact
+    // vergelijken, want _ en % zijn in ilike jokertekens. In brokjes van 40
+    // zodat de URL niet te lang wordt.
+    const orIlike = (col, part) => part.map(e => `${col}.ilike."${e.replace(/["\\]/g, "")}"`).join(",");
+    const parts = [];
+    for (let i = 0; i < list.length; i += 40) parts.push(list.slice(i, i + 40));
+    // Alleen eigen rijen: een eigenaar die elders ook teamlid is, ziet via RLS
+    // ook die salon — de eigenaar van dit scherm is de ingelogde gebruiker.
+    const { data: sess } = await supabase.auth.getSession();
+    const uid = sess?.session?.user?.id;
+    if (!uid) return;
+    const results = await Promise.all(parts.map(part => Promise.all([
+      supabase.from("manual_clients").select("email, name, phone").eq("owner_id", uid).or(orIlike("email", part)),
+      supabase.from("clients").select("email, first_name, phone").or(orIlike("email", part)),
+      // De gedeelde clients-rij is alleen nog zichtbaar via een gekoppelde
+      // afspraak; het nummer dat de klant bij haar laatste boeking invulde
+      // is daarom de terugval. Ook lege nummers overslaan: anders "won" een
+      // nieuwere boeking zonder nummer van een oudere mét nummer.
+      supabase.from("appointments").select("client_email, client_name, client_phone, date").eq("owner_id", uid).or(orIlike("client_email", part)).not("client_phone", "is", null).neq("client_phone", "").order("date", { ascending: false }),
+    ])));
+    const m = [], cl = [], ap = [];
+    for (const [rm, rc, ra] of results) { m.push(...(rm.data || [])); cl.push(...(rc.data || [])); ap.push(...(ra.data || [])); }
+    const keyOf = (v) => { const k = String(v || "").trim().toLowerCase(); return want.has(k) ? k : ""; };
     setContact(prev => {
       const next = { ...prev };
-      for (const r of cl || []) { const k = String(r.email || "").toLowerCase(); if (k) next[k] = { phone: r.phone || next[k]?.phone || "", name: r.first_name || next[k]?.name || "" }; }
+      for (const r of cl) { const k = keyOf(r.email); if (k) next[k] = { phone: r.phone || next[k]?.phone || "", name: r.first_name || next[k]?.name || "" }; }
+      // Laatste afspraak (nieuwste eerst, dus de eerste treffer per adres).
+      const seenAppt = new Set();
+      for (const r of ap) {
+        const k = keyOf(r.client_email);
+        if (!k || seenAppt.has(k) || !String(r.client_phone || "").trim()) continue;
+        seenAppt.add(k);
+        next[k] = { phone: r.client_phone || next[k]?.phone || "", name: next[k]?.name || String(r.client_name || "").split(/\s+/)[0] || "" };
+      }
       // Eigen contacten winnen (de eigenaar heeft ze zelf ingevuld).
-      for (const r of m || []) { const k = String(r.email || "").toLowerCase(); if (k) next[k] = { phone: r.phone || next[k]?.phone || "", name: String(r.name || "").split(/\s+/)[0] || next[k]?.name || "" }; }
+      for (const r of m) { const k = keyOf(r.email); if (k) next[k] = { phone: r.phone || next[k]?.phone || "", name: String(r.name || "").split(/\s+/)[0] || next[k]?.name || "" }; }
       return next;
     });
   };
@@ -891,7 +935,10 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
   const SEGMENTS = [
     { key: "all", nl: "Alle klanten", en: "All clients", es: "Todos los clientes", desc_nl: "iedereen die ooit een afspraak had", desc_en: "everyone who ever booked", desc_es: "todos los que alguna vez reservaron" },
     { key: "loyal", nl: "Trouwe klanten", en: "Loyal clients", es: "Clientes fieles", desc_nl: "5+ voltooide afspraken", desc_en: "5+ completed visits", desc_es: "5 o más visitas completadas" },
-    { key: "new", nl: "Nieuwe klanten", en: "New clients", es: "Clientes nuevos", desc_nl: "eerste bezoek in de laatste 30 dagen", desc_en: "first visit in the last 30 days", desc_es: "primera visita en los últimos 30 días" },
+    // send-newsletter telt ook de importdatum als "eerst gezien": een salon
+    // die net haar hele lijst importeerde zag hier anders al haar vaste
+    // klanten als "nieuw" zonder dat de omschrijving dat zei.
+    { key: "new", nl: "Nieuwe klanten", en: "New clients", es: "Clientes nuevos", desc_nl: "nieuw in je lijst (bezoek of import) in de laatste 30 dagen", desc_en: "new in your list (visit or import) in the last 30 days", desc_es: "nuevos en tu lista (visita o importación) en los últimos 30 días" },
     { key: "dormant", nl: "Slapende klanten", en: "Dormant clients", es: "Clientes inactivos", desc_nl: "meer dan 60 dagen niet meer geweest", desc_en: "haven't visited in 60+ days", desc_es: "sin visitar desde hace más de 60 días" },
   ];
 
@@ -923,7 +970,28 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
         body: { subject: subject.trim(), message: message.trim(), segment },
       });
       if (error || !data) throw new Error(error?.message || "send_failed");
-      toast.show(lang === "nl" ? `Nieuwsbrief verstuurd naar ${data.sent} klant${data.sent === 1 ? "" : "en"}` : lang === "es" ? `Boletín enviado a ${data.sent} cliente${data.sent === 1 ? "" : "s"}` : `Newsletter sent to ${data.sent} client${data.sent === 1 ? "" : "s"}`);
+      // send-newsletter antwoordt ook bij een mislukte verzending met 200 en
+      // {sent, total, failed}. Alleen als alles weg is: groene melding en de
+      // velden leeg; anders blijft de tekst staan zodat er niets opnieuw
+      // getypt hoeft te worden.
+      const sent = Number(data.sent) || 0;
+      const total = Number(data.total) || 0;
+      const failed = Number(data.failed) || Math.max(0, total - sent);
+      if (sent === 0) {
+        toast.show(lang === "nl" ? "Er is niets verstuurd. Je tekst staat er nog; probeer het later opnieuw." : lang === "es" ? "No se ha enviado nada. Tu texto sigue aquí; inténtalo más tarde." : "Nothing was sent. Your text is still here; please try again later.", "error");
+        setConfirming(false);
+        return;
+      }
+      if (failed > 0) {
+        toast.show(lang === "nl"
+          ? `${sent} van ${total} verstuurd, ${failed} lukte niet. Let op: opnieuw versturen mailt de hele doelgroep nog een keer.`
+          : lang === "es"
+          ? `${sent} de ${total} enviados, ${failed} fallaron. Ojo: volver a enviar manda el correo otra vez a todo el segmento.`
+          : `${sent} of ${total} sent, ${failed} failed. Note: sending again emails the whole segment once more.`, "error");
+        setConfirming(false);
+        return;
+      }
+      toast.show(lang === "nl" ? `Nieuwsbrief verstuurd naar ${sent} klant${sent === 1 ? "" : "en"}` : lang === "es" ? `Boletín enviado a ${sent} cliente${sent === 1 ? "" : "s"}` : `Newsletter sent to ${sent} client${sent === 1 ? "" : "s"}`);
       setSubject(""); setMessage(""); setConfirming(false);
     } catch (e) {
       console.error("Newsletter send failed:", e);
@@ -942,10 +1010,10 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
       </div>
       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
         {lang === "nl"
-          ? "Stuur een e-mail naar al je klanten — bijvoorbeeld voor een vakantiesluiting, aanbieding of nieuwtje. Klanten krijgen elk een aparte e-mail met jouw salonnaam."
+          ? "Stuur een e-mail naar al je klanten — bijvoorbeeld voor een vakantiesluiting, aanbieding of nieuwtje. Klanten krijgen elk een aparte e-mail met jouw salonnaam. Elke e-mail heeft een afmeldlink; wie zich afmeldt, telt niet meer mee."
           : lang === "es"
-          ? "Envía un correo a todos tus clientes — por ejemplo para un cierre por vacaciones, una promoción o una novedad. Cada cliente recibe su propio correo con el nombre de tu salón."
-          : "Send an email to all your clients — for a holiday closure, promo, or update. Each client gets their own email with your salon name."}
+          ? "Envía un correo a todos tus clientes — por ejemplo para un cierre por vacaciones, una promoción o una novedad. Cada cliente recibe su propio correo con el nombre de tu salón. Cada correo lleva un enlace para darse de baja; quien se da de baja ya no se cuenta."
+          : "Send an email to all your clients — for a holiday closure, promo, or update. Each client gets their own email with your salon name. Every email has an unsubscribe link; anyone who unsubscribes is no longer counted."}
       </div>
 
       <label style={lbl}>{lang === "nl" ? "Doelgroep" : lang === "es" ? "Segmento" : "Segment"}</label>
@@ -1082,10 +1150,18 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
     try {
       const rows = await parse(file);
       // Wat is er al? Handmatige klanten én klanten uit bestaande afspraken.
-      const [{ data: existing }, { data: fromAppts }] = await Promise.all([
+      const [{ data: existing, error: exErr }, { data: fromAppts, error: apErr }] = await Promise.all([
         fetchAllRows(() => supabase.from("manual_clients").select("id, name, email, birthday").eq("owner_id", ownerId).order("id")),
         fetchAllRows(() => supabase.from("appointments").select("client_email").eq("owner_id", ownerId).order("id")),
       ]);
+      // Zonder volledige lijst van wat er al is, zou elke bestaande klant als
+      // nieuw worden ingevoegd (dubbel in de lijst, dubbele mails). Dan liever
+      // stoppen; het bestand kan gewoon opnieuw.
+      if (exErr || apErr) {
+        console.error("client import (dedupe fetch):", exErr || apErr);
+        toast.show(lang === "nl" ? "Kon je bestaande klanten niet ophalen. Er is niets geïmporteerd; probeer het opnieuw." : lang === "es" ? "No se pudieron cargar tus clientes actuales. No se ha importado nada; inténtalo de nuevo." : "Could not load your existing clients. Nothing was imported; please try again.", "error");
+        return;
+      }
       const seenMail = new Set([
         ...(existing || []).map(x => (x.email || "").toLowerCase()).filter(Boolean),
         ...(fromAppts || []).map(x => (x.client_email || "").toLowerCase()).filter(Boolean),
@@ -1096,7 +1172,11 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
       // deze import voor salons die al klanten in Vellu hebben staan.
       const manualByMail = new Map((existing || []).filter(x => x.email).map(x => [x.email.toLowerCase(), x]));
       const manualByName = new Map((existing || []).filter(x => x.name).map(x => [x.name.toLowerCase(), x]));
-      const toInsert = []; const toUpdate = []; let skipped = 0;
+      // toFill: klanten die alleen via boekingen bekend zijn (geen eigen
+      // manual_clients-rij). Hun verjaardag krijgt een eigen rij met e-mail +
+      // naam, zodat de klantenlijst en de verjaardagsmail hem oppakken.
+      const toInsert = []; const toUpdate = []; const toFill = []; let skipped = 0;
+      const newByMail = new Map(); // e-mail -> rij die dit bestand zelf invoegt
       for (const r of rows) {
         const first = pick(r, ["voornaam", "first name", "firstname", "nombre"]);
         const last = pick(r, ["achternaam", "last name", "lastname", "apellido"]);
@@ -1114,22 +1194,38 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
           // Heeft de rij een geldige datum en de bestaande manual_clients-rij
           // nog geen, dan werken we alleen dat veld bij.
           const parsedBd = parseBirthday(bd);
-          const bestaand = (email && manualByMail.get(email)) || manualByName.get(name.toLowerCase());
+          // Tweede regel voor een adres dat dit bestand zelf al toevoegt: geen
+          // tweede rij, hooguit de verjaardag op de nog in te voegen rij.
+          const nieuw = email ? newByMail.get(email) : null;
+          if (nieuw) {
+            if (parsedBd && !nieuw.birthday) nieuw.birthday = parsedBd; else skipped++;
+            continue;
+          }
+          // Met een e-mailadres alleen op e-mail koppelen: op naam terugvallen
+          // gaf de verjaardag aan een ándere klant met dezelfde naam.
+          const bestaand = email ? manualByMail.get(email) : manualByName.get(name.toLowerCase());
           if (parsedBd && bestaand && !bestaand.birthday) {
             toUpdate.push({ id: bestaand.id, birthday: parsedBd });
             bestaand.birthday = parsedBd; // dubbele rijen in hetzelfde bestand niet twee keer updaten
+          } else if (parsedBd && email && !bestaand) {
+            // Alleen bekend uit boekingen: eigen rij aanmaken (alleen schrijven
+            // naar manual_clients; die wint voor deze salon van clients.birthday).
+            toFill.push({ owner_id: ownerId, name, email, birthday: parsedBd });
+            manualByMail.set(email, { email, name, birthday: parsedBd }); // tweede regel met hetzelfde adres overslaan
           } else skipped++;
           continue;
         }
         if (email) seenMail.add(email); else seenName.add(name.toLowerCase());
-        toInsert.push({
+        const rij = {
           owner_id: ownerId, name,
           email: email || null, phone: phone || null,
           birthday: parseBirthday(bd),
           notes: pick(r, ["notitie", "notities", "note", "notes", "opmerking", "nota"]) || null,
-        });
+        };
+        toInsert.push(rij);
+        if (email) newByMail.set(email, rij);
       }
-      if (!toInsert.length && !toUpdate.length) {
+      if (!toInsert.length && !toUpdate.length && !toFill.length) {
         toast.show(lang === "nl" ? ("Niets ge\u00efmporteerd \u2014 " + skipped + " regel(s) overgeslagen (al bekend of geen naam)") : lang === "es" ? "Nada importado" : ("Nothing imported \u2014 " + skipped + " row(s) skipped"), "error");
         return;
       }
@@ -1146,6 +1242,13 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
         const { error } = await supabase.from("manual_clients").update({ birthday: u.birthday }).eq("id", u.id);
         if (error) { console.error("client import (birthday update):", error); faalde = true; break; }
         updated++;
+      }
+      // Boekers zonder eigen rij: rij met e-mail, naam en verjaardag. Telt als
+      // "bijgewerkt" — voor de eigenaar is het een bestaande klant.
+      for (let i = 0; i < toFill.length; i += 200) {
+        const { error } = await supabase.from("manual_clients").insert(toFill.slice(i, i + 200));
+        if (error) { console.error("client import (birthday rows):", error); faalde = true; break; }
+        updated += Math.min(200, toFill.length - i);
       }
       if (faalde) {
         // Voorheen brak de lus stil af en verscheen daarna alsnog de groene
@@ -1327,7 +1430,11 @@ async function loadLogoForPdf(salonData) {
 // levert de catalogus daarom los aan.
 // `staffEmail`: e-mail van het teamlid voor het bedrijfsblok van háár rapport
 // (de medewerkers-app geeft die mee; de eigenaars-app leest hem uit salonData.staff).
-function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast, fixedStaffName = "", fixedStaffId = null, fetchRange = null, services = null, staff = null, staffEmail = "" }) {
+// `companyOverride`: { name, address, kvk_number, btw_id, iban } — de eigen
+// factuurgegevens van het teamlid (medewerkers-app, Facturatie). Gebruikt als
+// er geen factuurprofiel van de eigenaar voor haar bestaat, zodat haar rapport
+// dezelfde KVK/btw-id/IBAN draagt als haar facturen i.p.v. die van de salon.
+function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast, fixedStaffName = "", fixedStaffId = null, fetchRange = null, services = null, staff = null, staffEmail = "", companyOverride = null }) {
   const [period, setPeriod] = useState("this_month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -1393,8 +1500,12 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
         source = fetched.filter(a => a.status === "completed");
       }
       const selectedStaff = staffFilter ? staffList.find(st => st.id === staffFilter) : null;
+      // Verwijderde facturen (Facturen > Verwijderen) tellen niet mee, net als
+      // in de tegels van het Facturen-scherm; anders klopte het rapport niet
+      // met wat de eigenaar daar ziet.
       const inRange = source.filter(a =>
         a.date >= range.from && a.date <= range.to &&
+        a.invoice_view_state !== "deleted" &&
         (!selectedStaff || involvesStaff(a, selectedStaff.id))
       );
       if (inRange.length === 0) {
@@ -1425,13 +1536,31 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
       const norm = (v) => String(v || "").trim().toLowerCase();
       const ownProfile = shareId ? (salonData.invoice_profiles || []).find(p => norm(p.label) === norm(reportStaffName) || (p.iban_holder && norm(p.iban_holder) === norm(reportStaffName))) : null;
       const member = shareId ? (salonData.staff || []).find(m => m.id === shareId) : null;
+      const salonTitle = salonData.business_name || salonData.name;
+      const co = shareId && !ownProfile ? companyOverride : null;
       const reportSalon = ownProfile ? {
         ...salonData,
-        business_name: `${salonData.business_name || salonData.name} — ${ownProfile.label || reportStaffName}`,
-        name: `${salonData.business_name || salonData.name} — ${ownProfile.label || reportStaffName}`,
+        business_name: `${salonTitle} — ${ownProfile.label || reportStaffName}`,
+        name: `${salonTitle} — ${ownProfile.label || reportStaffName}`,
         address: ownProfile.address || "", postcode: "", city: "",
         kvk_number: ownProfile.kvk_number || "", btw_id: ownProfile.btw_id || "", iban: ownProfile.iban || "",
         salon_email: staffEmail || member?.email || "",
+      } : co ? {
+        // Geen profiel van de eigenaar, wel de eigen factuurgegevens van het
+        // teamlid (companyOverride, medewerkers-app > Facturatie): per veld
+        // dezelfde terugval op de salon als haar facturen (StaffApp), zodat
+        // rapport en factuur dezelfde KVK, btw-id en IBAN dragen.
+        ...salonData,
+        business_name: `${salonTitle} — ${co.name || reportStaffName}`,
+        name: `${salonTitle} — ${co.name || reportStaffName}`,
+        // Alleen een EIGEN adres vervangt dat van de salon (en dan zonder de
+        // postcode/plaats van de salon); is het de terugval op het salonadres,
+        // dan blijft de plaats gewoon staan.
+        ...(String(co.address || "").trim() && String(co.address).trim() !== String(salonData.address || "").trim() ? { address: co.address, postcode: "", city: "" } : {}),
+        kvk_number: co.kvk_number || salonData.kvk_number || "",
+        btw_id: co.btw_id || salonData.btw_id || "",
+        iban: co.iban || salonData.iban || "",
+        salon_email: staffEmail || member?.email || salonData.salon_email || "",
       } : salonData;
       const params = {
         salon: reportSalon, appointments: rows, range, lang,
@@ -1596,9 +1725,12 @@ function TranslateBtn({ sourceText, sourceLang, targetLang, onResult, accent }) 
     } catch { /* swallowed — silent no-op if DeepL is unreachable */ }
     setLoading(false);
   };
+  // Label = bron en doel uit de props (ook ES als bron in de Spaanse
+  // interface); het pijltje als inline SVG, geen tekstteken.
+  const tgtShort = String(targetLang || "").slice(0, 2).toUpperCase();
   return (
     <button type="button" onClick={doTranslate} disabled={disabled}
-      title={sourceLang === "NL" ? "Vertaal vanuit Nederlands (DeepL)" : "Translate from English (DeepL)"}
+      title={sourceLang === "NL" ? "Vertaal vanuit Nederlands (DeepL)" : sourceLang === "ES" ? "Traducir del español (DeepL)" : "Translate from English (DeepL)"}
       style={{ background: "transparent", border: "none", color: disabled ? "#999" : accent, cursor: disabled ? "not-allowed" : "pointer", padding: 0, fontSize: 9, letterSpacing: "0.04em", display: "inline-flex", alignItems: "center", gap: 3, fontWeight: 600 }}>
       {loading ? "..." : (
         <>
@@ -1606,29 +1738,69 @@ function TranslateBtn({ sourceText, sourceLang, targetLang, onResult, accent }) 
             <path d="M5 8l6 6" /><path d="M4 14l6-6 2-3" /><path d="M2 5h12" /><path d="M7 2h1" />
             <path d="M22 22l-5-10-5 10" /><path d="M14 18h6" />
           </svg>
-          {sourceLang === "NL" ? "NL→EN" : "EN→NL"}
+          {sourceLang}
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14" /><path d="M13 6l6 6-6 6" /></svg>
+          {tgtShort}
         </>
       )}
     </button>
   );
 }
 
+// Teksten die de eigenaar in de Spaanse interface typte in een veld ZONDER
+// es-kolom (bijv. het boekingsbeleid). Zo'n veld bewaart de invoer in de
+// EN-kolom; autoFillTranslations herkent de tekst hieraan en vertaalt hem bij
+// opslaan vanuit het Spaans naar NL en EN, i.p.v. Spaans als Engels op te slaan.
+// Op de tekst zelf gesleuteld, zodat de opslagknop elders (een ander tabblad,
+// een andere component) niets hoeft te weten.
+const ES_TYPED_IN_EN = new Set();
+// NL-teksten die de eigenaar in diezelfde Spaanse modus zelf in de NL-editor
+// zette ("Editar versión NL"). Die laat opslaan staan; een NL-tekst van
+// eerder (oud beleid) wordt wel opnieuw uit het nieuwe Spaans vertaald.
+const NL_SET_IN_ES = new Set();
+
 // Single-input bilingual field. Owner only edits ONE language (the current
 // UI lang). The other language is auto-filled on save via autoFillTranslations
 // unless the owner clicks "andere taal" to open a manual editor.
-function AutoTranslateField({ nlValue, enValue, setNl, setEn, lang, accent, placeholder, textarea, rows, label, hintSuffix }) {
+// Spaanse interface: met esValue/onEsChange (tabel heeft een es-kolom) bewerkt
+// het veld de es-waarde en vult opslaan NL en EN vanuit het Spaans. Zonder die
+// props (geen es-kolom) komt de invoer in de EN-kolom en wordt hij bij opslaan
+// vanuit het Spaans naar NL en EN vertaald (zie ES_TYPED_IN_EN).
+function AutoTranslateField({ nlValue, enValue, setNl, setEn, esValue, onEsChange, lang, accent, placeholder, textarea, rows, label, hintSuffix }) {
   const { colors: c } = useTheme();
   const [showOther, setShowOther] = useState(false);
   const isNl = lang === "nl";
-  const current = isNl ? { val: nlValue, set: setNl } : { val: enValue, set: setEn };
+  const isEs = lang === "es";
+  const hasEs = typeof onEsChange === "function";
+  // Geen es-kolom: invoer naar EN, maar onthouden dat het Spaans is. De
+  // vorige stand (enValue) gaat eruit, zodat alleen de laatste tekst telt.
+  const setEnFromEs = (v) => {
+    const prev = String(enValue || "").trim();
+    if (prev) ES_TYPED_IN_EN.delete(prev);
+    const k = String(v || "").trim();
+    if (k) ES_TYPED_IN_EN.add(k);
+    setEn(v);
+  };
+  const current = isNl
+    ? { val: nlValue, set: setNl }
+    : isEs
+    ? (hasEs ? { val: esValue, set: onEsChange } : { val: enValue, set: setEnFromEs })
+    : { val: enValue, set: setEn };
+  // Zonder es-kolom staat in de EN-kolom alleen Spaans als de eigenaar het
+  // net typte; anders is het opgeslagen Engels en vertaalt de knop vanuit EN.
+  const esInEn = isEs && !hasEs && ES_TYPED_IN_EN.has(String(enValue || "").trim());
+  const setNlInEs = (v) => { const k = String(v || "").trim(); if (k) NL_SET_IN_ES.add(k); setNl(v); };
   const other = isNl
     ? { val: enValue, set: setEn, sourceLang: "NL", targetLang: "EN-US", label: "EN", labelLong: "Engels" }
+    : isEs
+    ? { val: nlValue, set: hasEs ? setNl : setNlInEs, sourceLang: hasEs || esInEn ? "ES" : "EN", targetLang: "NL", label: "NL", labelLong: "Neerlandés" }
     : { val: nlValue, set: setNl, sourceLang: "EN", targetLang: "NL", label: "NL", labelLong: "Dutch" };
   const El = textarea ? "textarea" : "input";
   const inputStyle = textarea
     ? { fontSize: 13, padding: "10px 12px", width: "100%", fontFamily: "inherit", lineHeight: 1.5, resize: "vertical" }
     : { fontSize: 13, padding: "10px 12px", width: "100%" };
-  const done = !!(other.val || "").trim();
+  // Spaans mét es-kolom: klaar als NL én EN er staan.
+  const done = isEs && hasEs ? !!(nlValue || "").trim() && !!(enValue || "").trim() : !!(other.val || "").trim();
   return (
     <div>
       {label && <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{label}</div>}
@@ -1638,8 +1810,8 @@ function AutoTranslateField({ nlValue, enValue, setNl, setEn, lang, accent, plac
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, fontSize: 10, color: c.textMuted, gap: 8, flexWrap: "wrap" }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></svg>
-            {isNl ? `Wordt automatisch vertaald naar Engels` : lang === "es" ? `Se traduce automáticamente al neerlandés` : `Auto-translated to Dutch`}
-            {done && <span style={{ color: c.success || accent, marginLeft: 4 }}>· {isNl ? "EN klaar" : lang === "es" ? "NL listo" : "NL done"}</span>}
+            {isNl ? `Wordt automatisch vertaald naar Engels` : isEs ? (hasEs ? `Se traduce automáticamente al neerlandés y al inglés` : `Sin versión en español: al guardar se traduce al neerlandés y al inglés`) : `Auto-translated to Dutch`}
+            {done && <span style={{ color: c.success || accent, marginLeft: 4 }}>· {isNl ? "EN klaar" : isEs ? (hasEs ? "NL + EN listo" : "NL listo") : "NL done"}</span>}
             {hintSuffix}
           </span>
           <button type="button" onClick={() => setShowOther(true)}
@@ -1679,9 +1851,11 @@ async function autoFillTranslations(form, pairs, currentLang) {
   const SRC = { nl: "NL", en: "EN", es: "ES" };        // DeepL source codes
   const TGT = { nl: "NL", en: "EN-US", es: "ES" };     // DeepL target codes
   const cur = ["nl", "en", "es"].includes(currentLang) ? currentLang : "nl";
-  // Where to look for the owner's typed text, per UI language. AutoTranslateField
-  // stores es-UI input in the EN field (it only edits nl/en), so for es we fall
-  // back to en, then nl — first non-empty field wins as the translation source.
+  // Where to look for the owner's typed text, per UI language. In the es UI
+  // AutoTranslateField edits the es field when the form passes esValue/
+  // onEsChange; without them the typed Spanish sits in the EN field and is
+  // handled via ES_TYPED_IN_EN below. Otherwise the first non-empty field wins
+  // as the translation source.
   const PREF = { nl: ["nl", "en", "es"], en: ["en", "nl", "es"], es: ["es", "en", "nl"] };
   const jobs = [];
   for (const p of pairs) {
@@ -1691,6 +1865,20 @@ async function autoFillTranslations(form, pairs, currentLang) {
     const esField = p.es || p.nl.replace(/_nl$/, "_es");
     const esOk = esField === "name_es" || esField === "description_es";
     const fields = { nl: p.nl, en: p.en, ...(esOk ? { es: esField } : {}) };
+    // Spaanse interface, veld zonder es-binding: de EN-kolom bevat wat de
+    // eigenaar in het Spaans typte. Bron = ES; EN krijgt de Engelse vertaling
+    // (overschrijven, want er staat nu Spaans). NL volgt ook de nieuwe tekst
+    // (anders lazen Nederlandse bezoekers nog het oude beleid), behalve als
+    // de eigenaar de NL-versie zelf net invulde. Een es-kolom wordt zoals
+    // overal alleen gevuld als hij leeg is.
+    const enTyped = String(updated[p.en] || "").trim();
+    if (cur === "es" && enTyped && ES_TYPED_IN_EN.has(enTyped)) {
+      if (fields.es && !String(updated[fields.es] || "").trim()) updated[fields.es] = enTyped;
+      const nlNow = String(updated[p.nl] || "").trim();
+      if (!nlNow || !NL_SET_IN_ES.has(nlNow)) jobs.push({ text: enTyped, sourceLang: "ES", targetLang: "NL", targetField: p.nl });
+      jobs.push({ text: enTyped, sourceLang: "ES", targetLang: "EN-US", targetField: p.en, esTyped: enTyped });
+      continue;
+    }
     let srcLg = null;
     for (const lg of PREF[cur]) { if (fields[lg] && String(updated[fields[lg]] || "").trim()) { srcLg = lg; break; } }
     if (!srcLg) continue;
@@ -1716,7 +1904,11 @@ async function autoFillTranslations(form, pairs, currentLang) {
       });
       if (!error && data?.translations) {
         for (let i = 0; i < list.length; i++) {
-          if (data.translations[i]) updated[list[i].targetField] = data.translations[i];
+          if (data.translations[i]) {
+            updated[list[i].targetField] = data.translations[i];
+            // Spaanse invoer is nu Engels: niet nog eens als Spaans behandelen.
+            if (list[i].esTyped) ES_TYPED_IN_EN.delete(list[i].esTyped);
+          }
         }
       }
     } catch { /* ignore — save what the owner typed */ }
@@ -1841,30 +2033,37 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur
   const { colors: c } = useTheme();
   const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60", per_unit: false });
+  const EMPTY_VARIANT = { name_nl: "", name_en: "", name_es: "", description_nl: "", description_en: "", description_es: "", price: "", duration: "60", per_unit: false };
+  const [form, setForm] = useState(EMPTY_VARIANT);
+  // Tweede tik tijdens het vertalen (DeepL, 1-2 s) gaf een dubbele variant.
+  const [saving, setSaving] = useState(false);
 
   const add = async () => {
+    if (saving) return;
     const primaryName = lang === "nl" ? form.name_nl : lang === "es" ? (form.name_es || form.name_en || form.name_nl) : (form.name_en || form.name_nl);
     if (!primaryName || !form.price) return;
     const price = parseFloat(form.price);
     if (!Number.isFinite(price) || price < 0) { toast.show(lang === "nl" ? "Ongeldige prijs" : lang === "es" ? "Precio no válido" : "Invalid price", "error"); return; }
-    const filled = await autoFillTranslations(form, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
-    const { data, error } = await supabase.from("service_variants").insert({
-      service_id: serviceId, name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null,
-      description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null,
-      price, duration: parseInt(filled.duration) || 60,
-      per_unit: !!form.per_unit,
-      max_quantity: 10,
-      // Append at the end of the list so drag-reorder positions stay stable.
-      position: nextPosition
-    }).select().single();
-    if (error || !data) {
-      toast.show(lang === "nl" ? "Toevoegen mislukt" : lang === "es" ? "Error al añadir" : "Failed to add", "error");
-      return;
-    }
-    onAdd(data);
-    setForm({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", duration: "60", per_unit: false });
-    setOpen(false);
+    setSaving(true);
+    try {
+      const filled = await autoFillTranslations(form, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
+      const { data, error } = await supabase.from("service_variants").insert({
+        service_id: serviceId, name_nl: filled.name_nl || filled.name_en || filled.name_es, name_en: filled.name_en || null, name_es: filled.name_es || null,
+        description_nl: filled.description_nl || null, description_en: filled.description_en || null, description_es: filled.description_es || null,
+        price, duration: parseInt(filled.duration) || 60,
+        per_unit: !!form.per_unit,
+        max_quantity: 10,
+        // Append at the end of the list so drag-reorder positions stay stable.
+        position: nextPosition
+      }).select().single();
+      if (error || !data) {
+        toast.show(lang === "nl" ? "Toevoegen mislukt" : lang === "es" ? "Error al añadir" : "Failed to add", "error");
+        return;
+      }
+      onAdd(data);
+      setForm(EMPTY_VARIANT);
+      setOpen(false);
+    } finally { setSaving(false); }
   };
 
   if (!open) return (
@@ -1878,16 +2077,20 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur
         <AutoTranslateField
           nlValue={form.name_nl}
           enValue={form.name_en}
+          esValue={form.name_es}
           setNl={v => setForm(f => ({...f, name_nl: v}))}
           setEn={v => setForm(f => ({...f, name_en: v}))}
+          onEsChange={v => setForm(f => ({...f, name_es: v}))}
           lang={lang} accent={accent}
           placeholder={lang === "nl" ? "Naam *" : lang === "es" ? "Nombre *" : "Name *"}
         />
         <AutoTranslateField
           nlValue={form.description_nl}
           enValue={form.description_en}
+          esValue={form.description_es}
           setNl={v => setForm(f => ({...f, description_nl: v}))}
           setEn={v => setForm(f => ({...f, description_en: v}))}
+          onEsChange={v => setForm(f => ({...f, description_es: v}))}
           lang={lang} accent={accent}
           placeholder={lang === "nl" ? "Omschrijving" : lang === "es" ? "Descripción" : "Description"}
         />
@@ -1900,9 +2103,9 @@ function VariantAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur
           {lang === "nl" ? "Klant kan aantal kiezen (bijv. 3 stuks)" : lang === "es" ? "El cliente puede elegir una cantidad (p. ej. 3 unidades)" : "Client can choose a quantity (e.g. 3 units)"}
         </label>
       </div>
-      {((lang === "nl" ? !form.name_nl : !form.name_en) || !form.price) && <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 4 }}>* {lang === "nl" ? "Vul naam en prijs in" : lang === "es" ? "Rellena el nombre y el precio" : "Fill in name and price"}</div>}
+      {((lang === "nl" ? !form.name_nl : lang === "es" ? !form.name_es : !form.name_en) || !form.price) && <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 4 }}>* {lang === "nl" ? "Vul naam en prijs in" : lang === "es" ? "Rellena el nombre y el precio" : "Fill in name and price"}</div>}
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{t.add}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44`, opacity: saving ? 0.6 : 1 }} onClick={add} disabled={saving}>{saving ? "..." : t.add}</button>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}><NavIcon name="xmark" size={12} /></button>
       </div>
     </div>
@@ -1913,9 +2116,12 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur =
   const { colors: c } = useTheme();
   const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name_nl: "", name_en: "", price: "", duration: "", per_unit: false });
+  const EMPTY_EXTRA = { name_nl: "", name_en: "", name_es: "", price: "", duration: "", per_unit: false };
+  const [form, setForm] = useState(EMPTY_EXTRA);
+  const [saving, setSaving] = useState(false); // geen dubbele extra bij een tweede tik
 
   const add = async () => {
+    if (saving) return;
     const primaryName = lang === "nl" ? form.name_nl : lang === "es" ? (form.name_es || form.name_en || form.name_nl) : (form.name_en || form.name_nl);
     if (!primaryName || !form.price) return;
     const price = parseFloat(form.price);
@@ -1924,23 +2130,26 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur =
     // like 30 makes the booking longer (e.g. intricate design, removal).
     const duration = form.duration === "" ? null : parseInt(form.duration);
     if (duration !== null && (!Number.isFinite(duration) || duration < 0 || duration > 480)) { toast.show(lang === "nl" ? "Ongeldige duur" : lang === "es" ? "Duración no válida" : "Invalid duration", "error"); return; }
-    const filled = await autoFillTranslations(form, [{ nl: "name_nl", en: "name_en" }], lang);
-    const { data, error } = await supabase.from("service_extras").insert({
-      service_id: serviceId, name_nl: filled.name_nl || filled.name_en, name_en: filled.name_en || null, name_es: filled.name_es || null,
-      price,
-      duration,
-      per_unit: !!form.per_unit,
-      max_quantity: 10,
-      // Append at the end of the list so drag-reorder positions stay stable.
-      position: nextPosition
-    }).select().single();
-    if (error || !data) {
-      toast.show(lang === "nl" ? "Toevoegen mislukt" : lang === "es" ? "Error al añadir" : "Failed to add", "error");
-      return;
-    }
-    onAdd(data);
-    setForm({ name_nl: "", name_en: "", price: "", duration: "", per_unit: false });
-    setOpen(false);
+    setSaving(true);
+    try {
+      const filled = await autoFillTranslations(form, [{ nl: "name_nl", en: "name_en" }], lang);
+      const { data, error } = await supabase.from("service_extras").insert({
+        service_id: serviceId, name_nl: filled.name_nl || filled.name_en || filled.name_es, name_en: filled.name_en || null, name_es: filled.name_es || null,
+        price,
+        duration,
+        per_unit: !!form.per_unit,
+        max_quantity: 10,
+        // Append at the end of the list so drag-reorder positions stay stable.
+        position: nextPosition
+      }).select().single();
+      if (error || !data) {
+        toast.show(lang === "nl" ? "Toevoegen mislukt" : lang === "es" ? "Error al añadir" : "Failed to add", "error");
+        return;
+      }
+      onAdd(data);
+      setForm(EMPTY_EXTRA);
+      setOpen(false);
+    } finally { setSaving(false); }
   };
 
   if (!open) return (
@@ -1954,8 +2163,10 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur =
         <AutoTranslateField
           nlValue={form.name_nl}
           enValue={form.name_en}
+          esValue={form.name_es}
           setNl={v => setForm(f => ({...f, name_nl: v}))}
           setEn={v => setForm(f => ({...f, name_en: v}))}
+          onEsChange={v => setForm(f => ({...f, name_es: v}))}
           lang={lang} accent={accent}
           placeholder={lang === "nl" ? "Naam *" : lang === "es" ? "Nombre *" : "Name *"}
         />
@@ -1972,7 +2183,7 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur =
         </label>
       </div>
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{t.add}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44`, opacity: saving ? 0.6 : 1 }} onClick={add} disabled={saving}>{saving ? "..." : t.add}</button>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}><NavIcon name="xmark" size={12} /></button>
       </div>
     </div>
@@ -1980,46 +2191,97 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur =
 }
 
 // ─── STAFF ADDER ────────────────────────────────────────────
-function StaffAdder({ ownerId, services, lang, t, accent, onAdd, salonHours }) {
+// `accountType`: optioneel ("team" | "joint"); zonder prop leest hij het type
+// van het opgeslagen profiel. Alleen bij een teamaccount gaat er na het
+// toevoegen een uitnodiging per e-mail uit.
+function StaffAdder({ ownerId, services, lang, t, accent, onAdd, salonHours, accountType }) {
   const { colors: c } = useTheme();
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", role: "", email: "" });
   const [selServices, setSelServices] = useState([]);
+  const [saving, setSaving] = useState(false); // geen dubbel teamlid bij een tweede tik
+  // Accounttype voor de uitleg onder het e-mailveld: eigen logins (en dus de
+  // uitnodiging) bestaan alleen bij een teamaccount. Zonder prop lezen we het
+  // bij openen uit het profiel (de accountkeuze wordt direct opgeslagen).
+  const [acctType, setAcctType] = useState(accountType ?? null);
+  useEffect(() => {
+    if (accountType !== undefined) { setAcctType(accountType); return; }
+    if (!open || !ownerId) return;
+    let stop = false;
+    supabase.from("profiles").select("account_type").eq("id", ownerId).maybeSingle()
+      .then(({ data }) => { if (!stop) setAcctType(data?.account_type || "joint"); }, () => {});
+    return () => { stop = true; };
+  }, [open, ownerId, accountType]);
+  const isJoint = acctType != null && acctType !== "team";
+
+  // Uitnodiging mailen (best effort): de stylist krijgt een link van Vellu en
+  // maakt daarmee een account aan of logt in; pas dan wordt zij aan deze rij
+  // gekoppeld (claim_staff_invite). Automatisch koppelen op e-mailadres
+  // bestaat niet meer. Mislukt het, dan blijft het teamlid gewoon staan en kan
+  // de eigenaar het opnieuw mailen vanuit het teamoverzicht.
+  const sendInvite = async (staffId, email) => {
+    try {
+      let team = accountType === "team";
+      if (accountType === undefined) {
+        const { data: prof } = await supabase.from("profiles").select("account_type").eq("id", ownerId).maybeSingle();
+        team = prof?.account_type === "team";
+      }
+      if (!team) {
+        // Gedeeld account: geen eigen login, dus geen uitnodiging. Zeggen
+        // waarom, i.p.v. stil niets te doen (vroeger kon zij zichzelf koppelen
+        // door met dit adres een account te maken; dat kan niet meer).
+        toast.show(lang === "nl" ? `Teamlid toegevoegd. Met een gedeeld account krijgt zij geen eigen login; kies ${t.teamAccount} bij ${t.accountType} als zij zelf moet kunnen inloggen.` : lang === "es" ? `Miembro añadido. Con una cuenta compartida no recibe acceso propio; elige ${t.teamAccount} en ${t.accountType} si debe poder entrar por su cuenta.` : `Team member added. With a joint account they do not get their own login; choose ${t.teamAccount} under ${t.accountType} if they should be able to sign in themselves.`);
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("create-staff-account", {
+        body: { action: "invite", staff_id: staffId, lang: ["nl", "en", "es"].includes(lang) ? lang : "nl" },
+      });
+      if (error || !data?.success) throw new Error(data?.error || "invite_failed");
+      toast.show(lang === "nl" ? `Uitnodiging verstuurd naar ${email}` : lang === "es" ? `Invitación enviada a ${email}` : `Invitation sent to ${email}`);
+    } catch (e) {
+      console.error("staff invite failed:", e);
+      toast.show(lang === "nl" ? "Teamlid toegevoegd, maar de uitnodiging kon niet worden verstuurd. Mail hem opnieuw vanuit het teamoverzicht." : lang === "es" ? "Miembro añadido, pero no se pudo enviar la invitación. Vuelve a enviarla desde la lista del equipo." : "Team member added, but the invitation could not be sent. Send it again from the team list.", "error");
+    }
+  };
 
   const add = async () => {
+    if (saving) return;
     if (!form.name.trim()) return;
     const email = form.email.trim().toLowerCase();
-    // Basic email check if provided. Email is what lets the staff member log in — when
-    // they sign up or log in with this address, our auth flow will link their user_id
-    // to this staff_members row automatically.
+    // Basic email check if provided. Email is what lets the staff member log in:
+    // in a team salon she gets an invitation link by e-mail (sendInvite below).
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       toast.show(lang === "nl" ? "Ongeldig e-mailadres" : lang === "es" ? "Dirección de correo no válida" : "Invalid email address", "error");
       return;
     }
-    // Zonder working_hours is een nieuwe medewerker bij een teamaccount NUL
-    // dagen boekbaar: de boekingspagina telt alleen medewerkers die voor die
-    // dag eigen uren hebben en sluit de dag anders. Je voegde iemand toe en je
-    // agenda ging dicht. Standaard krijgt hij daarom de openingstijden van de
-    // salon; die kan de eigenaar daarna per dag aanpassen.
-    const { data, error } = await supabase.from("staff_members").insert({
-      owner_id: ownerId, name: form.name.trim(), role: form.role.trim() || null, email: email || null,
-      working_hours: salonHours || null
-    }).select().single();
-    if (error || !data) {
-      toast.show(lang === "nl" ? "Medewerker toevoegen mislukt" : lang === "es" ? "Error al añadir personal" : "Failed to add staff", "error");
-      return;
-    }
-    // Link selected services
-    if (selServices.length > 0) {
-      await supabase.from("staff_services").insert(
-        selServices.map(sid => ({ staff_id: data.id, service_id: sid }))
-      );
-    }
-    onAdd({ ...data, service_ids: selServices });
-    setForm({ name: "", role: "", email: "" });
-    setSelServices([]);
-    setOpen(false);
+    setSaving(true);
+    try {
+      // Zonder working_hours is een nieuwe medewerker bij een teamaccount NUL
+      // dagen boekbaar: de boekingspagina telt alleen medewerkers die voor die
+      // dag eigen uren hebben en sluit de dag anders. Je voegde iemand toe en je
+      // agenda ging dicht. Standaard krijgt hij daarom de openingstijden van de
+      // salon; die kan de eigenaar daarna per dag aanpassen.
+      const { data, error } = await supabase.from("staff_members").insert({
+        owner_id: ownerId, name: form.name.trim(), role: form.role.trim() || null, email: email || null,
+        working_hours: salonHours || null
+      }).select().single();
+      if (error || !data) {
+        toast.show(lang === "nl" ? "Medewerker toevoegen mislukt" : lang === "es" ? "Error al añadir personal" : "Failed to add staff", "error");
+        return;
+      }
+      // Link selected services
+      if (selServices.length > 0) {
+        await supabase.from("staff_services").insert(
+          selServices.map(sid => ({ staff_id: data.id, service_id: sid }))
+        );
+      }
+      onAdd({ ...data, service_ids: selServices });
+      setForm({ name: "", role: "", email: "" });
+      setSelServices([]);
+      setOpen(false);
+      if (email) await sendInvite(data.id, email);
+    } finally { setSaving(false); }
   };
 
   if (!open) return (
@@ -2032,8 +2294,12 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd, salonHours }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
         <input className="input-field" placeholder={t.staffName + " *"} value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} style={{ fontSize: 12, padding: "10px 12px" }} />
         <input className="input-field" placeholder={t.staffRole} value={form.role} onChange={e => setForm(f => ({...f, role: e.target.value}))} style={{ fontSize: 12, padding: "10px 12px" }} />
-        <input className="input-field" type="email" placeholder={`${lang === "nl" ? "E-mail voor login" : lang === "es" ? "Correo de acceso" : "Login email"} (${t.optional || "optional"})`} value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} style={{ fontSize: 12, padding: "10px 12px" }} />
-        <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.4 }}>{lang === "nl" ? "Voeg een e-mailadres toe als de medewerker in moet kunnen loggen op hun eigen dashboard." : lang === "es" ? "Añade un correo si este miembro del personal debe poder acceder a su propio panel." : "Add an email if this staff member should be able to log into their own dashboard."}</div>
+        <input className="input-field" type="email" placeholder={`${isJoint ? t.staffEmail : lang === "nl" ? "E-mail voor login" : lang === "es" ? "Correo de acceso" : "Login email"} (${t.optional || "optional"})`} value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} style={{ fontSize: 12, padding: "10px 12px" }} />
+        <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.4 }}>{isJoint
+          // Gedeeld account: het adres krijgt wel meldingen van haar boekingen
+          // (book-appointment staff_emails), maar geen login.
+          ? (lang === "nl" ? `Met een gedeeld account loggen jullie allemaal met dezelfde login in. Op dit adres krijgt de medewerker meldingen van haar boekingen. Een eigen login kan alleen met een teamaccount (${t.accountType}: ${t.teamAccount}).` : lang === "es" ? `Con una cuenta compartida todos usan el mismo acceso. En este correo el miembro recibe avisos de sus reservas. Un acceso propio solo es posible con una cuenta de equipo (${t.accountType}: ${t.teamAccount}).` : `With a joint account everyone signs in with the same login. This address gets notifications about their bookings. Their own login is only possible with a team account (${t.accountType}: ${t.teamAccount}).`)
+          : (lang === "nl" ? "Voeg een e-mailadres toe als de medewerker in moet kunnen loggen op hun eigen dashboard. Bij een teamaccount krijgt zij daarna een uitnodigingslink per e-mail." : lang === "es" ? "Añade un correo si este miembro del personal debe poder acceder a su propio panel. Con una cuenta de equipo recibirá después un enlace de invitación por correo." : "Add an email if this staff member should be able to log into their own dashboard. With a team account they then get an invitation link by email.")}</div>
       </div>
       {services.length > 0 && (
         <div style={{ marginBottom: 8 }}>
@@ -2054,7 +2320,7 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd, salonHours }) {
         </div>
       )}
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{t.add}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44`, opacity: saving ? 0.6 : 1 }} onClick={add} disabled={saving}>{saving ? "..." : t.add}</button>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}><NavIcon name="xmark" size={12} /></button>
       </div>
     </div>
@@ -2067,21 +2333,26 @@ function LocationAdder({ ownerId, lang, t, accent, onAdd }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", address: "", city: "", phone: "" });
+  const [saving, setSaving] = useState(false); // geen dubbele locatie bij een tweede tik
 
   const add = async () => {
+    if (saving) return;
     if (!form.name.trim()) return;
-    const { data, error } = await supabase.from("locations").insert({
-      owner_id: ownerId, name: form.name.trim(), address: form.address || null,
-      city: form.city || null, phone: form.phone || null,
-      business_hours: DEFAULT_HOURS, break_minutes: 0
-    }).select().single();
-    if (error || !data) {
-      toast.show(lang === "nl" ? "Locatie toevoegen mislukt" : lang === "es" ? "Error al añadir ubicación" : "Failed to add location", "error");
-      return;
-    }
-    onAdd(data);
-    setForm({ name: "", address: "", city: "", phone: "" });
-    setOpen(false);
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.from("locations").insert({
+        owner_id: ownerId, name: form.name.trim(), address: form.address || null,
+        city: form.city || null, phone: form.phone || null,
+        business_hours: DEFAULT_HOURS, break_minutes: 0
+      }).select().single();
+      if (error || !data) {
+        toast.show(lang === "nl" ? "Locatie toevoegen mislukt" : lang === "es" ? "Error al añadir ubicación" : "Failed to add location", "error");
+        return;
+      }
+      onAdd(data);
+      setForm({ name: "", address: "", city: "", phone: "" });
+      setOpen(false);
+    } finally { setSaving(false); }
   };
 
   if (!open) return (
@@ -2100,7 +2371,7 @@ function LocationAdder({ ownerId, lang, t, accent, onAdd }) {
         </div>
       </div>
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44` }} onClick={add}>{t.add}</button>
+        <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px", flex: 1, color: accent, borderColor: `${accent}44`, opacity: saving ? 0.6 : 1 }} onClick={add} disabled={saving}>{saving ? "..." : t.add}</button>
         <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 14px" }} onClick={() => setOpen(false)}><NavIcon name="xmark" size={12} /></button>
       </div>
     </div>
@@ -2134,39 +2405,113 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
   // tijdens een referral-actie met een uitnodigingscode aanmeldde (dan is de
   // gratis maand haar proef; zie start-trial + RPC my_trial_days).
   const [trialDays, setTrialDays] = useState(14);
-  const [postCheckout, setPostCheckout] = useState(false);
+  // Terug van Mollie: Mollie stuurt ELKE uitkomst (betaald, geannuleerd,
+  // mislukt, overschrijving open) naar /owner?subscription=success. We tonen
+  // daarom pas iets na controle: null (geen terugkeer) | "checking" | "active"
+  // | "activating" (Mollie: betaald, webhook nog onderweg) | "slow" |
+  // "pending" (open/pending, bv. bankoverschrijving) | "failed" | "unknown".
+  const [postCheckout, setPostCheckout] = useState(null);
+  // In behandeling: betaalknoppen weg (dubbel betalen), tenzij de eigenaar
+  // bewust toch opnieuw wil betalen (bv. een afgebroken iDEAL-scherm).
+  const [payAnyway, setPayAnyway] = useState(false);
+  // Zolang de status van een eerdere betaling nog wordt opgevraagd, blijven
+  // de betaalknoppen uit (anders kon een snelle tik een tweede checkout starten).
+  const [payStatusLoading, setPayStatusLoading] = useState(false);
   // Eigen confirm-modal: PlanSelection staat los van OwnerApp en heeft dus geen
   // toegang tot de showConfirm daar. Nodig omdat beide knoppen hieronder de
   // pagina verlaten/herladen zonder dat de gebruiker daarop bedacht is.
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
 
-  // On mount: detect Mollie redirect, then load profile.trial_used / status
+  // Status van de laatste Mollie-betaling van deze klant (create-subscription
+  // action last_payment_status): 'paid' | 'open' | 'pending' | 'authorized' |
+  // 'failed' | 'canceled' | 'expired' | null. Fout of onbekend = null.
+  const lastPaymentStatus = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("create-subscription", { body: { action: "last_payment_status" } });
+      return error ? null : (data?.status || null);
+    } catch { return null; }
+  };
+
+  // On mount: load profile.trial_used / status, and after a Mollie redirect
+  // check what really happened to the payment before showing anything.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("subscription") === "success") {
-      setPostCheckout(true);
-      // Strip the query string so a refresh doesn't re-trigger the splash
-      window.history.replaceState({}, "", "/owner");
-      // Webhook should have flipped subscription_status=active by now (Mollie
-      // typically pings within seconds). Reload after a short pause so the
-      // user lands in OwnerApp instead of bouncing back here.
-      setTimeout(() => window.location.reload(), 4000);
-      return;
-    }
+    const fromCheckout = params.get("subscription") === "success";
     let cancelled = false;
+    if (fromCheckout) {
+      setPostCheckout("checking");
+      // Strip the query string so a refresh doesn't re-trigger the check
+      window.history.replaceState({}, "", "/owner");
+    }
     (async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("trial_used, subscription_status")
+        .select("trial_used, subscription_status, mollie_customer_id")
         .eq("id", user.id)
         .maybeSingle();
-      if (!cancelled && data) setProfileBilling(data);
+      if (!cancelled && data) {
+        if (!fromCheckout && data.mollie_customer_id) setPayStatusLoading(true);
+        setProfileBilling(data);
+      }
       try {
         const { data: td } = await supabase.rpc("my_trial_days");
         const n = Number(td);
         if (!cancelled && Number.isFinite(n) && n >= 14 && n <= 90) setTrialDays(n);
       } catch { /* zonder antwoord: gewone 14 dagen */ }
+      // Geen terugkeer van Mollie, wel eerder een checkout gestart: staat er
+      // nog een betaling open (jaarlijks per overschrijving duurt dagen), dan
+      // eerst die melding i.p.v. meteen weer betaalknoppen.
+      if (!fromCheckout && data?.mollie_customer_id) {
+        const st = await lastPaymentStatus();
+        if (!cancelled && (st === "open" || st === "pending")) setPostCheckout("pending");
+        if (!cancelled) setPayStatusLoading(false);
+      }
     })();
+    if (fromCheckout) {
+      (async () => {
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        // Zelfde regel als planIsActive (App.jsx), zonder de coulance.
+        const isActive = async () => {
+          const { data } = await supabase.from("profiles").select("plan, plan_expires_at").eq("id", user.id).maybeSingle();
+          if (!data?.plan) return false;
+          const raw = data.plan_expires_at;
+          if (!raw) return true;
+          const exp = new Date(typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw + "T23:59:59" : raw);
+          return exp.getTime() > Date.now();
+        };
+        // Actief: welkom en herladen, dan opent het dashboard.
+        const done = () => { if (cancelled) return; setPostCheckout("active"); setTimeout(() => window.location.reload(), 1500); };
+        const FAILED = ["failed", "canceled", "expired"];
+        // Nog niet zeker (betaald maar traag, of onbekend): de parameter terug
+        // in de adresbalk, zodat ook een gewone F5 de controle opnieuw draait
+        // in plaats van zonder melding de betaalknoppen te tonen.
+        const keepCheck = () => window.history.replaceState({}, "", "/owner?subscription=success");
+        let status = null;
+        // ~20 s op de webhook wachten; na ~6 s al bij Mollie navragen, zodat
+        // een geannuleerde betaling niet de hele wachttijd kost.
+        for (let i = 0; i < 10; i++) {
+          if (cancelled) return;
+          if (await isActive()) return done();
+          if (i === 2) { status = await lastPaymentStatus(); if (FAILED.includes(status)) break; }
+          await sleep(2000);
+        }
+        if (cancelled) return;
+        if (!FAILED.includes(status)) status = await lastPaymentStatus();
+        if (cancelled) return;
+        if (status === "paid" || status === "authorized") {
+          // Betaald, maar de webhook is nog niet verwerkt: nog een minuut kijken.
+          setPostCheckout("activating");
+          for (let i = 0; i < 20; i++) {
+            await sleep(3000);
+            if (cancelled) return;
+            if (await isActive()) return done();
+          }
+          if (!cancelled) { keepCheck(); setPostCheckout("slow"); }
+        } else if (status === "open" || status === "pending") setPostCheckout("pending");
+        else if (FAILED.includes(status)) setPostCheckout("failed");
+        else { keepCheck(); setPostCheckout("unknown"); }
+      })();
+    }
     return () => { cancelled = true; };
   }, [user.id]);
 
@@ -2176,16 +2521,36 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
   const PRICES = { starter: 19, professional: 35 };
   const priceFor = (planId) => {
     const m = PRICES[planId];
-    if (billingInterval === "monthly") return { display: m, suffix: t.perMonth, sub: null };
+    if (billingInterval === "monthly") return { display: `€${m}`, suffix: t.perMonth, sub: null };
     const y = m * 10;
     return {
-      display: (y / 12).toFixed(2),
+      // Komma als decimaalteken, zoals overal: €15,83 i.p.v. €15.83.
+      display: fmtAmt("€", y / 12),
       suffix: t.perMonth,
       sub: `€${y} ${t.billedYearly}`,
     };
   };
 
   const canTrial = profileBilling && !profileBilling.trial_used;
+
+  // Foutcode uit start-trial / create-subscription. Bij een niet-2xx-antwoord
+  // geeft functions.invoke data=null en staat de code in error.context (zoals
+  // RescheduleModal hem leest); error.message is dan alleen een Engelse
+  // technische zin die de eigenaar niets zegt.
+  const fnErrorCode = async (data, error) => {
+    if (data?.error) return data.error;
+    if (error?.context && typeof error.context.json === "function") {
+      try { const parsed = await error.context.json(); if (parsed?.error) return parsed.error; } catch { /* geen JSON */ }
+    }
+    return "unknown";
+  };
+  const planErrorText = (code, fallback) => ({
+    already_subscribed: lang === "nl" ? "Je hebt al een actief abonnement. Ververs de pagina." : lang === "es" ? "Ya tienes una suscripción activa. Recarga la página." : "You already have an active subscription. Please refresh the page.",
+    mollie_customer_failed: lang === "nl" ? "De betaalpagina kon niet worden geopend. Probeer het over een paar minuten opnieuw." : lang === "es" ? "No se pudo abrir la página de pago. Inténtalo de nuevo en unos minutos." : "The payment page could not be opened. Please try again in a few minutes.",
+    mollie_payment_failed: lang === "nl" ? "De betaalpagina kon niet worden geopend. Probeer het over een paar minuten opnieuw." : lang === "es" ? "No se pudo abrir la página de pago. Inténtalo de nuevo en unos minutos." : "The payment page could not be opened. Please try again in a few minutes.",
+    no_auth: lang === "nl" ? "Je sessie is verlopen. Log opnieuw in." : lang === "es" ? "Tu sesión ha caducado. Inicia sesión de nuevo." : "Your session has expired. Please sign in again.",
+    invalid_auth: lang === "nl" ? "Je sessie is verlopen. Log opnieuw in." : lang === "es" ? "Tu sesión ha caducado. Inicia sesión de nuevo." : "Your session has expired. Please sign in again.",
+  }[code] || fallback || t.somethingWrong);
 
   const handleStartTrial = async (planId) => {
     if (busy) return;
@@ -2204,13 +2569,14 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
         body: { plan: planId, billing_interval: billingInterval },
       });
       if (error || !data?.success) {
-        const code = data?.error || error?.message || "unknown";
+        const code = await fnErrorCode(data, error);
         if (code === "trial_already_used") {
           // Race: profile says no trial, server says yes. Refresh state.
           toast.show(lang === "nl" ? "Proefperiode al gebruikt" : lang === "es" ? "Prueba ya utilizada" : "Trial already used", "error");
           setProfileBilling((p) => ({ ...(p || {}), trial_used: true }));
         } else {
-          toast.show(lang === "nl" ? `Probleem: ${code}` : lang === "es" ? `Problema: ${code}` : `Error: ${code}`, "error");
+          console.error("start-trial failed:", code, error);
+          toast.show(planErrorText(code, lang === "nl" ? "De proefperiode kon niet starten. Probeer het opnieuw." : lang === "es" ? "No se pudo iniciar la prueba. Inténtalo de nuevo." : "The trial could not be started. Please try again."), "error");
         }
         return;
       }
@@ -2245,15 +2611,9 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
         body: { plan: planId, billing_interval: billingInterval },
       });
       if (error || !data?.checkout_url) {
-        const code = data?.error || error?.message || "unknown";
-        toast.show(
-          lang === "nl"
-            ? `Betaling kon niet starten: ${code}`
-            : lang === "es"
-            ? `No se pudo iniciar el pago: ${code}`
-            : `Could not start payment: ${code}`,
-          "error"
-        );
+        const code = await fnErrorCode(data, error);
+        console.error("create-subscription failed:", code, error);
+        toast.show(planErrorText(code, lang === "nl" ? "De betaling kon niet starten. Probeer het opnieuw." : lang === "es" ? "No se pudo iniciar el pago. Inténtalo de nuevo." : "The payment could not be started. Please try again."), "error");
         return;
       }
       // Hand off to Mollie's hosted checkout. They'll redirect back to
@@ -2287,28 +2647,59 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
     },
   ];
 
-  // Post-Mollie-checkout success splash (auto-reloads after a few seconds)
-  if (postCheckout) {
+  // Terug van Mollie: volledig scherm zolang we controleren of activeren.
+  // "pending", "failed" en "unknown" tonen gewoon de plannen met een melding
+  // erboven (zie checkoutNotice hieronder).
+  if (postCheckout === "checking" || postCheckout === "active" || postCheckout === "activating" || postCheckout === "slow") {
+    const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+    const title = postCheckout === "checking"
+      ? L("Een momentje", "One moment", "Un momento")
+      : postCheckout === "active"
+      ? L("Welkom bij Vellu!", "Welcome to Vellu!", "¡Bienvenido a Vellu!")
+      : L("Betaling gelukt", "Payment received", "Pago recibido");
+    const body = postCheckout === "checking"
+      ? L("We controleren je betaling…", "We are checking your payment…", "Estamos comprobando tu pago…")
+      : postCheckout === "active"
+      ? L("Je abonnement is actief. Je dashboard wordt geopend…", "Your subscription is active. Opening your dashboard…", "Tu suscripción está activa. Abriendo tu panel…")
+      : postCheckout === "activating"
+      ? L("Je abonnement wordt geactiveerd. Een momentje…", "Your subscription is being activated. One moment…", "Estamos activando tu suscripción. Un momento…")
+      : L("Het activeren duurt langer dan normaal. Controleer het over een paar minuten opnieuw; je hoeft niet opnieuw te betalen.", "Activation is taking longer than usual. Check again in a few minutes; you do not need to pay again.", "La activación tarda más de lo normal. Vuelve a comprobarlo en unos minutos; no tienes que volver a pagar.");
     return (
       <Layout>
         <AtelierSkin />
         <div className="atelier" style={{ background: c.bg, minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, fontFamily: "'Jost',sans-serif", color: c.text, textAlign: "center" }}>
-          <div style={{ marginBottom: 24 }}><NavIcon name="check" size={48} color={c.success} /></div>
+          {postCheckout !== "checking" && <div style={{ marginBottom: 24 }}><NavIcon name="check" size={48} color={c.success} /></div>}
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 12 }}>
-            {lang === "nl" ? "Welkom bij Vellu!" : lang === "es" ? "¡Bienvenido a Vellu!" : "Welcome to Vellu!"}
+            {title}
           </div>
           <div style={{ fontSize: 14, color: c.textSub, maxWidth: 420 }}>
-            {lang === "nl"
-              ? "Je abonnement wordt geactiveerd. Een momentje…"
-              : lang === "es"
-              ? "Estamos activando tu suscripción. Un momento…"
-              : "Your subscription is being activated. One moment…"}
+            {body}
           </div>
-          <div style={{ marginTop: 28, width: 32, height: 32, border: `2px solid ${c.border}`, borderTopColor: accent, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          {postCheckout === "slow" ? (
+            // Met de parameter: een kale reload sloeg de controle over en
+            // toonde de betaalknoppen weer, net na "niet opnieuw betalen".
+            <button className="btn-primary" style={{ marginTop: 28, width: "auto", padding: "12px 24px" }} onClick={() => { window.location.href = "/owner?subscription=success"; }}>
+              {L("Opnieuw controleren", "Check again", "Comprobar de nuevo")}
+            </button>
+          ) : (
+            <div style={{ marginTop: 28, width: 32, height: 32, border: `2px solid ${c.border}`, borderTopColor: accent, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          )}
         </div>
       </Layout>
     );
   }
+
+  // Melding boven de plannen na een betaling die (nog) niet tot toegang
+  // leidde. In behandeling: geen betaalknoppen, zodat er niet dubbel betaald
+  // wordt — behalve als de eigenaar bewust opnieuw wil betalen.
+  const hidePay = postCheckout === "pending" && !payAnyway;
+  const checkoutNotice = postCheckout === "pending"
+    ? (lang === "nl" ? "Je betaling is in behandeling. Een bankoverschrijving kan 1-3 werkdagen duren; je krijgt toegang zodra de betaling binnen is." : lang === "es" ? "Tu pago está en proceso. Una transferencia bancaria puede tardar de 1 a 3 días hábiles; tendrás acceso en cuanto se reciba el pago." : "Your payment is being processed. A bank transfer can take 1-3 business days; you get access as soon as the payment arrives.")
+    : postCheckout === "failed"
+    ? (lang === "nl" ? "De betaling is niet gelukt of geannuleerd. Probeer het opnieuw." : lang === "es" ? "El pago no se completó o se canceló. Inténtalo de nuevo." : "The payment did not go through or was cancelled. Please try again.")
+    : postCheckout === "unknown"
+    ? (lang === "nl" ? "We konden je betaling nog niet bevestigen. Heb je betaald? Kies dan over een paar minuten 'Opnieuw controleren' voordat je opnieuw betaalt." : lang === "es" ? "Aún no hemos podido confirmar tu pago. ¿Ya has pagado? Pulsa 'Comprobar de nuevo' dentro de unos minutos antes de volver a pagar." : "We could not confirm your payment yet. Already paid? Choose 'Check again' in a few minutes before paying again.")
+    : "";
 
   // The CTA copy depends on whether they can still trial. Loading text only
   // shows on the specific plan being processed, never both buttons at once.
@@ -2355,6 +2746,25 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
             </div>
           </div>
 
+          {checkoutNotice && (
+            <div role="status" data-checkout-notice={postCheckout} style={{ marginBottom: 24, padding: "14px 16px", borderRadius: 8, background: c.bgCard, border: `1px solid ${accent}55`, fontSize: 13, color: c.text, lineHeight: 1.55, textAlign: "center" }}>
+              {checkoutNotice}
+              {(postCheckout === "pending" || postCheckout === "unknown") && (
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", marginTop: 12 }}>
+                  {/* Opnieuw de terugkeer-controle draaien (de parameter start hem). */}
+                  <button className="btn-ghost" style={{ width: "auto", fontSize: 11, padding: "8px 16px", borderColor: `${accent}55`, color: accent }} onClick={() => { window.location.href = "/owner?subscription=success"; }}>
+                    {lang === "nl" ? "Opnieuw controleren" : lang === "es" ? "Comprobar de nuevo" : "Check again"}
+                  </button>
+                  {postCheckout === "pending" && !payAnyway && (
+                    <button className="btn-ghost" style={{ width: "auto", fontSize: 11, padding: "8px 16px", color: c.textMuted }} onClick={() => setPayAnyway(true)}>
+                      {lang === "nl" ? "Toch een nieuwe betaling starten" : lang === "es" ? "Iniciar un nuevo pago de todos modos" : "Start a new payment anyway"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Monthly/Yearly toggle */}
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
             <div className="lang-toggle">
@@ -2394,7 +2804,7 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
                     <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: "0.06em", marginBottom: 4 }}>{plan.name}</div>
                     <div style={{ fontSize: 12, color: c.textLabel, marginBottom: 12, minHeight: 16 }}>{plan.desc}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 48, fontWeight: 300, color: accent, lineHeight: 1 }}>
-                      €{p.display}<span style={{ fontSize: 16, color: c.textLabel }}>{p.suffix}</span>
+                      {p.display}<span style={{ fontSize: 16, color: c.textLabel }}>{p.suffix}</span>
                     </div>
                     {p.sub && (
                       <div style={{ fontSize: 11, color: c.textMuted, marginTop: 6 }}>{p.sub}</div>
@@ -2408,14 +2818,16 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
                       </div>
                     ))}
                   </div>
-                  <button
-                    className={plan.popular ? "btn-primary" : "btn-ghost"}
-                    style={{ width: "100%", ...(plan.popular ? {} : { borderColor: `${accent}44`, color: accent }) }}
-                    disabled={busy || !profileBilling}
-                    onClick={() => (canTrial ? handleStartTrial(plan.id) : handleSubscribe(plan.id))}
-                  >
-                    {ctaLabel(plan.id)}
-                  </button>
+                  {!hidePay && (
+                    <button
+                      className={plan.popular ? "btn-primary" : "btn-ghost"}
+                      style={{ width: "100%", ...(plan.popular ? {} : { borderColor: `${accent}44`, color: accent }) }}
+                      disabled={busy || !profileBilling || payStatusLoading}
+                      onClick={() => (canTrial ? handleStartTrial(plan.id) : handleSubscribe(plan.id))}
+                    >
+                      {ctaLabel(plan.id)}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -2434,11 +2846,20 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
                   : lang === "es"
                   ? "Sin compromiso. Cancela cuando quieras, durante o después de la prueba."
                   : "No commitment. Cancel anytime during or after the trial.")
-              : (lang === "nl"
-                  ? "Veilig betalen via iDEAL, creditcard, Apple Pay, Google Pay of SEPA — powered by Mollie."
+              // Maandelijks = machtiging en daar laat create-subscription
+              // alleen iDEAL en creditcard toe; jaarlijks is een eenmalige
+              // betaling waarbij Mollie elke ingeschakelde methode toont.
+              : billingInterval === "monthly"
+              ? (lang === "nl"
+                  ? "Veilig betalen via iDEAL of creditcard — powered by Mollie."
                   : lang === "es"
-                  ? "Pago seguro con iDEAL, tarjeta, Apple Pay, Google Pay o SEPA — con la tecnología de Mollie."
-                  : "Secure payment via iDEAL, card, Apple Pay, Google Pay or SEPA — powered by Mollie.")}
+                  ? "Pago seguro con iDEAL o tarjeta — con la tecnología de Mollie."
+                  : "Secure payment via iDEAL or card — powered by Mollie.")
+              : (lang === "nl"
+                  ? "Veilig betalen via iDEAL, creditcard of een andere methode die Mollie op de betaalpagina aanbiedt — powered by Mollie."
+                  : lang === "es"
+                  ? "Pago seguro con iDEAL, tarjeta u otro método que Mollie ofrezca en la página de pago — con la tecnología de Mollie."
+                  : "Secure payment via iDEAL, card or another method Mollie offers on the payment page — powered by Mollie.")}
           </div>
         </div>
       </div>
@@ -2601,7 +3022,10 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish }) {
 
               <input className="input-field" placeholder={t.onboardingServiceName} value={svcName} onChange={e => setSvcName(e.target.value)} style={{ ...inputStyle, marginBottom: 10 }} />
               <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
-                <input className="input-field" type="number" placeholder={t.onboardingServicePrice} value={svcPrice} onChange={e => setSvcPrice(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
+                {/* Valuta van de salon i.p.v. een vaste €: een salon op Bonaire
+                    (USD), Aruba of Curaçao zag "Prijs (€)". Een eventuele oude
+                    "(€)" in de vertaling wordt eerst weggehaald. */}
+                <input className="input-field" type="number" placeholder={`${String(t.onboardingServicePrice || "").replace(/\s*\(€\)\s*$/, "")} (${curSym(salonData.country_code).trim()})`} value={svcPrice} onChange={e => setSvcPrice(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
                 <select className="input-field" value={svcDuration} onChange={e => setSvcDuration(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }}>
                   {[15,30,45,60,75,90,120].map(m => <option key={m} value={m} style={optStyle}>{m} min</option>)}
                 </select>
@@ -2734,16 +3158,27 @@ function parseCSV(text) {
 // waardoor de klanten-import in Instellingen hem niet kon gebruiken en de
 // kolom "birthday" daar stilzwijgend werd genegeerd — terwijl de hulptekst
 // bij de verjaardagsmail belooft dat je die kunt importeren.
+// Alleen echte datums: '31-02-1990' of een Amerikaanse '05/14/1990' gaf
+// eerder '1990-02-31' / '1990-14-05', en Postgres weigerde dan de HELE insert
+// van 200 klanten. Ongeldig = null (geen verjaardag), de rij gaat gewoon mee.
 const parseBirthday = (raw) => {
   if (!raw) return null;
   const t = String(raw).trim();
   if (!t) return null;
-  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  // dd-mm-jjjj of dd/mm/jjjj — Europese volgorde, want de salons zitten in
-  // NL/BE en de Cariben.
-  const eu = /^(\d{2})[-\/](\d{2})[-\/](\d{4})$/.exec(t);
-  if (eu) return `${eu[3]}-${eu[2]}-${eu[1]}`;
+  const valid = (y, m, d) => {
+    const Y = Number(y), M = Number(m), D = Number(d);
+    if (Y < 1900 || Y > new Date().getFullYear() || M < 1 || M > 12 || D < 1) return null;
+    const dt = new Date(Date.UTC(Y, M - 1, D));
+    if (dt.getUTCFullYear() !== Y || dt.getUTCMonth() !== M - 1 || dt.getUTCDate() !== D) return null;
+    return `${Y}-${String(M).padStart(2, "0")}-${String(D).padStart(2, "0")}`;
+  };
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
+  if (iso) return valid(iso[1], iso[2], iso[3]);
+  // d-m-jjjj, dd-mm-jjjj, dd/mm/jjjj of dd.mm.jjjj — Europese volgorde, want
+  // de salons zitten in NL/BE en de Cariben. Nederlandse Excel schrijft korte
+  // datums zonder voorloopnul ('5-3-1990'), ook na opnieuw opslaan.
+  const eu = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(t);
+  if (eu) return valid(eu[3], eu[2], eu[1]);
   return null;
 };
 
