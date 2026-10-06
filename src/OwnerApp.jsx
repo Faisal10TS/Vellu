@@ -3524,6 +3524,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       list.sort((a, b) => a.name.localeCompare(b.name));
       setClients(list.filter((cl) => !cl.hidden));
       setHiddenClients(list.filter((cl) => cl.hidden));
+      // De open klantkaart meenemen in de verse telling: na "Telt vanaf"
+      // (ingangsdatum per klant) moet de stempelstand op de kaart zelf ook
+      // verspringen, niet alleen in de lijst (06-10-2026).
+      setSelected((s) => (s ? (list.find((x) => x.key === s.key) || s) : s));
       setLoading(false);
     })();
     return () => { cancelled = true; };
