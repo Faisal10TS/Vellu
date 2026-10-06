@@ -3294,6 +3294,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   // (gebruikt en verlopen tellen mee) — de trigger geeft pas een nieuwe code
   // als floor(bezoeken / nodig) daarboven komt.
   const [loyaltyIssued, setLoyaltyIssued] = useState({});
+  // Uitgegeven codes die meetellen: alleen vanaf de ingangsdatum van de klant
+  // (of de salondatum) — zelfde regel als de trigger sinds 06-10-2026.
+  const issuedSince = (k, since) => (loyaltyIssued[k] || []).filter((d) => !since || d >= since).length;
   // Stempelkaart-schakelaars: één tik tegelijk, anders maakte een dubbele tik
   // twee schaduwrijen voor dezelfde klant.
   const [loyaltyBusy, setLoyaltyBusy] = useState(false);
@@ -3343,7 +3346,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           .order("id")),
         fetchAllRows(() => supabase
           .from("manual_clients")
-          .select("id, name, email, phone, notes, hidden, birthday, loyalty_opt_in, loyalty_staff_off, is_business, contact_name, created_at")
+          .select("id, name, email, phone, notes, hidden, birthday, loyalty_opt_in, loyalty_staff_off, loyalty_since, is_business, contact_name, created_at")
           .eq("owner_id", ownerId)
           .order("id")),
         supabase
@@ -3365,7 +3368,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         // gebruikte en verlopen: die tellen mee voor wanneer de trigger de
         // volgende code geeft (loyaltyIssued); de open codes filteren we hier.
         loyalty?.enabled
-          ? fetchAllRows(() => supabase.from("birthday_discount_codes").select("id, code, client_email, discount_pct, expires_on, used_at, visits_at, staff_id").eq("owner_id", ownerId).eq("kind", "loyalty").order("id"))
+          ? fetchAllRows(() => supabase.from("birthday_discount_codes").select("id, code, client_email, discount_pct, expires_on, used_at, visits_at, staff_id, created_at").eq("owner_id", ownerId).eq("kind", "loyalty").order("id"))
           : Promise.resolve({ data: [] }),
       ]);
       if (!cancelled) {
@@ -3373,10 +3376,12 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         setWaitlistEnabled(prof?.waitlist_enabled !== false);
         // Sleutel "email|staff_id" — salonbrede codes hebben een lege staff.
         const byMail = {};
+        // Per sleutel de uitgiftedata (YYYY-MM-DD): met een ingangsdatum per
+        // klant tellen alleen codes vanaf die dag mee (zie issuedSince).
         const issued = {};
         for (const r of lcodes || []) {
           const k = `${String(r.client_email || "").toLowerCase()}|${r.staff_id || ""}`;
-          issued[k] = (issued[k] || 0) + 1;
+          (issued[k] = issued[k] || []).push(String(r.created_at || "").slice(0, 10));
           if (r.used_at || !r.expires_on || r.expires_on < salonToday) continue;
           if (!byMail[k] || r.expires_on > byMail[k].expires_on) byMail[k] = r;
         }
@@ -3481,10 +3486,12 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           // uitgezette stylisten tellen over alle rijen samen.
           existing.loyaltyOptIn = !!existing.loyaltyOptIn || !!m.loyalty_opt_in;
           existing.loyaltyStaffOff = [...new Set([...(existing.loyaltyStaffOff || []), ...staffOff])];
+          // Ingangsdatum per klant: de laatste datum wint (zoals de trigger).
+          if (m.loyalty_since && (!existing.loyaltySince || m.loyalty_since > existing.loyaltySince)) existing.loyaltySince = m.loyalty_since;
           existing.isBusiness = !!m.is_business;
           existing.contactName = m.contact_name || "";
         } else {
-          const card = { key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, manualIds: [m.id], manualNameKey: nk, clientId: null, hidden: !!m.hidden, loyaltyOptIn: !!m.loyalty_opt_in, loyaltyStaffOff: staffOff, isBusiness: !!m.is_business, contactName: m.contact_name || "", outstanding: 0, openItems: [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
+          const card = { key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, manualIds: [m.id], manualNameKey: nk, clientId: null, hidden: !!m.hidden, loyaltyOptIn: !!m.loyalty_opt_in, loyaltyStaffOff: staffOff, loyaltySince: m.loyalty_since || null, isBusiness: !!m.is_business, contactName: m.contact_name || "", outstanding: 0, openItems: [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
           extra.push(card);
           // Een volgende rij met hetzelfde adres én dezelfde naam komt op deze
           // kaart; een andere naam op hetzelfde adres krijgt een eigen kaart.
@@ -3500,8 +3507,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           // Stempels: zelfde telling als de trigger appointments_loyalty_stamp
           // (afgerond, geen kassaverkoop, sinds loyalty_since, en alleen
           // afspraken met precies dit e-mailadres — zonder adres geen stempels).
+          // Ingangsdatum: die van de klant (klantkaart, 06-10-2026) als die er
+          // is, anders de salondatum — zelfde regel als de trigger.
+          const sinceOf = cl.loyaltySince || loyalty?.since || null;
           const stampAppts = loyalty?.enabled && cl.email
-            ? cl.appts.filter((a) => a.status === "completed" && !isSaleRow(a) && String(a.client_email || "").trim().toLowerCase() === cl.email && (!loyalty.since || a.date >= loyalty.since))
+            ? cl.appts.filter((a) => a.status === "completed" && !isSaleRow(a) && String(a.client_email || "").trim().toLowerCase() === cl.email && (!sinceOf || a.date >= sinceOf))
             : [];
           cl.loyaltyVisits = stampAppts.length;
           // Per teamlid: stempels per stylist (bezoek telt bij elke stylist die
@@ -3786,6 +3796,34 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     setRefreshKey((k) => k + 1);
   };
 
+  // Ingangsdatum per klant (TTNB via Faisal 06-10-2026: de papieren kaart loopt
+  // door tot hij vol is, dan pas gaat de klant online sparen). manual_clients.
+  // loyalty_since = de dag waarop háár online kaart begint; null = salondatum.
+  // De trigger telt bezoeken én eerder uitgegeven codes vanaf die dag.
+  const setLoyaltySince = async (cl, dateStr) => {
+    if (!cl || loyaltyBusy) return;
+    const val = dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : null;
+    const mids = manualIdsOf(cl);
+    let error, newId = cl.manualId || null;
+    if (mids.length > 0) {
+      setLoyaltyBusy(true);
+      ({ error } = await supabase.from("manual_clients").update({ loyalty_since: val }).eq("owner_id", ownerId).in("id", mids));
+    } else {
+      if (!cl.email) { toast.show(lang === "nl" ? "Deze klant heeft geen e-mailadres en kan niet sparen" : lang === "es" ? "Este cliente no tiene correo y no puede acumular" : "This client has no email address and cannot collect stamps", "error"); return; }
+      if (!val) return;
+      setLoyaltyBusy(true);
+      const { data, error: e } = await supabase.from("manual_clients").insert({ owner_id: ownerId, name: cl.name || cl.email, email: cl.email, phone: cl.phone || null, loyalty_since: val }).select("id").maybeSingle();
+      error = e; newId = data?.id || null;
+    }
+    setLoyaltyBusy(false);
+    if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
+    setSelected((s) => s && s.key === cl.key ? { ...s, loyaltySince: val, manualId: newId, manualIds: mids.length > 0 ? mids : (newId ? [newId] : []) } : s);
+    toast.show(val
+      ? (lang === "nl" ? `Stempelkaart telt vanaf ${fmtDate(val)}` : lang === "es" ? `La tarjeta cuenta desde ${fmtDate(val)}` : `Loyalty card counts from ${fmtDate(val)}`)
+      : (lang === "nl" ? "Stempelkaart telt weer vanaf de salondatum" : lang === "es" ? "La tarjeta vuelve a contar desde la fecha del salón" : "Loyalty card counts from the salon date again"));
+    setRefreshKey((k) => k + 1);
+  };
+
   // Welke kaart blijft er bij samenvoegen over? De afspraken van de bron gaan
   // naar het e-mailadres van de doelkaart; zonder adres kan die ze niet
   // overnemen (dan bleef alles staan terwijl er "Samengevoegd" verscheen).
@@ -3854,6 +3892,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       if (source.loyaltyOptIn && !target.loyaltyOptIn) patch.loyalty_opt_in = true;
       // Per teamlid uitgezette stylisten: samenvoegen (uit blijft uit).
       if ((source.loyaltyStaffOff || []).length > 0) patch.loyalty_staff_off = [...new Set([...(target.loyaltyStaffOff || []), ...source.loyaltyStaffOff])];
+      // Ingangsdatum van de stempelkaart: de doelkaart houdt de hare, anders die van de bron.
+      if (source.loyaltySince && !target.loyaltySince) patch.loyalty_since = source.loyaltySince;
       // Zakelijke klant blijft zakelijk.
       if (source.isBusiness && !target.isBusiness) { patch.is_business = true; if (source.contactName && !target.contactName) patch.contact_name = source.contactName; }
       // Blijft een verborgen kaart over (de andere kaart had als enige een
@@ -4320,8 +4360,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                   // geen stand bij een stylist bij wie deze klant uitgezet is.
                   const staffOff = Array.isArray(cl.loyaltyStaffOff) ? cl.loyaltyStaffOff : [];
                   const cards = loyalty.perStaff
-                    ? staffList.filter((s) => s.active !== false && !staffOff.includes(s.id)).map((s) => ({ name: s.name, visits: cl.loyaltyByStaff?.[s.id] || 0, code: loyaltyCodes[`${mail}|${s.id}`], issued: loyaltyIssued[`${mail}|${s.id}`] || 0 })).filter((x) => x.visits > 0 || x.code)
-                    : [{ name: "", visits: cl.loyaltyVisits || 0, code: loyaltyCodes[`${mail}|`], issued: loyaltyIssued[`${mail}|`] || 0 }].filter((x) => x.visits > 0 || x.code);
+                    ? staffList.filter((s) => s.active !== false && !staffOff.includes(s.id)).map((s) => ({ name: s.name, visits: cl.loyaltyByStaff?.[s.id] || 0, code: loyaltyCodes[`${mail}|${s.id}`], issued: issuedSince(`${mail}|${s.id}`, cl.loyaltySince || loyalty.since) })).filter((x) => x.visits > 0 || x.code)
+                    : [{ name: "", visits: cl.loyaltyVisits || 0, code: loyaltyCodes[`${mail}|`], issued: issuedSince(`${mail}|`, cl.loyaltySince || loyalty.since) }].filter((x) => x.visits > 0 || x.code);
                   if (cards.length === 0) return null;
                   const anyCode = cards.some((x) => x.code);
                   return (
@@ -4465,8 +4505,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 // te zetten); uitgezette stylisten staan onderaan.
                 const staffOff = Array.isArray(selected.loyaltyStaffOff) ? selected.loyaltyStaffOff : [];
                 const cards = loyalty.perStaff
-                  ? staffList.filter((s) => s.active !== false).map((s) => ({ id: s.id, name: s.name, visits: selected.loyaltyByStaff?.[s.id] || 0, code: loyaltyCodes[`${mail}|${s.id}`] || null, issued: loyaltyIssued[`${mail}|${s.id}`] || 0, off: staffOff.includes(s.id) })).sort((a, b) => (a.off ? 1 : 0) - (b.off ? 1 : 0))
-                  : [{ id: null, name: "", visits: selected.loyaltyVisits || 0, code: loyaltyCodes[`${mail}|`] || null, issued: loyaltyIssued[`${mail}|`] || 0, off: false }];
+                  ? staffList.filter((s) => s.active !== false).map((s) => ({ id: s.id, name: s.name, visits: selected.loyaltyByStaff?.[s.id] || 0, code: loyaltyCodes[`${mail}|${s.id}`] || null, issued: issuedSince(`${mail}|${s.id}`, selected.loyaltySince || loyalty.since), off: staffOff.includes(s.id) })).sort((a, b) => (a.off ? 1 : 0) - (b.off ? 1 : 0))
+                  : [{ id: null, name: "", visits: selected.loyaltyVisits || 0, code: loyaltyCodes[`${mail}|`] || null, issued: issuedSince(`${mail}|`, selected.loyaltySince || loyalty.since), off: false }];
                 const waMsg = (card) => card.code ? L(
                   `Hoi${hi}! 🎉 Je stempelkaart${card.name ? ` bij ${card.name}` : ""} bij ${loyalty.salonName} is vol: ${card.code.discount_pct}% korting op je volgende afspraak${card.name ? ` bij ${card.name}` : ""} met code ${card.code.code}, geldig tot ${fmtLong(card.code.expires_on)}. Boek: https://vellu.cc/${loyalty.slug}`,
                   `Hi${hi}! 🎉 Your loyalty card${card.name ? ` with ${card.name}` : ""} at ${loyalty.salonName} is full: ${card.code.discount_pct}% off your next appointment${card.name ? ` with ${card.name}` : ""} with code ${card.code.code}, valid until ${fmtLong(card.code.expires_on)}. Book: https://vellu.cc/${loyalty.slug}`,
@@ -4476,6 +4516,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 // Alleen gekozen klanten: schakelaar op de kaart; zonder vinkje
                 // geen stempels (de trigger slaat haar bezoeken over).
                 const takesPart = !loyalty.selectedOnly || !!selected.loyaltyOptIn;
+                const todayStr = fmt(salonNow(countryCode));
                 return (
                   <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 12px", marginTop: 4 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -4495,6 +4536,27 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                         {takesPart
                           ? L("Doet mee: bezoeken tellen, code per e-mail.", "Takes part: visits count, code by email.", "Participa: las visitas cuentan, código por correo.")
                           : L("Doet niet mee. Zet aan om deze klant te laten sparen; eerdere bezoeken tellen dan meteen mee.", "Not taking part. Turn on to let this client collect stamps; earlier visits count right away.", "No participa. Actívalo para que acumule sellos; las visitas anteriores cuentan de inmediato.")}
+                      </div>
+                    )}
+                    {/* Ingangsdatum per klant (TTNB via Faisal 06-10-2026): papieren
+                        kaarten lopen door tot ze vol zijn, dan pas gaat de klant
+                        online sparen — vanaf de dag die je hier zet tellen haar
+                        bezoeken en codes; eerdere stempels vervallen voor haar.
+                        Leeg = de salondatum uit Instellingen. */}
+                    {selected.email && takesPart && (
+                      <div data-loyalty-since style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>{L("Telt vanaf", "Counts from", "Cuenta desde")}</div>
+                        <input className="input-field" type="date" data-loyalty-since-input value={selected.loyaltySince || ""} max={todayStr} disabled={loyaltyBusy}
+                          onChange={(e) => setLoyaltySince(selected, e.target.value || null)}
+                          style={{ width: "auto", fontSize: 12, padding: "6px 8px", minHeight: 0 }} />
+                        {selected.loyaltySince
+                          ? <button type="button" className="btn-ghost" data-loyalty-since-reset disabled={loyaltyBusy} style={{ padding: "6px 10px", fontSize: 10 }} onClick={() => setLoyaltySince(selected, null)}>{L("Salondatum", "Salon date", "Fecha del salón")}</button>
+                          : <button type="button" className="btn-ghost" data-loyalty-since-today disabled={loyaltyBusy} style={{ padding: "6px 10px", fontSize: 10 }} onClick={() => setLoyaltySince(selected, todayStr)}>{L("Vanaf vandaag", "From today", "Desde hoy")}</button>}
+                        <div style={{ fontSize: 10, color: c.textMuted, lineHeight: 1.4, flexBasis: "100%" }}>
+                          {selected.loyaltySince
+                            ? L(`Alleen bezoeken en codes vanaf ${fmtDate(selected.loyaltySince)} tellen voor deze klant; eerdere stempels vervallen.`, `Only visits and codes from ${fmtDate(selected.loyaltySince)} count for this client; earlier stamps lapse.`, `Solo cuentan las visitas y códigos desde ${fmtDate(selected.loyaltySince)} para este cliente; los sellos anteriores caducan.`)
+                            : L(`Standaard de salondatum${loyalty.since ? ` (${fmtDate(loyalty.since)})` : ""}. Zet hier de dag waarop haar online kaart begint, bijvoorbeeld toen haar papieren kaart vol was.`, `Default is the salon date${loyalty.since ? ` (${fmtDate(loyalty.since)})` : ""}. Set the day her online card starts, for example when her paper card was full.`, `Por defecto la fecha del salón${loyalty.since ? ` (${fmtDate(loyalty.since)})` : ""}. Fija el día en que empieza su tarjeta en línea, por ejemplo cuando se llenó su tarjeta de papel.`)}
+                        </div>
                       </div>
                     )}
                     {/* Stempels hangen aan het e-mailadres (de trigger telt per adres). */}
@@ -21611,9 +21673,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         </div>
                       </div>
                       <div style={{ fontSize: 10, color: c.textMuted, marginTop: 8, lineHeight: 1.5 }}>
-                        {L(`Voorbeeld: na ${need} bezoeken krijgt de klant code ${prefix}-${pct}-K7QM4 voor ${pct}% korting, ${days} dagen geldig — en daarna opnieuw na elke ${need}. Zet de datum eerder om eerdere bezoeken mee te tellen. Aan de kassa vul je de code in bij korting; klanten zonder e-mailadres kunnen niet sparen. Vergeet niet 'Opslaan'.`,
-                           `Example: after ${need} visits the client gets code ${prefix}-${pct}-K7QM4 for ${pct}% off, valid ${days} days — and again after every ${need}. Set an earlier date to count past visits. At the till, enter the code as a discount; clients without an email address can't collect stamps. Don't forget 'Save'.`,
-                           `Ejemplo: tras ${need} visitas el cliente recibe el código ${prefix}-${pct}-K7QM4 con ${pct}% de descuento, válido ${days} días — y de nuevo cada ${need}. Pon una fecha anterior para contar visitas pasadas. En caja, introduce el código como descuento; los clientes sin correo no pueden acumular. No olvides «Guardar».`)}
+                        {L(`Voorbeeld: na ${need} bezoeken krijgt de klant code ${prefix}-${pct}-K7QM4 voor ${pct}% korting, ${days} dagen geldig — en daarna opnieuw na elke ${need}. Zet de datum eerder om eerdere bezoeken mee te tellen. Per klant kan het anders: op haar klantkaart (Klanten) stel je in vanaf welke dag háár kaart telt, bijvoorbeeld de dag dat haar papieren kaart vol was. Aan de kassa vul je de code in bij korting; klanten zonder e-mailadres kunnen niet sparen. Vergeet niet 'Opslaan'.`,
+                           `Example: after ${need} visits the client gets code ${prefix}-${pct}-K7QM4 for ${pct}% off, valid ${days} days — and again after every ${need}. Set an earlier date to count past visits. Per client it can differ: on her client card (Clients) you set from which day her card counts, for example the day her paper card was full. At the till, enter the code as a discount; clients without an email address can't collect stamps. Don't forget 'Save'.`,
+                           `Ejemplo: tras ${need} visitas el cliente recibe el código ${prefix}-${pct}-K7QM4 con ${pct}% de descuento, válido ${days} días — y de nuevo cada ${need}. Pon una fecha anterior para contar visitas pasadas. Por cliente puede ser distinto: en su ficha (Clientes) fijas desde qué día cuenta su tarjeta, por ejemplo el día en que se llenó su tarjeta de papel. En caja, introduce el código como descuento; los clientes sin correo no pueden acumular. No olvides «Guardar».`)}
                       </div>
                     </>)}
                   </div>

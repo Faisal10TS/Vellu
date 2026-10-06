@@ -269,10 +269,19 @@ serve(async (req) => {
         // Alle afgeronde bezoeken van deze klant (zelfde regels als de trigger),
         // in JS geteld: per teamlid moet er in de breakdown gekeken worden en
         // dat is via de REST-filter niet uit te drukken.
+        const mailPattern = String(appt.client_email).replace(/[\\%_]/g, (m: string) => `\\${m}`);
+        // Ingangsdatum per klant (manual_clients.loyalty_since, 06-10-2026):
+        // de online kaart van deze klant begint dan, niet op de salondatum —
+        // zelfde regel als de trigger (laatste datum wint bij dubbele rijen).
+        let since: string | null = p.loyalty_since || null;
+        const { data: mcRows } = await supabase.from("manual_clients").select("loyalty_since")
+          .eq("owner_id", appt.owner_id).ilike("email", mailPattern).not("loyalty_since", "is", null);
+        const own = (mcRows || []).map((m: any) => String(m.loyalty_since || "")).filter(Boolean).sort().pop();
+        if (own) since = own;
         let vq = supabase.from("appointments").select("id, staff_id, service_breakdown")
-          .eq("owner_id", appt.owner_id).ilike("client_email", String(appt.client_email).replace(/[\\%_]/g, (m: string) => `\\${m}`))
+          .eq("owner_id", appt.owner_id).ilike("client_email", mailPattern)
           .eq("status", "completed").or("is_sale.is.null,is_sale.eq.false");
-        if (p.loyalty_since) vq = vq.gte("date", p.loyalty_since);
+        if (since) vq = vq.gte("date", since);
         const { data: visitRows } = await vq;
         const rows = visitRows || [];
         const involves = (a: any, sid: string) => a.staff_id === sid || (Array.isArray(a.service_breakdown) && a.service_breakdown.some((q: any) => q?.staff_id === sid));

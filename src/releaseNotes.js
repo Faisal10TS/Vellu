@@ -14,6 +14,24 @@
 
 export const RELEASES = [
   {
+    // TTNB 06-10-2026: papieren kaarten lopen door tot ze vol zijn, pas dan
+    // gaat een klant online sparen — met alleen de salondatum kreeg Orma
+    // twee stempels die nog bij haar papieren kaart hoorden.
+    id: "2026-10-06",
+    date: "2026-10-06",
+    title: { nl: "Stempelkaart: ingangsdatum per klant", en: "Loyalty card: start date per client", es: "Tarjeta de fidelidad: fecha de inicio por cliente" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Stempelkaart: op de klantkaart stel je per klant in vanaf welke dag haar kaart telt (Telt vanaf, met de knop Vanaf vandaag). Handig als je papieren kaarten gebruikt: zet de datum op de dag dat haar papieren kaart vol was, dan begint ze online op nul. Alleen bezoeken en codes vanaf die dag tellen; leeg betekent de salondatum uit Instellingen.",
+          en: "Loyalty card: on the client card you now set per client from which day her card counts (Counts from, with the button From today). Useful if you use paper cards: set the date to the day her paper card was full and she starts online at zero. Only visits and codes from that day count; empty means the salon date from Settings.",
+          es: "Tarjeta de fidelidad: en la ficha del cliente fijas por cliente desde qué día cuenta su tarjeta (Cuenta desde, con el botón Desde hoy). Útil si usas tarjetas de papel: pon el día en que se llenó su tarjeta de papel y empieza en línea desde cero. Solo cuentan las visitas y los códigos desde ese día; vacío significa la fecha del salón de Ajustes.",
+        },
+      },
+    ],
+  },
+  {
     // Vervolg op "b" (vierde blok van die dag, daarom "d"): Curaçao is +599 9 en dan 7
     // cijfers. Een lokaal 7-cijferig nummer kreeg alleen 599 ervoor en miste
     // dus de 9. Raakt alleen salons op Curaçao (Mebeauty, Aura Glow).
