@@ -68,6 +68,11 @@ export default function AdminDashboard({ onLogout }) {
   const [timeline, setTimeline] = useState([]);
   const [billing, setBilling] = useState(null);
   const [subs, setSubs] = useState([]);
+  // Abonnementsomzet per maand/kwartaal/jaar (admin_subscription_revenue,
+  // 06-10-2026: "how much I make a month, a year and quarterly off Vellu
+  // subscriptions") — echt geïnde facturen, demo's uitgesloten.
+  const [subRevenue, setSubRevenue] = useState([]);
+  const [revView, setRevView] = useState("month"); // month | quarter | year
   // "Beoordeel Vellu" (16-09-2026): cijfers + toelichting van saloneigenaren,
   // met de knop om een citaat op vellu.cc te zetten (alleen als de salon dat
   // toestond). Zie RateVellu.jsx en migratie beoordeel_vellu.
@@ -102,7 +107,7 @@ export default function AdminDashboard({ onLogout }) {
         return;
       }
       setIsAdmin(true);
-      const [ov, sl, rs, cr, tl, bo, sb, ar, ai, sv] = await Promise.all([
+      const [ov, sl, rs, cr, tl, bo, sb, ar, ai, sv, sr] = await Promise.all([
         supabase.rpc("admin_overview"),
         supabase.rpc("admin_salons_list"),
         supabase.rpc("admin_recent_signups", { p_days: 30 }),
@@ -113,6 +118,7 @@ export default function AdminDashboard({ onLogout }) {
         supabase.rpc("admin_app_ratings"),
         supabase.rpc("admin_rating_invites"),
         supabase.rpc("admin_rating_site_visibility"),
+        supabase.rpc("admin_subscription_revenue"),
       ]);
       if (cancelled) return;
       setOverview(ov.data?.[0] || null);
@@ -122,6 +128,7 @@ export default function AdminDashboard({ onLogout }) {
       setTimeline(tl.data || []);
       setBilling(bo.data?.[0] || null);
       setSubs(sb.data || []);
+      setSubRevenue(sr.data || []);
       setRatings(ar.data || []);
       setInvites(ai.data || []);
       setSiteOn(!!sv.data);
@@ -368,6 +375,82 @@ export default function AdminDashboard({ onLogout }) {
             <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
               MRR counts salons with an active Mollie subscription, plus yearly customers with a paid invoice covering today (the yearly flow is a one-off payment, no Mollie subscription) — yearly counts at its monthly equivalent (price ÷ 12). Trials and comped/demo accounts contribute €0 until they convert. All amounts in euro — Vellu always bills in euro, whatever currency the salon itself uses.
             </div>
+
+            {/* ── Subscription income per month / quarter / year (06-10-2026):
+                what Vellu actually collected (payment_invoices), not the run-rate. ── */}
+            {(() => {
+              const nowD = new Date(now);
+              const y = nowD.getFullYear(), m = nowD.getMonth();
+              const pad2 = (n) => String(n).padStart(2, "0");
+              const keyOf = (kind, d) => kind === "month" ? `${d.getFullYear()}-${pad2(d.getMonth() + 1)}` : kind === "quarter" ? `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}` : String(d.getFullYear());
+              const prevOf = (kind) => kind === "month" ? new Date(y, m - 1, 1) : kind === "quarter" ? new Date(y, m - 3, 1) : new Date(y - 1, 0, 1);
+              const labelOf = (kind, key) => {
+                if (kind === "month") { const [yy, mm] = key.split("-"); return new Date(Number(yy), Number(mm) - 1, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" }); }
+                if (kind === "quarter") { const [yy, q] = key.split("-"); return `${q} ${yy}`; }
+                return key;
+              };
+              const rowsOf = (kind) => subRevenue.filter((r) => r.kind === kind).slice().sort((a, b) => String(b.period_start).localeCompare(String(a.period_start)));
+              const rows = rowsOf(revView);
+              const find = (kind, key) => subRevenue.find((r) => r.kind === kind && r.period_key === key);
+              const cur = find(revView, keyOf(revView, nowD));
+              const prev = find(revView, keyOf(revView, prevOf(revView)));
+              const ytd = find("year", String(y));
+              const unit = revView === "month" ? "month" : revView === "quarter" ? "quarter" : "year";
+              const maxTot = Math.max(1, ...rows.map((r) => Number(r.total_eur) || 0));
+              const pill = (on) => ({ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "6px 10px", borderRadius: 8, cursor: "pointer", border: `1px solid ${on ? accent : c.border}`, background: on ? `${accent}1a` : "transparent", color: on ? accent : c.textSub, fontFamily: "inherit" });
+              return (
+                <div data-sub-revenue style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "14px 18px", marginBottom: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>Subscription income — collected by Vellu</div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {[["month", "Monthly"], ["quarter", "Quarterly"], ["year", "Yearly"]].map(([k, l]) => (
+                        <button key={k} type="button" data-rev-view={k} onClick={() => setRevView(k)} style={pill(revView === k)}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 14 }}>
+                    <StatCard label={`This ${unit}`} value={fmtEur(cur?.total_eur)} sub={`${labelOf(revView, keyOf(revView, nowD))} · ${cur?.invoice_count ?? 0} invoices · ${cur?.salon_count ?? 0} salons`} accent={accent} c={c} />
+                    <StatCard label={`Previous ${unit}`} value={fmtEur(prev?.total_eur)} sub={`${labelOf(revView, keyOf(revView, prevOf(revView)))} · ${prev?.invoice_count ?? 0} invoices`} accent={c.textSub} c={c} />
+                    <StatCard label="This year to date" value={fmtEur(ytd?.total_eur)} sub={`${y} · ${fmtEur(ytd?.excl_vat_eur)} excl. VAT · ${ytd?.invoice_count ?? 0} invoices`} accent={accent} c={c} />
+                  </div>
+                  {rows.length === 0 ? (
+                    <div style={{ fontSize: 12, color: c.textMuted }}>No paid invoices yet.</div>
+                  ) : (
+                    <div style={{ overflowX: "auto" }}>
+                      <table data-rev-table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ background: c.bg, borderBottom: `1px solid ${c.border}` }}>
+                            {["Period", "Invoices", "Salons", "Excl. VAT", "VAT", "Total", ""].map((h) => (
+                              <th key={h} style={{ padding: "10px 12px", textAlign: h === "Period" || h === "" ? "left" : "right", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((r) => (
+                            <tr key={r.period_key} style={{ borderBottom: `1px solid ${c.border}` }}>
+                              <td style={{ padding: "10px 12px", fontWeight: 500 }}>{labelOf(revView, r.period_key)}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "right", color: c.textSub }}>{r.invoice_count}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "right", color: c.textSub }}>{r.salon_count}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "right", color: c.textSub }}>{fmtEur(r.excl_vat_eur)}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "right", color: c.textMuted }}>{fmtEur(r.vat_eur)}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "right", color: accent, fontFamily: "'Cormorant Garamond',serif", fontSize: 16, whiteSpace: "nowrap" }}>{fmtEur(r.total_eur)}</td>
+                              <td style={{ padding: "10px 12px", width: "30%" }}>
+                                <div style={{ height: 8, borderRadius: 4, background: c.bg, overflow: "hidden" }}>
+                                  <div style={{ height: "100%", width: `${Math.round(((Number(r.total_eur) || 0) / maxTot) * 100)}%`, background: accent, borderRadius: 4 }} />
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 10, lineHeight: 1.5 }}>
+                    Based on invoices actually paid via Mollie (date of issue), demo salons excluded. A yearly subscription lands in full in the month it was paid; MRR above spreads it over twelve months.
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Trials ending soon — the conversion window worth chasing */}
             {endingTrials.length > 0 && (
