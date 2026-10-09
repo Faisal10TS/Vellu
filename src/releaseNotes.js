@@ -14,6 +14,23 @@
 
 export const RELEASES = [
   {
+    // TTNB 09-10-2026: "e text nan ta overlap" — op een lege dag stonden
+    // "Geen afspraken" en "10:00 – 17:00 vrij" over elkaar in de dagweergave.
+    id: "2026-10-09",
+    date: "2026-10-09",
+    title: { nl: "Agenda: lege dag", en: "Calendar: empty day", es: "Agenda: día vacío" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Agenda, dagweergave: op een dag zonder afspraken stonden Geen afspraken en het vrije tijdvak over elkaar. De melding staat nu netjes boven het vrije tijdvak.",
+          en: "Calendar, day view: on a day without appointments, No appointments and the free time slot overlapped. The message now sits neatly above the free slot.",
+          es: "Agenda, vista diaria: en un día sin citas, No hay citas y el hueco libre se superponían. El mensaje aparece ahora encima del hueco libre.",
+        },
+      },
+    ],
+  },
+  {
     // TTNB 06-10-2026: papieren kaarten lopen door tot ze vol zijn, pas dan
     // gaat een klant online sparen — met alleen de salondatum kreeg Orma
     // twee stempels die nog bij haar papieren kaart hoorden.

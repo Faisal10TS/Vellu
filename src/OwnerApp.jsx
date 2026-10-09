@@ -13504,18 +13504,31 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ position: "absolute", right: 6, top: -9, fontSize: 9, fontWeight: 700, letterSpacing: "0.06em", color: onAccentInk(accent, c.btnOnDark), background: accent, padding: "2px 6px", borderRadius: 5, lineHeight: "12px", fontVariantNumeric: "tabular-nums" }}>{fmtT(nowMinutes)}</div>
                           </div>
                         )}
-                        {/* Vrije gaten: gestippeld tik-doel, achter de kaarten. */}
-                        {gaps.map(([s, e]) => {
-                          const top = toPx(s) + 1; const height = toPx(e) - toPx(s) - 2; const ts = fmtT(s), te = fmtT(e);
-                          const vrij = lang === "nl" ? "vrij" : lang === "es" ? "libre" : "free";
-                          return (
-                            <div key={`gap-${s}`} data-day-gap={ts} role="button" tabIndex={0} title={`${ts} – ${te} · ${lang === "nl" ? "vrij — tik om in te plannen" : lang === "es" ? "libre — toca para reservar" : "free — tap to book"}`}
-                              onClick={() => openAddApptAt(calDate, ts)} onKeyDown={e2 => { if (e2.key === "Enter" || e2.key === " ") { e2.preventDefault(); openAddApptAt(calDate, ts); } }}
-                              style={{ position: "absolute", top, height, left: 6, right: 6, borderRadius: 6, border: `1px dashed ${accent}55`, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 9.5, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: `color-mix(in srgb, ${accent} 45%, ${c.text})`, cursor: "pointer", zIndex: 1, overflow: "hidden", whiteSpace: "nowrap" }}>
-                              <NavIcon name="plus" size={10} color="currentColor" />{height >= 22 ? `${ts} – ${te} ${vrij}` : ""}
-                            </div>
-                          );
-                        })}
+                        {/* Vrije gaten: gestippeld tik-doel, achter de kaarten.
+                            Lege dag: de melding "Geen afspraken op deze dag" staat
+                            als eerste regel IN het grootste vrije blok — los erover
+                            in het midden viel hij samen met "10:00 – 17:00 vrij"
+                            (TTNB 09-10-2026: "e text nan ta overlap"). */}
+                        {(() => {
+                          const emptyDay = dayAppts.length === 0 && rawBlocks.length === 0 && !unavailableOn(calDate).unavailable;
+                          const biggest = emptyDay && gaps.length > 0 ? gaps.reduce((m, g) => (g[1] - g[0] > m[1] - m[0] ? g : m), gaps[0]) : null;
+                          const emptyText = calDate === todayStr ? t.noTodayAppts : (lang === "nl" ? "Geen afspraken op deze dag" : lang === "es" ? "No hay citas este día" : "No appointments on this day");
+                          return gaps.map(([s, e]) => {
+                            const top = toPx(s) + 1; const height = toPx(e) - toPx(s) - 2; const ts = fmtT(s), te = fmtT(e);
+                            const vrij = lang === "nl" ? "vrij" : lang === "es" ? "libre" : "free";
+                            const withMsg = biggest && biggest[0] === s && height >= 44;
+                            return (
+                              <div key={`gap-${s}`} data-day-gap={ts} role="button" tabIndex={0} title={`${ts} – ${te} · ${lang === "nl" ? "vrij — tik om in te plannen" : lang === "es" ? "libre — toca para reservar" : "free — tap to book"}`}
+                                onClick={() => openAddApptAt(calDate, ts)} onKeyDown={e2 => { if (e2.key === "Enter" || e2.key === " ") { e2.preventDefault(); openAddApptAt(calDate, ts); } }}
+                                style={{ position: "absolute", top, height, left: 6, right: 6, borderRadius: 6, border: `1px dashed ${accent}55`, display: "flex", flexDirection: withMsg ? "column" : "row", alignItems: "center", justifyContent: "center", gap: withMsg ? 8 : 6, cursor: "pointer", zIndex: 1, overflow: "hidden", whiteSpace: "nowrap", padding: "0 8px" }}>
+                                {withMsg && <div data-day-empty style={{ fontSize: 12, color: c.textMuted, whiteSpace: "normal", textAlign: "center", lineHeight: 1.4 }}>{emptyText}</div>}
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 9.5, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: `color-mix(in srgb, ${accent} 45%, ${c.text})` }}>
+                                  <NavIcon name="plus" size={10} color="currentColor" />{height >= 22 ? `${ts} – ${te} ${vrij}` : ""}
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
                         {/* Staff / owner blocks — gearceerd, neutraal (16-09). Full-day
                             blocks span the whole visible window; time blocks
                             only cover their range. Sits BEHIND appointments so
@@ -13609,6 +13622,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           // say "unavailable" instead of "no appointments".
                           // Uitzonderingsdagen tellen mee (zie unavailableOn).
                           const { unavailable, name: unavailableName } = unavailableOn(calDate);
+                          // Is er een vrij blok, dan staat "Geen afspraken" daar al
+                          // in (hierboven) — niet nog eens los eroverheen. Alleen
+                          // als dat grootste blok te laag is voor twee regels,
+                          // blijft de losse melding staan.
+                          const toPxH = (g) => toPx(g[1]) - toPx(g[0]) - 2;
+                          if (!unavailable && gaps.some(g => toPxH(g) >= 44)) return null;
                           return (
                             <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: c.textMuted, fontSize: 12, textAlign: "center", padding: 16, gap: 6 }}>
                               {unavailable ? (
