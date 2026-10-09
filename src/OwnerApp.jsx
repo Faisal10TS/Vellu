@@ -7787,19 +7787,52 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const vm = (svc.variants || []).find(v => bRow.label && (bRow.label.endsWith(v.name_nl || "") || (v.name_en && bRow.label.endsWith(v.name_en))));
       return parseFloat(vm ? vm.price : svc.price) || 0;
     };
+    // Extra's die al in het label van een bestaand deel staan ("… + Russian
+    // manicure") herkennen en aangevinkt tonen (TTNB 09-10-2026). Voorheen
+    // stonden die knoppen uit terwijl het label (en de prijs) ze al bevatte:
+    // nog eens aantikken telde de extra dubbel, en een extra erbij zetten op een
+    // verder ongewijzigd deel veranderde het label maar niet de deelprijs.
+    // Zelfde splitsing als catalogPartPrice in shared.jsx: na de em-dash de
+    // variant, na " + " de extra's, gescheiden door ", " (eventueel "×2").
+    const normX = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+    const parseLabelExtras = (bRow) => {
+      const label = String(bRow.label || "");
+      const svc = (salonData.services || []).find(s => s.id === bRow.service_id);
+      const dash = label.indexOf(" — ");
+      const from = dash >= 0 ? dash + 3 : 0;
+      const plusAt = label.indexOf(" + ", from);
+      if (!svc || plusAt < 0) return { baseLabel: label, ids: [], names: {} };
+      const names = {};
+      const ids = [];
+      for (const raw of label.slice(plusAt + 3).split(", ")) {
+        const nm = normX(raw.replace(/\s*×\s*\d+\s*$/, ""));
+        const ex = (svc.extras || []).find(e => [e.name_nl, e.name_en, e.name_es].some(n => n && normX(n) === nm));
+        if (!ex) return { baseLabel: label, ids: [], names: {} };
+        ids.push(ex.id); names[ex.id] = raw;
+      }
+      return { baseLabel: label.slice(0, plusAt), ids, names };
+    };
     setEditApptForm({
-      svcRows: breakdown.map((bRow, i) => ({
-        key: `r${i}_${bRow.service_id || i}`,
-        original: true,
-        origIndex: i,
-        origLabel: bRow.label || "",
-        service_id: bRow.service_id || "",
-        variant_id: "",
-        extra_ids: [],
-        staff_id: bRow.staff_id || null,
-        duration: parseInt(bRow.duration) || 60,
-        estPrice: estRowPrice(bRow, i),
-      })),
+      svcRows: breakdown.map((bRow, i) => {
+        const px = parseLabelExtras(bRow);
+        return {
+          key: `r${i}_${bRow.service_id || i}`,
+          original: true,
+          origIndex: i,
+          origLabel: bRow.label || "",
+          // baseLabel = het label zonder de extra's; baseExtraIds = de extra's
+          // die er bij het openen al op stonden (zitten al in de deelprijs).
+          baseLabel: px.baseLabel,
+          baseExtraIds: px.ids,
+          baseExtraNames: px.names,
+          service_id: bRow.service_id || "",
+          variant_id: "",
+          extra_ids: px.ids,
+          staff_id: bRow.staff_id || null,
+          duration: parseInt(bRow.duration) || 60,
+          estPrice: estRowPrice(bRow, i),
+        };
+      }),
       date: a.date || "",
       time: (a.time || "").slice(0, 5),
       price: finalPrice != null ? String(finalPrice + storedDiscount) : "",
@@ -8108,9 +8141,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // silently drops the other parts anymore.
     const validRows = (editApptForm.svcRows || []).filter(r => r.service_id);
     const origBreakdownLen = (Array.isArray(orig.service_breakdown) && orig.service_breakdown.length > 0) ? orig.service_breakdown.length : 1;
+    // Bestaand deel met andere extra's dan bij het openen (zie baseExtraIds).
+    const extrasChanged = (r) => {
+      const a = [...(r.extra_ids || [])].sort().join(","), b = [...(r.baseExtraIds || [])].sort().join(",");
+      return a !== b;
+    };
     const serviceChanged = validRows.length > 0 && (
       validRows.length !== origBreakdownLen ||
-      validRows.some(r => !r.original || (r.extra_ids || []).length > 0)
+      validRows.some(r => !r.original || extrasChanged(r))
     );
     if (serviceChanged) {
       const svcLabelOf = (svc) => clientLang === "nl" ? (svc?.name_nl || svc?.name || "") : clientLang === "es" ? (svc?.name_es || svc?.name_en || svc?.name_nl || svc?.name || "") : (svc?.name_en || svc?.name_nl || svc?.name || "");
@@ -8121,21 +8159,41 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       // prijs uit het formulier. Zonder dit verloor Bewerk de deelprijzen en
       // toonde elk deel weer het totaal.
       const origPrices = partPricesOf(orig, salonData.services || [], salonData.staff || []);
+      const exName = (e) => clientLang === "nl" ? e.name_nl : clientLang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl);
       const parts = validRows.map(r => {
         const svc = (salonData.services || []).find(s => s.id === r.service_id);
+        const exs = (r.extra_ids || []).map(id => (svc?.extras || []).find(e => e.id === id)).filter(Boolean);
         let base;
+        let partPrice;
         if (r.original) {
-          base = r.origLabel || svcLabelOf(svc);
+          const origPrice = origPrices && Number.isFinite(origPrices[r.origIndex]) ? origPrices[r.origIndex] : null;
+          if (!extrasChanged(r)) {
+            // Ongewijzigd deel: label en prijs zoals ze waren.
+            base = r.origLabel || svcLabelOf(svc);
+            partPrice = origPrice;
+          } else {
+            // Extra's erbij of eraf op een verder ongewijzigd deel: label
+            // opnieuw opbouwen (bestaande extra's in hun oorspronkelijke
+            // schrijfwijze) én de deelprijs aanpassen met precies die extra's —
+            // voorheen bleef de oude deelprijs staan terwijl het totaal wél
+            // meeging (Junady, TTNB 09-10-2026: €45 i.p.v. €55).
+            const baseIds = r.baseExtraIds || [];
+            const priceOf = (id) => parseFloat((svc?.extras || []).find(e => e.id === id)?.price || 0) || 0;
+            const added = (r.extra_ids || []).filter(id => !baseIds.includes(id));
+            const removed = baseIds.filter(id => !(r.extra_ids || []).includes(id));
+            base = (r.baseLabel || r.origLabel || svcLabelOf(svc));
+            if (exs.length > 0) base += " + " + exs.map(e => (r.baseExtraNames || {})[e.id] || exName(e)).join(", ");
+            partPrice = origPrice != null
+              ? Math.max(0, Math.round((origPrice + added.reduce((s, id) => s + priceOf(id), 0) - removed.reduce((s, id) => s + priceOf(id), 0)) * 100) / 100)
+              : null;
+          }
         } else {
           const v = r.variant_id ? (svc?.variants || []).find(x => x.id === r.variant_id) : null;
           base = svcLabelOf(svc) + (v ? " — " + (clientLang === "nl" ? v.name_nl : clientLang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)) : "");
+          if (exs.length > 0) base += " + " + exs.map(exName).join(", ");
+          partPrice = Number.isFinite(parseFloat(r.estPrice)) && parseFloat(r.estPrice) > 0 ? parseFloat(r.estPrice) : null;
         }
-        const exs = (r.extra_ids || []).map(id => (svc?.extras || []).find(e => e.id === id)).filter(Boolean);
-        if (exs.length > 0) base += " + " + exs.map(e => clientLang === "nl" ? e.name_nl : clientLang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)).join(", ");
         const entry = { service_id: r.service_id, staff_id: r.staff_id || null, duration: parseInt(r.duration) || 60, offset_min: runningOffset, label: base };
-        const partPrice = r.original
-          ? (origPrices && Number.isFinite(origPrices[r.origIndex]) ? origPrices[r.origIndex] : null)
-          : (Number.isFinite(parseFloat(r.estPrice)) && parseFloat(r.estPrice) > 0 ? parseFloat(r.estPrice) : null);
         if (partPrice != null) entry.price = partPrice;
         runningOffset += entry.duration;
         const sn = r.staff_id ? staffNameOf(r.staff_id) : "";

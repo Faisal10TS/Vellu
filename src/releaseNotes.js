@@ -18,8 +18,18 @@ export const RELEASES = [
     // "Geen afspraken" en "10:00 – 17:00 vrij" over elkaar in de dagweergave.
     id: "2026-10-09",
     date: "2026-10-09",
-    title: { nl: "Agenda: lege dag", en: "Calendar: empty day", es: "Agenda: día vacío" },
+    title: { nl: "Agenda: lege dag en extra's bewerken", en: "Calendar: empty day and editing extras", es: "Agenda: día vacío y editar extras" },
     items: [
+      {
+        // Esther 09-10: "It only happens when I edit the extras" — Junady:
+        // 2 weken bijvullen (45) + Russian manicure (10) stond op €45.
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Afspraak bewerken: zet je een extra aan of uit op een behandeling die je verder niet wijzigt, dan gaat de prijs van die extra nu ook mee in de prijs van die behandeling. Voorheen klopte het totaal wel maar de prijs per behandeling niet. Extra's die al op de afspraak staan, staan bij het openen nu aangevinkt, zodat je ze niet per ongeluk dubbel rekent.",
+          en: "Editing an appointment: if you turn an extra on or off for a treatment you otherwise leave unchanged, the extra's price now goes into that treatment's price too. Before, the total was right but the price per treatment was not. Extras already on the appointment are now ticked when you open it, so you don't charge them twice by accident.",
+          es: "Editar una cita: si activas o quitas un extra en un tratamiento que no cambias, el precio del extra entra ahora también en el precio de ese tratamiento. Antes el total era correcto pero el precio por tratamiento no. Los extras que ya están en la cita aparecen marcados al abrirla, para que no los cobres dos veces por error.",
+        },
+      },
       {
         kind: "fix", audience: ["owner"],
         text: {
