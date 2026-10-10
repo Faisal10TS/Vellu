@@ -20,7 +20,17 @@
 //
 // Foutcodes voor de app: 400 no_change; 409 not_active, no_mollie_customer,
 // no_valid_mandate, yearly_oneoff (eenmalig betaald jaarabonnement, sinds
-// 05-10-2026) en busy (er loopt al een wissel, sinds 05-10-2026).
+// 05-10-2026) en busy (er loopt al een wissel, sinds 05-10-2026); bij een proef
+// met automatisch betalen (sinds 10-10-2026) ook 409 trial_autopay_monthly_only
+// en first_charge_started, 502 mollie_update_failed en 500
+// profile_update_failed.
+//
+// PROEF MET AUTOMATISCH BETALEN (sinds 10-10-2026): trialing + een Mollie-
+// abonnement dat pas na het einde van de proef afschrijft. Wisselen tussen
+// Starter en Professional past alleen het bedrag van dat abonnement aan (PATCH);
+// er is nog niets betaald, dus geen pro rata en geen nieuw abonnement. Een proef
+// ZONDER abonnement wisselt nog steeds in de app zelf (de guard-trigger op
+// profiles staat dat alleen toe zolang mollie_subscription_id leeg is).
 //
 // Auth: requires a valid Supabase JWT.
 
@@ -95,6 +105,52 @@ function ymd(d: Date) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
+// ── AUTOPAY-DATUMREGELS (sinds 10-10-2026) ──────────────────────────────
+// Letterlijk gekopieerd in create-subscription, mollie-webhook,
+// cancel-subscription, change-plan en send-renewal-reminder; de app heeft
+// dezelfde regels in src/autopay.js (edge functions hebben geen gedeelde module).
+// Mollie schrijft een abonnement af op een Amsterdamse kalenderdag (startDate),
+// op een tijdstip van die dag dat wij niet kennen. De eerste afschrijvingsdag is
+// daarom de eerste Amsterdamse dag die pas NA het einde van de proef begint
+// (meestal de dag na de einddatum): alleen zo wordt er nooit afgeschreven terwijl
+// de proef nog loopt. Ook niet op Bonaire/Curaçao/Aruba/Sint Maarten, waar de
+// Amsterdamse dag al om 18:00 of 19:00 de avond ervoor begint. Uitzetten en
+// wisselen kan tot het begin van die dag (Amsterdamse middernacht), dus altijd
+// tot minstens het einde van de proef.
+const AMS = "Europe/Amsterdam";
+function ymdIn(tz: string, d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+// Het tijdstip (ms) waarop Amsterdamse dag `ymd` begint: middernacht CET of CEST.
+function amsMidnightMs(ymd: string): number {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const base = Date.UTC(y, m - 1, d);
+  for (const h of [1, 2]) {
+    const t = base - h * 3600000;
+    if (ymdIn(AMS, new Date(t)) === ymd && ymdIn(AMS, new Date(t - 1)) !== ymd) return t;
+  }
+  return base - 3600000;
+}
+// Eerste Amsterdamse dag die op of na het einde van de proef begint.
+function autopayFirstYmd(end: Date): string {
+  const d = ymdIn(AMS, end);
+  if (amsMidnightMs(d) >= end.getTime()) return d;
+  const [y, m, dd] = d.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, dd + 1)).toISOString().slice(0, 10);
+}
+// Eerste afschrijving (= Mollie-startDate), nooit vóór vandaag (Amsterdam).
+function autopayChargeYmd(trialEndsAt: unknown, now = new Date()): string {
+  const end = new Date(String(trialEndsAt || "")); const today = ymdIn(AMS, now);
+  if (isNaN(end.getTime())) return today;
+  const d = autopayFirstYmd(end); return d > today ? d : today;
+}
+// Vanaf het begin van de eerste afschrijvingsdag kan Mollie de betaling al
+// hebben aangemaakt: uitzetten/wisselen kan dan niet meer.
+function autopayChargeDayReached(trialEndsAt: unknown, now = new Date()): boolean {
+  const end = new Date(String(trialEndsAt || "")); if (isNaN(end.getTime())) return true;
+  return ymdIn(AMS, now) >= autopayFirstYmd(end);
+}
+
 function addInterval(from: Date, interval: "monthly" | "yearly", n = 1): Date {
   const d = new Date(from);
   if (interval === "monthly") d.setMonth(d.getMonth() + n);
@@ -142,7 +198,7 @@ serve(async (req) => {
     .update({ plan_change_started_at: lockIso })
     .eq("id", userId)
     .or(`plan_change_started_at.is.null,plan_change_started_at.lt."${staleIso}"`)
-    .select("id, business_name, email, plan, billing_interval, subscription_status, mollie_customer_id, mollie_subscription_id, mollie_mandate_id, plan_expires_at, current_period_start")
+    .select("id, business_name, email, plan, billing_interval, subscription_status, mollie_customer_id, mollie_subscription_id, mollie_mandate_id, plan_expires_at, current_period_start, trial_ends_at")
     .maybeSingle();
   if (profileErr) {
     console.error("change-plan: lock/profile lookup failed", profileErr);
@@ -167,6 +223,11 @@ serve(async (req) => {
 
 // deno-lint-ignore no-explicit-any
 async function changePlan(profile: any, userId: string, newPlan: string, newInterval: string, origin: string | null): Promise<Response> {
+  // Proef met automatisch betalen: alleen het geplande abonnement bijwerken.
+  if (profile.subscription_status === "trialing" && profile.mollie_subscription_id) {
+    return await changeTrialAutopayPlan(profile, userId, newPlan, newInterval, origin);
+  }
+
   // Need an established subscription to change. Trials should go through the
   // normal subscribe flow (which sets up the first mandate via checkout).
   if (profile.subscription_status !== "active") {
@@ -389,5 +450,68 @@ async function changePlan(profile: any, userId: string, newPlan: string, newInte
     next_charge_amount: amount,
     prorated_charge: proratedCharged,
     new_subscription_id: newSubId,
+  }, origin);
+}
+
+// Proef met automatisch betalen (sinds 10-10-2026). Er is nog niets betaald:
+// het Mollie-abonnement (start = eerste dag na de proef) krijgt alleen het nieuwe
+// bedrag, de omschrijving en het plan in de metadata. Geen pro rata, geen
+// nieuw abonnement, en plan_expires_at blijft de einddatum van de proef.
+// Volgorde: eerst Mollie, dan het profiel. Mislukt het profiel, dan PATCHt een
+// herhaling gewoon nog een keer (hetzelfde resultaat).
+// deno-lint-ignore no-explicit-any
+async function changeTrialAutopayPlan(profile: any, userId: string, newPlan: string, newInterval: string, origin: string | null): Promise<Response> {
+  // Automatisch betalen is altijd maandelijks; jaarlijks kiest ze na de proef.
+  if (newInterval !== "monthly") return err(409, "trial_autopay_monthly_only", origin);
+  if (newPlan === profile.plan) return err(400, "no_change", origin);
+  if (autopayChargeDayReached(profile.trial_ends_at)) return err(409, "first_charge_started", origin);
+  if (!profile.mollie_customer_id) return err(409, "no_mollie_customer", origin);
+
+  const amount = PLAN_PRICES[newPlan].monthly;
+  const description = `Vellu ${newPlan === "professional" ? "Professional" : "Starter"} (monthly)`;
+  const startDate = autopayChargeYmd(profile.trial_ends_at);
+  const patchRes = await mollieFetch(
+    `/customers/${profile.mollie_customer_id}/subscriptions/${profile.mollie_subscription_id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        amount: { currency: "EUR", value: amount.toFixed(2) },
+        description,
+        metadata: { owner_id: userId, plan: newPlan, billing_interval: "monthly", kind: "trial_autopay" },
+      }),
+    },
+  );
+  if (!patchRes.ok) {
+    console.error("Mollie subscription update (trial autopay) failed:", patchRes.status, patchRes.raw);
+    return err(502, "mollie_update_failed", origin);
+  }
+  const { error: updErr } = await supabase.from("profiles").update({ plan: newPlan }).eq("id", userId);
+  if (updErr) {
+    console.error("change-plan (trial autopay): profile update failed", updErr);
+    return err(500, "profile_update_failed", origin);
+  }
+  await supabase.from("payment_events").insert({
+    owner_id: userId,
+    mollie_customer_id: profile.mollie_customer_id,
+    mollie_subscription_id: profile.mollie_subscription_id,
+    event_type: "subscription.changed",
+    status: "trialing",
+    amount_eur: amount,
+    description,
+    raw_payload: {
+      trial_autopay: true,
+      from_plan: profile.plan,
+      to_plan: newPlan,
+      start_date: startDate,
+    } as Record<string, unknown>,
+  });
+  return ok({
+    success: true,
+    trial_autopay: true,
+    plan: newPlan,
+    billing_interval: "monthly",
+    next_charge_on: startDate,
+    next_charge_amount: amount,
+    prorated_charge: 0,
   }, origin);
 }

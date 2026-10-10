@@ -25,6 +25,25 @@
 // need a mandate to be established. Credits are decremented in the webhook
 // during recurring renewals (see referral_credit logic in mollie-webhook).
 //
+// AUTOMATISCH BETALEN NA DE PROEF (sinds 10-10-2026, action "trial_autopay").
+// Een salon mag geen geld kwijt zijn op het moment dat ze tijdens haar proef
+// "abonneert". Tot deze datum maakte dit pad dan een VOLLEDIGE eerste betaling
+// (EUR 19 / 35) die meteen werd afgeschreven; de webhook schoof alleen de
+// betaalde periode naar het einde van de proef. Nu:
+//   - tijdens een lopende proef weigert het gewone pad ({plan, billing_interval})
+//     met 409 trial_use_autopay, ook voor oude tabbladen die nog "Nu abonneren"
+//     tonen;
+//   - de enige optie tijdens de proef is "trial_autopay": een machtigings-
+//     betaling van EUR 0,00 (creditcard; Mollie schrijft dan niets af) of
+//     EUR 0,01 (iDEAL, alleen Nederland; iDEAL vraagt een echt bedrag en levert
+//     een SEPA-machtiging op), met metadata kind "trial_autopay_mandate";
+//   - mollie-webhook maakt daarna een Mollie-abonnement dat pas na het einde
+//     van de proef voor het eerst afschrijft (de eerste Amsterdamse dag die na
+//     het einde begint, zie autopayChargeYmd). De salon blijft 'trialing'; de
+//     eerste echte afschrijving (recurring.paid) zet haar op actief.
+// Het plan komt uit het profiel, nooit van de app: wisselen tijdens de proef
+// loopt via change-plan (met abonnement) of via de app zelf (zonder).
+//
 // Auth: requires a valid Supabase JWT.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -53,6 +72,55 @@ const PLAN_PRICES: Record<string, { monthly: number; yearly: number }> = {
   starter: { monthly: 19.0, yearly: 190.0 },
   professional: { monthly: 35.0, yearly: 350.0 },
 };
+
+// ── AUTOPAY-DATUMREGELS (sinds 10-10-2026) ──────────────────────────────
+// Letterlijk gekopieerd in create-subscription, mollie-webhook,
+// cancel-subscription, change-plan en send-renewal-reminder; de app heeft
+// dezelfde regels in src/autopay.js (edge functions hebben geen gedeelde module).
+// Mollie schrijft een abonnement af op een Amsterdamse kalenderdag (startDate),
+// op een tijdstip van die dag dat wij niet kennen. De eerste afschrijvingsdag is
+// daarom de eerste Amsterdamse dag die pas NA het einde van de proef begint
+// (meestal de dag na de einddatum): alleen zo wordt er nooit afgeschreven terwijl
+// de proef nog loopt. Ook niet op Bonaire/Curaçao/Aruba/Sint Maarten, waar de
+// Amsterdamse dag al om 18:00 of 19:00 de avond ervoor begint. Uitzetten en
+// wisselen kan tot het begin van die dag (Amsterdamse middernacht), dus altijd
+// tot minstens het einde van de proef.
+const AMS = "Europe/Amsterdam";
+function ymdIn(tz: string, d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+// Het tijdstip (ms) waarop Amsterdamse dag `ymd` begint: middernacht CET of CEST.
+function amsMidnightMs(ymd: string): number {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const base = Date.UTC(y, m - 1, d);
+  for (const h of [1, 2]) {
+    const t = base - h * 3600000;
+    if (ymdIn(AMS, new Date(t)) === ymd && ymdIn(AMS, new Date(t - 1)) !== ymd) return t;
+  }
+  return base - 3600000;
+}
+// Eerste Amsterdamse dag die op of na het einde van de proef begint.
+function autopayFirstYmd(end: Date): string {
+  const d = ymdIn(AMS, end);
+  if (amsMidnightMs(d) >= end.getTime()) return d;
+  const [y, m, dd] = d.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, dd + 1)).toISOString().slice(0, 10);
+}
+// Eerste afschrijving (= Mollie-startDate), nooit vóór vandaag (Amsterdam).
+function autopayChargeYmd(trialEndsAt: unknown, now = new Date()): string {
+  const end = new Date(String(trialEndsAt || "")); const today = ymdIn(AMS, now);
+  if (isNaN(end.getTime())) return today;
+  const d = autopayFirstYmd(end); return d > today ? d : today;
+}
+// Vanaf het begin van de eerste afschrijvingsdag kan Mollie de betaling al
+// hebben aangemaakt: uitzetten/wisselen kan dan niet meer.
+function autopayChargeDayReached(trialEndsAt: unknown, now = new Date()): boolean {
+  const end = new Date(String(trialEndsAt || "")); if (isNaN(end.getTime())) return true;
+  return ymdIn(AMS, now) >= autopayFirstYmd(end);
+}
+// Zelfde landenlijst als mollie-webhook: de omschrijving op de betaalpagina van
+// Mollie en op het bankafschrift in de taal van de salon.
+const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
@@ -95,6 +163,31 @@ async function mollieFetch(path: string, init?: RequestInit) {
   return { status: r.status, ok: r.ok, data, raw: text };
 }
 
+// Mollie-klant ophalen of aanmaken voor het pad "trial_autopay". Zelfde stappen
+// als "Step 1" in het gewone pad hieronder (dat bewust ongewijzigd is gelaten).
+async function ensureMollieCustomer(
+  userId: string,
+  userEmail: string,
+  profile: { business_name?: string | null; email?: string | null; mollie_customer_id?: string | null },
+): Promise<string | null> {
+  if (profile.mollie_customer_id) return profile.mollie_customer_id;
+  const cRes = await mollieFetch("/customers", {
+    method: "POST",
+    body: JSON.stringify({
+      name: profile.business_name || "Vellu Customer",
+      email: profile.email || userEmail,
+      metadata: { owner_id: userId },
+    }),
+  });
+  if (!cRes.ok || !cRes.data || typeof cRes.data !== "object") {
+    console.error("Mollie customer create failed:", cRes.status, cRes.raw);
+    return null;
+  }
+  const customerId = (cRes.data as { id: string }).id;
+  await supabase.from("profiles").update({ mollie_customer_id: customerId }).eq("id", userId);
+  return customerId;
+}
+
 serve(async (req) => {
   const origin = req.headers.get("origin");
   // Return the customer to the SAME origin they started on after the Mollie
@@ -120,7 +213,7 @@ serve(async (req) => {
   const userEmail = userData.user.email || "";
 
   // Parse + validate body
-  let body: { plan?: string; billing_interval?: string; action?: string };
+  let body: { plan?: string; billing_interval?: string; action?: string; method?: string };
   try { body = await req.json(); }
   catch { return err(400, "invalid_json", origin); }
 
@@ -156,6 +249,87 @@ serve(async (req) => {
     return ok({ status: status && KNOWN.includes(status) ? status : null }, origin);
   }
 
+  // ── Automatisch betalen na de proef aanzetten (sinds 10-10-2026) ────────
+  // Alleen de machtiging vastleggen: creditcard EUR 0,00 (Mollie: "No money
+  // will then be debited"), iDEAL EUR 0,01 (vraagt een echt bedrag; die cent
+  // wordt bewust niet teruggestort: een terugbetaling geeft per salon een
+  // beheerdersmelding in mollie-webhook en kost meer dan hij oplevert). De echte
+  // afschrijving plant mollie-webhook pas na het einde van de proef.
+  if (body.action === "trial_autopay") {
+    const method = String(body.method || "");
+    if (method !== "creditcard" && method !== "ideal") return err(400, "invalid_method", origin);
+    const { data: tp, error: tpErr } = await supabase
+      .from("profiles")
+      .select("id, business_name, email, country_code, plan, subscription_status, trial_ends_at, mollie_customer_id, mollie_subscription_id, referral_credit_days")
+      .eq("id", userId)
+      .maybeSingle();
+    if (tpErr || !tp) return err(404, "no_profile", origin);
+    if (tp.subscription_status !== "trialing") return err(409, "not_trialing", origin);
+    const endMs = tp.trial_ends_at ? new Date(String(tp.trial_ends_at)).getTime() : NaN;
+    if (!Number.isFinite(endMs) || endMs <= Date.now()) return err(409, "trial_ended", origin);
+    if (tp.mollie_subscription_id) return err(409, "autopay_already_on", origin);
+
+    // Plan uit het profiel, niet uit de aanvraag.
+    const tPlan = PLAN_PRICES[String(tp.plan || "")] ? String(tp.plan) : "starter";
+    const tCustomerId = await ensureMollieCustomer(userId, userEmail, tp);
+    if (!tCustomerId) return err(502, "mollie_customer_failed", origin);
+
+    const amountNow = method === "ideal" ? 0.01 : 0;
+    const planLabel = tPlan === "professional" ? "Professional" : "Starter";
+    const dutch = DUTCH_COUNTRIES.has(String(tp.country_code || "NL").toUpperCase());
+    const tDescription = dutch
+      ? `Vellu ${planLabel}: automatisch betalen na proef`
+      : `Vellu ${planLabel}: automatic payment after trial`;
+    const mandateBody: Record<string, unknown> = {
+      amount: { currency: "EUR", value: amountNow.toFixed(2) },
+      customerId: tCustomerId,
+      sequenceType: "first",
+      // Eén methode, geen lijst: EUR 0,00 mag alleen bij creditcard, en de salon
+      // koos de methode al in de app (het bedrag hangt ervan af).
+      method,
+      description: tDescription,
+      redirectUrl: `${returnOrigin}/owner?tab=billing&autopay=return`,
+      webhookUrl: `${SUPABASE_URL}/functions/v1/mollie-webhook`,
+      metadata: {
+        owner_id: userId,
+        plan: tPlan,
+        billing_interval: "monthly",
+        // De webhook splitst hierop: abonnement plannen, GEEN factuur en GEEN
+        // referral-tegoed voor de uitnodiger (dit is nog geen echte betaling).
+        kind: "trial_autopay_mandate",
+        method,
+      },
+    };
+    const mRes = await mollieFetch("/payments", { method: "POST", body: JSON.stringify(mandateBody) });
+    if (!mRes.ok || !mRes.data || typeof mRes.data !== "object") {
+      console.error("Mollie mandate payment create failed:", mRes.status, mRes.raw);
+      return err(502, "mollie_payment_failed", origin);
+    }
+    const mp = mRes.data as { id: string; _links?: { checkout?: { href: string } } };
+    // Zelfde gebeurtenis als het gewone pad: check-pending-payments en
+    // last_payment_status werken zo ongewijzigd ook voor deze betaling.
+    await supabase.from("payment_events").insert({
+      owner_id: userId,
+      mollie_payment_id: mp.id,
+      mollie_customer_id: tCustomerId,
+      event_type: "first_payment.created",
+      status: "pending",
+      amount_eur: amountNow,
+      description: tDescription,
+      raw_payload: mp as unknown as Record<string, unknown>,
+    });
+    return ok({
+      success: true,
+      payment_id: mp.id,
+      checkout_url: mp._links?.checkout?.href || null,
+      method,
+      amount_now: amountNow,
+      plan: tPlan,
+      first_charge_date: autopayChargeYmd(tp.trial_ends_at),
+      first_charge_amount: PLAN_PRICES[tPlan].monthly,
+    }, origin);
+  }
+
   const plan = body.plan || "";
   const interval = body.billing_interval || "";
   if (!PLAN_PRICES[plan]) return err(400, "invalid_plan", origin);
@@ -166,10 +340,25 @@ serve(async (req) => {
   // Look up profile
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, mollie_customer_id, subscription_status, mollie_subscription_id")
+    .select("id, business_name, email, mollie_customer_id, subscription_status, mollie_subscription_id, trial_ends_at")
     .eq("id", userId)
     .maybeSingle();
   if (profileErr || !profile) return err(404, "no_profile", origin);
+
+  // Tijdens een lopende proef nooit meer meteen afschrijven (sinds 10-10-2026):
+  // dat gaat via automatisch betalen hierboven, ook voor jaarlijks. Beschermt
+  // tabbladen met de oude knop "Nu abonneren". Is de proef al voorbij maar heeft
+  // check-trials haar nog niet op past_due gezet, dan mag ze gewoon betalen
+  // vanaf het plan-scherm.
+  if (profile.subscription_status === "trialing") {
+    const endMs = profile.trial_ends_at ? new Date(String(profile.trial_ends_at)).getTime() : NaN;
+    if (Number.isFinite(endMs) && endMs > Date.now()) return err(409, "trial_use_autopay", origin);
+    // Proef voorbij terwijl automatisch betalen aanstaat: de eerste afschrijving
+    // loopt al (SEPA duurt dagen). Een volledige betaling erbij zou dubbel
+    // afschrijven. Mislukt die afschrijving, dan zet mollie-webhook haar op
+    // past_due zonder abonnement en kan ze hier weer gewoon betalen.
+    if (profile.mollie_subscription_id) return err(409, "autopay_charging", origin);
+  }
 
   // If they already have an active subscription, refuse — they should hit
   // change-plan or cancel-then-resubscribe instead.

@@ -17,6 +17,60 @@ const ADMIN_ALERT_EMAIL = Deno.env.get("ADMIN_ALERT_EMAIL") || "mirahventures@ve
 const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
+// Maandprijzen, kopie van PLAN_PRICES in create-subscription / change-plan.
+// Nodig voor automatisch betalen na de proef: de machtigingsbetaling is EUR 0,00
+// of 0,01, dus het bedrag van het abonnement komt hier vandaan.
+const PLAN_PRICES: Record<string, { monthly: number; yearly: number }> = {
+  starter: { monthly: 19.0, yearly: 190.0 },
+  professional: { monthly: 35.0, yearly: 350.0 },
+};
+
+// ── AUTOPAY-DATUMREGELS (sinds 10-10-2026) ──────────────────────────────
+// Letterlijk gekopieerd in create-subscription, mollie-webhook,
+// cancel-subscription, change-plan en send-renewal-reminder; de app heeft
+// dezelfde regels in src/autopay.js (edge functions hebben geen gedeelde module).
+// Mollie schrijft een abonnement af op een Amsterdamse kalenderdag (startDate),
+// op een tijdstip van die dag dat wij niet kennen. De eerste afschrijvingsdag is
+// daarom de eerste Amsterdamse dag die pas NA het einde van de proef begint
+// (meestal de dag na de einddatum): alleen zo wordt er nooit afgeschreven terwijl
+// de proef nog loopt. Ook niet op Bonaire/Curaçao/Aruba/Sint Maarten, waar de
+// Amsterdamse dag al om 18:00 of 19:00 de avond ervoor begint. Uitzetten en
+// wisselen kan tot het begin van die dag (Amsterdamse middernacht), dus altijd
+// tot minstens het einde van de proef.
+const AMS = "Europe/Amsterdam";
+function ymdIn(tz: string, d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+// Het tijdstip (ms) waarop Amsterdamse dag `ymd` begint: middernacht CET of CEST.
+function amsMidnightMs(ymd: string): number {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const base = Date.UTC(y, m - 1, d);
+  for (const h of [1, 2]) {
+    const t = base - h * 3600000;
+    if (ymdIn(AMS, new Date(t)) === ymd && ymdIn(AMS, new Date(t - 1)) !== ymd) return t;
+  }
+  return base - 3600000;
+}
+// Eerste Amsterdamse dag die op of na het einde van de proef begint.
+function autopayFirstYmd(end: Date): string {
+  const d = ymdIn(AMS, end);
+  if (amsMidnightMs(d) >= end.getTime()) return d;
+  const [y, m, dd] = d.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, dd + 1)).toISOString().slice(0, 10);
+}
+// Eerste afschrijving (= Mollie-startDate), nooit vóór vandaag (Amsterdam).
+function autopayChargeYmd(trialEndsAt: unknown, now = new Date()): string {
+  const end = new Date(String(trialEndsAt || "")); const today = ymdIn(AMS, now);
+  if (isNaN(end.getTime())) return today;
+  const d = autopayFirstYmd(end); return d > today ? d : today;
+}
+// Vanaf het begin van de eerste afschrijvingsdag kan Mollie de betaling al
+// hebben aangemaakt: uitzetten/wisselen kan dan niet meer.
+function autopayChargeDayReached(trialEndsAt: unknown, now = new Date()): boolean {
+  const end = new Date(String(trialEndsAt || "")); if (isNaN(end.getTime())) return true;
+  return ymdIn(AMS, now) >= autopayFirstYmd(end);
+}
+
 function plain(status: number, body: string) {
   return new Response(body, { status, headers: { "Content-Type": "text/plain" } });
 }
@@ -227,6 +281,9 @@ async function notifyPaymentFailed(
   profile: Record<string, unknown>,
   meta: { plan?: string; billing_interval?: string } | null,
   ownerId: string,
+  // Extra velden voor de mail, bijv. { after_trial: true } bij de eerste
+  // afschrijving na de proef (automatisch betalen).
+  extra?: Record<string, unknown>,
 ): Promise<void> {
   console.log("payment did not complete:", payment.id, payment.status);
 
@@ -259,6 +316,7 @@ async function notifyPaymentFailed(
           trial_ends_at: p.trial_ends_at || null,
           reason_code: reasonCode,
           reason_message: reasonMessage,
+          ...(extra || {}),
         },
       }),
     });
@@ -819,6 +877,253 @@ async function processEvent(
     return handled(terminal);
   }
 
+  // ── AUTOMATISCH BETALEN NA DE PROEF: machtiging vastgelegd ─────────────
+  // (sinds 10-10-2026) create-subscription start tijdens de proef een
+  // machtigingsbetaling van EUR 0,00 (creditcard) of 0,01 (iDEAL) met kind
+  // "trial_autopay_mandate". Dat is GEEN echte betaling: geen factuur, geen
+  // referral-tegoed voor de uitnodiger, en de toegang verandert niet. Hier
+  // plannen we alleen een Mollie-abonnement dat pas na het einde van de proef
+  // voor het eerst afschrijft (autopayChargeYmd: de eerste Amsterdamse dag die na
+  // het einde begint). De salon blijft 'trialing'; plan_expires_at blijft de
+  // einddatum van de proef. De eerste afschrijving loopt daarna door de gewone
+  // recurring-tak hieronder (periode vanaf plan_expires_at of, als die al
+  // voorbij is, vanaf de afschrijving; factuur, tegoed, en dan pas
+  // grant_referral_credit).
+  if (payment.sequenceType === "first" && meta?.kind === "trial_autopay_mandate") {
+    const metaM = payment.metadata as { plan?: string; method?: string } | null;
+    if (payment.status === "paid") {
+      let out = savedOutcome;
+      if (!out) {
+        if (profile.subscription_status !== "trialing") {
+          // Bijv. een checkout die pas afrondde nadat check-trials de proef had
+          // afgesloten, of een salon die intussen al gewoon betaalde. Niets
+          // automatisch aanmaken; de beheerder kijkt het na.
+          await alertAdmin(`Automatisch betalen zonder proef: ${profile.business_name || ownerId}`, [
+            `Salon: ${salonLabel}`,
+            `Betaling: ${payment.id} (${metaM?.method || (payment as unknown as { method?: string }).method || "?"}, EUR ${payment.amount.value})`,
+            `Status is ${profile.subscription_status || "leeg"}; er is GEEN abonnement aangemaakt. Controleer of dit klopt.`,
+          ]);
+          if (!(await saveOutcome(eventId, { skipped: true }))) return retryLater("outcome save error");
+          return handled();
+        }
+        const plan = PLAN_PRICES[String(profile.plan || "")] ? String(profile.plan) : (PLAN_PRICES[String(metaM?.plan || "")] ? String(metaM?.plan) : "starter");
+        out = {
+          plan,
+          amount: PLAN_PRICES[plan].monthly,
+          start_date: autopayChargeYmd(profile.trial_ends_at),
+          method: metaM?.method || (payment as unknown as { method?: string }).method || "",
+          old_subscription_id: profile.mollie_subscription_id || null,
+        };
+        if (!(await saveOutcome(eventId, out))) return retryLater("outcome save error");
+      }
+      if (out.skipped) return handled();
+      const plan = String(out.plan || "starter");
+      const amount = Number(out.amount || PLAN_PRICES[plan]?.monthly || 19);
+      const startDate = String(out.start_date);
+      // Een herhaling (Mollie of check-pending-payments) nadat een eerdere
+      // poging het abonnement al had aangemaakt.
+      const subFromEarlierRun = !!out.subscription_id;
+
+      // Zonder klant of geldige machtiging kan er niets worden afgeschreven:
+      // niets aanmaken, één seintje. De proef loopt gewoon door.
+      const customerId = payment.customerId || "";
+      const mandateId = payment.mandateId || "";
+      let mandateProblem = !customerId || !mandateId ? "geen klant of machtiging bij de betaling" : "";
+      if (!mandateProblem && !out.subscription_id) {
+        const mRes = await mollieFetch(`/customers/${customerId}/mandates/${mandateId}`);
+        const mStatus = mRes.ok && mRes.data && typeof mRes.data === "object" ? String((mRes.data as { status?: string }).status || "") : "";
+        // Alleen een ANTWOORD met een verkeerde stand houdt het tegen; kan Mollie
+        // de machtiging even niet laten zien, dan proberen we het gewoon.
+        if (mStatus && !["valid", "pending"].includes(mStatus)) mandateProblem = `machtiging ${mandateId} staat op ${mStatus}`;
+      }
+      if (mandateProblem) {
+        if (!out.subscription_alerted) {
+          out = { ...out, subscription_alerted: true };
+          await saveOutcome(eventId, out);
+          await alertAdmin(`Geen machtiging bij automatisch betalen: ${profile.business_name || ownerId}`, [
+            `Salon: ${salonLabel}`,
+            `Betaling: ${payment.id} (EUR ${payment.amount.value})`,
+            `Probleem: ${mandateProblem}.`,
+            "Er is GEEN abonnement aangemaakt; de proef loopt gewoon door en de salon kiest na afloop zelf een plan. Ze denkt wel dat automatisch betalen aanstaat: laat het haar weten.",
+          ]);
+        }
+        return handled();
+      }
+
+      // Het abonnement, één keer per betaling: een herhaling vindt het id in
+      // outcome terug en maakt er geen tweede aan.
+      let subscriptionId = String(out.subscription_id || "");
+      // Herhaling vóórdat het profiel was bijgewerkt (bijv. de vorige poging viel
+      // om bij het mailen of het afronden): intussen kan de salon automatisch
+      // betalen al hebben UITGEZET (abonnement gestopt, machtiging ingetrokken).
+      // Dan mag dit oude id niet terug in het profiel, en mag
+      // cancelOtherSubscriptions hieronder ook geen nieuwer abonnement stoppen
+      // dat ze daarna opnieuw aanzette. Eerst bij Mollie kijken of het nog loopt.
+      if (subFromEarlierRun && !out.profile_set) {
+        let live: boolean | "retry" = "retry";
+        try {
+          const g = await mollieFetch(`/customers/${customerId}/subscriptions/${subscriptionId}`);
+          if (g.ok && g.data && typeof g.data === "object") {
+            live = LIVE_SUB_STATUSES.includes(String((g.data as { status?: string }).status || ""));
+          } else if (g.status === 404 || g.status === 410) {
+            live = false;
+          } else {
+            console.error("trial autopay subscription lookup failed:", subscriptionId, g.status, g.raw);
+          }
+        } catch (e) {
+          console.error("trial autopay subscription lookup error:", subscriptionId, e);
+        }
+        if (live === "retry") return retryLater("subscription lookup failed");
+        if (!live) {
+          console.log("trial autopay: abonnement", subscriptionId, "loopt niet meer (uitgezet); profiel blijft zoals het is");
+          await saveOutcome(eventId, { ...out, stale_subscription: true });
+          return handled();
+        }
+      }
+      if (!subscriptionId) {
+        const subRes = await mollieFetch(`/customers/${customerId}/subscriptions`, {
+          method: "POST",
+          body: JSON.stringify({
+            amount: { currency: "EUR", value: amount.toFixed(2) },
+            interval: "1 month",
+            startDate,
+            description: `Vellu ${plan === "professional" ? "Professional" : "Starter"} (monthly)`,
+            mandateId,
+            webhookUrl: `${SUPABASE_URL}/functions/v1/mollie-webhook`,
+            metadata: { owner_id: ownerId, plan, billing_interval: "monthly", kind: "trial_autopay", mandate_payment_id: payment.id },
+          }),
+        });
+        if (subRes.ok && subRes.data && typeof subRes.data === "object") {
+          subscriptionId = (subRes.data as { id: string }).id;
+          out = { ...out, subscription_id: subscriptionId };
+          await saveOutcome(eventId, out);
+        } else {
+          console.error("trial autopay subscription create failed:", subRes.status, subRes.raw);
+          if (!out.subscription_alerted) {
+            out = { ...out, subscription_alerted: true };
+            await saveOutcome(eventId, out);
+            await alertAdmin(`Automatisch betalen: abonnement niet aangemaakt: ${profile.business_name || ownerId}`, [
+              `Salon: ${salonLabel}`,
+              `Machtigingsbetaling: ${payment.id} (EUR ${payment.amount.value}) is rond.`,
+              `Mollie antwoordde ${subRes.status}: ${String(subRes.raw || "").slice(0, 300)}`,
+              `Mollie en check-pending-payments proberen het opnieuw. Lukt het niet, maak het abonnement dan met de hand aan: EUR ${amount.toFixed(2)} per maand, startdatum ${startDate}, machtiging ${mandateId}.`,
+              MANUAL_SUB_ID_NOTE + " Laat subscription_status op trialing staan.",
+            ]);
+          }
+          return retryLater("subscription create failed");
+        }
+      }
+
+      // Alles wat er bij deze klant verder nog loopt stoppen (ook een tweede
+      // checkout vanuit een ander tabblad). Niet meer als het profiel al bij een
+      // eerdere poging is bijgewerkt: dan kan "verder" een abonnement zijn dat
+      // de salon daarna zelf opnieuw aanzette.
+      const failedOthers = out.profile_set ? [] : await cancelOtherSubscriptions(customerId, subscriptionId);
+      if (failedOthers.length) {
+        await alertAdmin(`Oud Mollie-abonnement niet gestopt: ${profile.business_name || ownerId}`, [
+          `Salon: ${salonLabel}`,
+          `Nieuw abonnement: ${subscriptionId}`,
+          `Niet gestopt: ${failedOthers.join(", ")}`,
+          "Stop deze abonnementen met de hand in Mollie, anders wordt er dubbel afgeschreven.",
+        ]);
+      }
+
+      // Alleen zolang ze nog in de proef zit. plan_expires_at, current_period_start,
+      // subscription_status en referral_credit_days blijven zoals ze zijn.
+      // mollie_customer_id gaat mee: create-subscription schrijft hem bij het
+      // aanmaken van de klant zonder foutcontrole, en zonder klant-id kan
+      // cancel-subscription het abonnement later niet stoppen (dan zou
+      // "uitzetten" lukken terwijl Mollie gewoon afschrijft).
+      const { data: updRows, error: updErr } = out.profile_set ? { data: [{ id: ownerId }], error: null } : await supabase.from("profiles")
+        .update({
+          mollie_customer_id: customerId,
+          mollie_mandate_id: mandateId,
+          mollie_subscription_id: subscriptionId,
+          billing_interval: "monthly",
+          cancel_at_period_end: false,
+          cancelled_at: null,
+        })
+        .eq("id", ownerId)
+        .eq("subscription_status", "trialing")
+        .select("id");
+      if (updErr) {
+        console.error("trial autopay profile update error:", ownerId, updErr);
+        await alertAdmin(`Automatisch betalen niet verwerkt: ${profile.business_name || ownerId}`, [
+          `Salon: ${salonLabel}`,
+          `Machtigingsbetaling: ${payment.id}; abonnement ${subscriptionId} (start ${startDate}) staat bij Mollie.`,
+          `Profiel bijwerken mislukt: ${updErr.message || String(updErr)}`,
+          "Mollie probeert het opnieuw; controleer daarna of mollie_subscription_id in het profiel staat.",
+        ]);
+        return retryLater("profile update error");
+      }
+      if (!updRows || (Array.isArray(updRows) && updRows.length === 0)) {
+        // De stand veranderde intussen (bijv. de salon betaalde toch gewoon):
+        // het net gemaakte abonnement mag niet blijven lopen.
+        const stopped = await cancelMollieSubscription(customerId, subscriptionId);
+        await alertAdmin(`Automatisch betalen teruggedraaid: ${profile.business_name || ownerId}`, [
+          `Salon: ${salonLabel}`,
+          `Machtigingsbetaling: ${payment.id}`,
+          `De salon stond bij het bijwerken niet meer op trialing; abonnement ${subscriptionId} is ${stopped ? "weer gestopt" : "NIET gestopt: stop het met de hand in Mollie"}.`,
+        ]);
+        return handled();
+      }
+      if (!out.profile_set) {
+        out = { ...out, profile_set: true };
+        await saveOutcome(eventId, out);
+      }
+
+      // Bevestiging aan de salon. Geldt ook als SEPA-vooraankondiging: datum en
+      // bedrag van de eerste afschrijving staan erin. autopay_off_deadline = het
+      // begin van de afschrijvingsdag (Amsterdam): send-emails toont dat in de
+      // tijdzone van de salon, en laat de uitzet-zin weg als het al voorbij is.
+      if (!out.mail_sent) {
+        try {
+          await fetch(`${SUPABASE_URL}/functions/v1/send-emails`, {
+            method: "POST",
+            headers: { "x-internal-secret": SUPABASE_SERVICE_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "trial_autopay_on",
+              booking: {
+                owner_email: profile.email,
+                owner_id: ownerId,
+                owner_lang: DUTCH_COUNTRIES.has(String(country || "NL")) ? "nl" : "en",
+                country_code: country || "NL",
+                business_name: profile.business_name,
+                salon_name: profile.business_name,
+                plan,
+                trial_ends_at: profile.trial_ends_at || null,
+                first_charge_date: startDate,
+                first_charge_amount: amount,
+                autopay_off_deadline: new Date(amsMidnightMs(startDate)).toISOString(),
+                amount_now: parseFloat(payment.amount.value),
+                method: out.method || "",
+                credit_days: profile.referral_credit_days || 0,
+              },
+            }),
+          });
+        } catch (e) { console.error("trial_autopay_on email error:", e); }
+        out = { ...out, mail_sent: true };
+        await saveOutcome(eventId, out);
+      }
+      return handled();
+    } else if (["failed", "expired", "canceled"].includes(payment.status)) {
+      // Afgebroken of geweigerd: er is niets afgeschreven en de proef loopt
+      // gewoon door, dus geen mail aan de salon (de app laat het zien bij
+      // terugkomst). Wel een seintje, zodat we kunnen helpen als ze het wilde.
+      const det = (payment as unknown as { details?: Record<string, unknown> }).details || {};
+      await alertAdmin(`Automatisch betalen afgebroken: ${profile.business_name || ownerId}`, [
+        `Salon: ${salonLabel}`,
+        `Methode: ${metaM?.method || "?"}`,
+        `Status: ${payment.status}`,
+        `Reden: ${det.failureReason || "-"}`,
+        `Mollie: ${payment.id}`,
+        "De salon heeft hier geen mail over gekregen; haar proef loopt gewoon door.",
+      ]);
+      return handled();
+    }
+    return handled(terminal);
+  }
+
   if (payment.sequenceType === "first") {
     if (payment.status === "paid") {
       const plan = meta?.plan || profile.plan || "starter";
@@ -1158,6 +1463,16 @@ async function processEvent(
           updates,
           // Laatste verlenging van een opgezegd abonnement: niet herplannen.
           ...(cancelledInFlight ? { cancelled_in_flight: true } : {}),
+          // Eerste afschrijving na de proef (automatisch betalen, sinds
+          // 10-10-2026): de eerste echte betaling van deze salon, dus pas nu
+          // krijgt de uitnodigende salon haar tegoed (zie hieronder). Ook via
+          // de metadata van het abonnement (kind "trial_autopay"): komt de
+          // afschrijving pas binnen nadat de salon niet meer op trialing staat,
+          // dan zou de uitnodiger haar tegoed anders nooit krijgen (deze salon
+          // krijgt geen first.paid meer). Een actieve salon niet: dat is een
+          // gewone verlenging van hetzelfde abonnement.
+          from_trial: profile.subscription_status === "trialing"
+            || (meta?.kind === "trial_autopay" && profile.subscription_status !== "active"),
         };
         if (!(await saveOutcome(eventId, out))) return retryLater("outcome save error");
       }
@@ -1236,6 +1551,9 @@ async function processEvent(
         ]);
         return retryLater("profile update error");
       }
+      // De machtiging tijdens de proef (EUR 0,00 / 0,01) telde bewust niet; dit
+      // is haar eerste echte betaling. De rpc is idempotent.
+      if (out.from_trial) await grantReferralCredit(ownerId);
       const invoiceRow = await createInvoice(ownerId, eventId, payment, plan, interval, country, btwId, periodStart, periodEnd);
       const invoiceFields = invoiceFieldsOf(invoiceRow, periodStart, country, btwId);
       try {
@@ -1260,6 +1578,64 @@ async function processEvent(
       } catch (e) { console.error("subscription_invoice email error:", e); }
       return handled();
     } else if (["failed", "expired", "canceled"].includes(payment.status)) {
+      // Eerste afschrijving na de proef (automatisch betalen) mislukt: ze heeft
+      // nog nooit betaald. Automatisch betalen gaat uit (abonnement gestopt en
+      // uit het profiel), anders probeert Mollie het een maand later opnieuw na
+      // een mail die zegt dat er niets is afgeschreven. Daarna is het de gewone
+      // stand na een proef: past_due, plan_expires_at = einde proef, dus het
+      // plan-scherm. De outcome onthoudt dat dit zo'n geval was, zodat een
+      // herhaling (profiel staat dan al op past_due zonder abonnement) niet in
+      // de controle "ander abonnement" belandt en hetzelfde afmaakt.
+      const trialFirstFail = savedOutcome
+        ? savedOutcome.trial_first_charge_failed === true
+        : profile.subscription_status === "trialing";
+      if (trialFirstFail) {
+        let fo: Outcome = savedOutcome || { trial_first_charge_failed: true };
+        if (!savedOutcome && !(await saveOutcome(eventId, fo))) return retryLater("outcome save error");
+        // Alleen de stand waarvoor dit bedoeld is omzetten (nog trialing, met
+        // DIT abonnement), en bij een herhaling niet opnieuw. Tussen twee
+        // pogingen kan de salon al gewoon betaald hebben (past_due mag dat):
+        // een kale update zou haar dan direct na het betalen weer op past_due
+        // zetten en haar nieuwe abonnement uit het profiel halen.
+        if (!fo.past_due_set) {
+          let q = supabase
+            .from("profiles")
+            .update({ subscription_status: "past_due", mollie_subscription_id: null })
+            .eq("id", ownerId)
+            .eq("subscription_status", "trialing");
+          if (payment.subscriptionId) q = q.eq("mollie_subscription_id", payment.subscriptionId);
+          const { error: tErr } = await q;
+          if (tErr) {
+            console.error("trial first charge past_due update error:", ownerId, tErr);
+            return retryLater("profile update error");
+          }
+          fo = { ...fo, past_due_set: true };
+          await saveOutcome(eventId, fo);
+        }
+        const subToStop = payment.subscriptionId || "";
+        const custForStop = payment.customerId || String(profile.mollie_customer_id || "");
+        if (subToStop && custForStop && !fo.sub_stopped) {
+          if (await cancelMollieSubscription(custForStop, subToStop)) {
+            fo = { ...fo, sub_stopped: true };
+          } else {
+            await alertAdmin(`Oud Mollie-abonnement niet gestopt: ${profile.business_name || ownerId}`, [
+              `Salon: ${salonLabel}`,
+              `Eerste afschrijving na de proef mislukt: ${payment.id} (EUR ${payment.amount.value})`,
+              `Mollie-klant: ${custForStop}`,
+              `Niet gestopt: ${subToStop}`,
+              "Stop dit abonnement met de hand in Mollie; de salon staat op past_due en kiest zelf opnieuw een plan.",
+            ]);
+            fo = { ...fo, sub_stopped: "alerted" };
+          }
+          await saveOutcome(eventId, fo);
+        }
+        if (!fo.mail_sent) {
+          await notifyPaymentFailed(payment, profile, meta, ownerId, { after_trial: true });
+          fo = { ...fo, mail_sent: true };
+          await saveOutcome(eventId, fo);
+        }
+        return handled();
+      }
       const { error: updErr } = await supabase
         .from("profiles")
         .update({ subscription_status: "past_due" })

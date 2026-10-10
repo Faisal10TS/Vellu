@@ -14,6 +14,25 @@
 
 export const RELEASES = [
   {
+    // De eigenaar wil niet dat een salon betaalt op het moment dat ze tijdens
+    // de proef abonneert: "Nu abonneren" rekende meteen het volle maandbedrag
+    // af. Nu legt ze alleen haar betaalgegevens vast en schrijven we pas af na
+    // het einde van de proef.
+    id: "2026-10-10",
+    date: "2026-10-10",
+    title: { nl: "Automatisch betalen na je proef", en: "Automatic payment after your trial", es: "Pago automático después de tu prueba" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Abonnement: tijdens je proefperiode kun je nu automatisch betalen na de proef aanzetten. Je legt alleen je betaalgegevens vast: met een creditcard wordt er niets afgeschreven, met iDEAL eenmalig €0,01. De eerste afschrijving is pas na het einde van je proef (de datum staat bij Abonnement), en tot je proef afloopt zet je het met één knop weer uit. Abonneren tijdens de proef rekent niet meer meteen af. Doe je niets, dan kies je na de proef gewoon zelf een plan.",
+          en: "Subscription: during your trial you can now turn on automatic payment after the trial. You only save your payment details: with a credit card nothing is charged, with iDEAL a one-off €0.01. The first charge only comes after your trial ends (the date is shown under Subscription), and until your trial ends you can turn it off with one button. Subscribing during the trial no longer charges you straight away. If you do nothing, you simply choose a plan yourself after the trial.",
+          es: "Suscripción: durante tu prueba ahora puedes activar el pago automático después de la prueba. Solo guardas tus datos de pago: con tarjeta de crédito no se cobra nada, con iDEAL una vez €0,01. El primer cobro llega después de que termine tu prueba (la fecha aparece en Suscripción), y hasta que termine tu prueba puedes desactivarlo con un botón. Suscribirte durante la prueba ya no te cobra al instante. Si no haces nada, eliges tú misma un plan después de la prueba.",
+        },
+      },
+    ],
+  },
+  {
     // TTNB 09-10-2026: "e text nan ta overlap" — op een lege dag stonden
     // "Geen afspraken" en "10:00 – 17:00 vrij" over elkaar in de dagweergave.
     id: "2026-10-09",

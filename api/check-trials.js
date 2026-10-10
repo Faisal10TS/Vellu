@@ -12,6 +12,17 @@
 //   1. trialing + trial_ends_at < now()  →  past_due
 //      (owner needs to subscribe to regain access; access already revoked
 //      because plan_expires_at = trial_ends_at)
+//      Sinds 10-10-2026 alleen proeven ZONDER automatisch betalen (geen
+//      mollie_subscription_id). Een proef MET automatisch betalen laat deze
+//      cron met rust: de eerste afschrijving valt na het einde van de proef en
+//      een SEPA-incasso blijft dagen "pending". mollie-webhook zet haar op
+//      actief (betaald) of op past_due zonder abonnement (mislukt), en
+//      check-pending-payments stemt achterblijvers af met Mollie (webhook
+//      opnieuw aantrappen, of het abonnement stoppen als het nooit afschreef).
+//      Hier blind op past_due zetten kan niet: het abonnement bleef dan in het
+//      profiel en bij Mollie staan, de salon kon vanaf het plan-scherm nog eens
+//      volledig betalen terwijl de incasso binnenkwam (dubbel), en deze cron
+//      heeft geen Mollie-sleutel om het abonnement te stoppen.
 //
 //   2. active + cancel_at_period_end + plan_expires_at < now()  →  cancelled
 //      (Mollie subscription was already cancelled at the time the user
@@ -39,12 +50,13 @@ export default async function handler(req, res) {
   let cancellationsFinalised = 0;
 
   try {
-    // 1. Trialing owners whose trial has ended → past_due
+    // 1. Trialing owners without auto-pay whose trial has ended → past_due
     {
       const { data, error } = await supabase
         .from('profiles')
         .update({ subscription_status: 'past_due' })
         .eq('subscription_status', 'trialing')
+        .is('mollie_subscription_id', null)
         .lt('trial_ends_at', nowIso)
         .select('id');
       if (error) throw error;

@@ -16,6 +16,14 @@
 //    boekingspagina blijft na afloop gewoon werken (book-appointment kijkt niet
 //    naar het abonnement); alleen het dashboard staat op pauze.
 //
+// 2b/3b. PROEF MET AUTOMATISCH BETALEN (sinds 10-10-2026): trialing + een
+//    Mollie-abonnement dat pas na het einde van de proef voor het eerst
+//    afschrijft (de eerste Amsterdamse dag die na het einde begint). Secties 2 en 3 slaan die salons al over (mollie_subscription_id
+//    IS NULL), want "kies een plan" en "je dashboard staat op pauze" kloppen voor
+//    hen niet. Zij krijgen 3 dagen vooraf trial_autopay_ending (datum, bedrag,
+//    hoe uit te zetten) en op de dag van de afschrijving trial_autopay_today,
+//    allebei mail + push. Geen kopie aan de beheerder.
+//
 // DEDUPE: renewal_reminder_log (owner_id, plan_expires_at, kind) — insert on
 // conflict = al gemaild. Vensters i.p.v. exacte dagen zodat een gemiste run
 // niet betekent dat er nooit meer een herinnering komt.
@@ -57,6 +65,92 @@ const PROEF_VENSTER_NA_DAGEN = 7; // proef afgelopen: tot een week terug (gemist
 const DUTCH = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 const langOf = (cc: unknown) => DUTCH.has(String(cc || "NL").toUpperCase()) ? "nl" : "en";
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Maandprijzen, kopie van PLAN_PRICES in create-subscription: het bedrag van de
+// eerste afschrijving bij automatisch betalen.
+const PLAN_PRICES: Record<string, { monthly: number; yearly: number }> = {
+  starter: { monthly: 19.0, yearly: 190.0 },
+  professional: { monthly: 35.0, yearly: 350.0 },
+};
+
+// ── AUTOPAY-DATUMREGELS (sinds 10-10-2026) ──────────────────────────────
+// Letterlijk gekopieerd in create-subscription, mollie-webhook,
+// cancel-subscription, change-plan en send-renewal-reminder; de app heeft
+// dezelfde regels in src/autopay.js (edge functions hebben geen gedeelde module).
+// Mollie schrijft een abonnement af op een Amsterdamse kalenderdag (startDate),
+// op een tijdstip van die dag dat wij niet kennen. De eerste afschrijvingsdag is
+// daarom de eerste Amsterdamse dag die pas NA het einde van de proef begint
+// (meestal de dag na de einddatum): alleen zo wordt er nooit afgeschreven terwijl
+// de proef nog loopt. Ook niet op Bonaire/Curaçao/Aruba/Sint Maarten, waar de
+// Amsterdamse dag al om 18:00 of 19:00 de avond ervoor begint. Uitzetten en
+// wisselen kan tot het begin van die dag (Amsterdamse middernacht), dus altijd
+// tot minstens het einde van de proef.
+const AMS = "Europe/Amsterdam";
+function ymdIn(tz: string, d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+// Het tijdstip (ms) waarop Amsterdamse dag `ymd` begint: middernacht CET of CEST.
+function amsMidnightMs(ymd: string): number {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const base = Date.UTC(y, m - 1, d);
+  for (const h of [1, 2]) {
+    const t = base - h * 3600000;
+    if (ymdIn(AMS, new Date(t)) === ymd && ymdIn(AMS, new Date(t - 1)) !== ymd) return t;
+  }
+  return base - 3600000;
+}
+// Eerste Amsterdamse dag die op of na het einde van de proef begint.
+function autopayFirstYmd(end: Date): string {
+  const d = ymdIn(AMS, end);
+  if (amsMidnightMs(d) >= end.getTime()) return d;
+  const [y, m, dd] = d.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, dd + 1)).toISOString().slice(0, 10);
+}
+// Eerste afschrijving (= Mollie-startDate), nooit vóór vandaag (Amsterdam).
+function autopayChargeYmd(trialEndsAt: unknown, now = new Date()): string {
+  const end = new Date(String(trialEndsAt || "")); const today = ymdIn(AMS, now);
+  if (isNaN(end.getTime())) return today;
+  const d = autopayFirstYmd(end); return d > today ? d : today;
+}
+// Vanaf het begin van de eerste afschrijvingsdag kan Mollie de betaling al
+// hebben aangemaakt: uitzetten/wisselen kan dan niet meer.
+function autopayChargeDayReached(trialEndsAt: unknown, now = new Date()): boolean {
+  const end = new Date(String(trialEndsAt || "")); if (isNaN(end.getTime())) return true;
+  return ymdIn(AMS, now) >= autopayFirstYmd(end);
+}
+// Bedrag zoals de app en send-emails het schrijven: komma, duizendtallen met een
+// punt ("€19,00"). Kopie van fN in send-emails; nooit toFixed(2) met een punt.
+const fN = (p: unknown) => {
+  const v = parseFloat(String(p)) || 0;
+  const [i, d] = Math.abs(v).toFixed(2).split(".");
+  return (v < 0 && +Math.abs(v).toFixed(2) !== 0 ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + d;
+};
+// Tijdzone per land, zelfde tabel als TZ_BY_COUNTRY in shared.jsx en
+// send-emails. Onbekend land = Amsterdam.
+const TZ_BY_COUNTRY: Record<string, string> = { NL: "Europe/Amsterdam", BE: "Europe/Brussels", GB: "Europe/London", AW: "America/Curacao", CW: "America/Curacao", BQ: "America/Curacao", SX: "America/Curacao" };
+const tzFor = (cc: unknown) => TZ_BY_COUNTRY[String(cc || "").toUpperCase()] || "Europe/Amsterdam";
+// Uiterste uitzetmoment (begin van de afschrijvingsdag in Amsterdam) op de klok
+// van de salon, voor de push: "vóór 25 oktober" in Nederland, "vóór 24 oktober
+// 18:00" op Bonaire. Zelfde regel als offByTxt in send-emails.
+const pushOffBy = (deadline: Date, cc: unknown, lang: string) => {
+  const tz = tzFor(cc);
+  const hm = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(deadline);
+  const dag = new Intl.DateTimeFormat(lang === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "long", timeZone: tz }).format(deadline);
+  if (hm === "00:00") return lang === "nl" ? `vóór ${dag}` : `before ${dag}`;
+  return lang === "nl" ? `vóór ${dag} ${hm}` : `before ${hm} on ${dag}`;
+};
+// Kale datum (YYYY-MM-DD) als "23 oktober" / "23 October" voor de push.
+const pushDate = (ymd: string, lang: string) =>
+  new Intl.DateTimeFormat(lang === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(ymd + "T12:00:00Z"));
+
+async function push(userId: string, title: string, body: string, url: string, tag: string) {
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/send-push-notification`, {
+    method: "POST",
+    headers: { "x-internal-secret": SUPABASE_SERVICE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId, title, body, url, tag }),
+  });
+  if (!r.ok) console.error(`send-push-notification ${tag} → ${r.status}`);
+}
 
 async function recordHealth(status: string, ms: number, processed: number, err: string | null) {
   try {
@@ -143,6 +237,58 @@ serve(async (req) => {
       } catch (e) { console.error("trial_ending email error for", s.id, e); }
     }
 
+    // ── 2b. Automatisch betalen: proef eindigt binnen 3 dagen ────────────
+    // Zelfde venster als sectie 2. Is de dag van de afschrijving al bereikt,
+    // dan dekt sectie 3b die dag.
+    const { data: apBijna, error: e2b } = await supabase
+      .from("profiles")
+      .select("id, business_name, email, country_code, plan, trial_ends_at, subscription_status, mollie_subscription_id, referral_credit_days")
+      .eq("subscription_status", "trialing")
+      .not("mollie_subscription_id", "is", null)
+      .not("trial_ends_at", "is", null)
+      .gt("trial_ends_at", nu.toISOString())
+      .lte("trial_ends_at", proefGrens.toISOString());
+    if (e2b) throw e2b;
+    for (const s of apBijna || []) {
+      if (!s.email) continue;
+      if (autopayChargeDayReached(s.trial_ends_at, nu)) continue;
+      if (!(await claim(s.id, s.trial_ends_at, "trial_autopay_ending"))) continue;
+      const lang = langOf(s.country_code);
+      const plan = PLAN_PRICES[String(s.plan || "")] ? String(s.plan) : "starter";
+      const chargeYmd = autopayChargeYmd(s.trial_ends_at, nu);
+      const amount = PLAN_PRICES[plan].monthly;
+      const offDeadline = new Date(amsMidnightMs(chargeYmd));
+      // Dagen tot de EINDDATUM van de proef in kalenderdagen op de klok van de
+      // salon: het onderwerp ("eindigt morgen") moet kloppen met de einddatum
+      // in de mail, en die staat ook op haar klok. 0 = vandaag. De klok-
+      // berekening van sectie 2 zei "over 2 dagen" bij een proef die morgen om
+      // 21:00 afloopt.
+      const tz = tzFor(s.country_code);
+      const daysLeft = Math.max(0, Math.round((Date.parse(ymdIn(tz, new Date(String(s.trial_ends_at))) + "T12:00:00Z") - Date.parse(ymdIn(tz, nu) + "T12:00:00Z")) / DAY_MS));
+      try {
+        await mail("trial_autopay_ending", {
+          owner_email: s.email, owner_id: s.id, owner_lang: lang, country_code: s.country_code || "NL",
+          business_name: s.business_name, salon_name: s.business_name,
+          plan, trial_ends_at: s.trial_ends_at, days_left: daysLeft,
+          first_charge_date: chargeYmd, first_charge_amount: amount,
+          autopay_off_deadline: offDeadline.toISOString(),
+          credit_days: s.referral_credit_days || 0,
+        });
+        verstuurd++;
+      } catch (e) { console.error("trial_autopay_ending email error for", s.id, e); }
+      try {
+        const datum = pushDate(chargeYmd, lang);
+        const bedrag = "€" + fN(amount);
+        const uiterlijk = pushOffBy(offDeadline, s.country_code, lang);
+        await push(
+          s.id,
+          lang === "nl" ? "Je proefperiode eindigt bijna" : "Your trial is almost over",
+          lang === "nl" ? `Op ${datum} schrijven we ${bedrag} af. Uitzetten kan ${uiterlijk}, bij Abonnement.` : `On ${datum} we will charge ${bedrag}. You can turn this off ${uiterlijk} under Subscription.`,
+          "/owner?tab=billing", `trial-autopay-ending-${s.id}`,
+        );
+      } catch (e) { console.error("trial_autopay_ending push error for", s.id, e); }
+    }
+
     // ── 3. Proef afgelopen zonder plan: mail + push + kopie aan beheerder ─
     const proefTerug = new Date(nu.getTime() - PROEF_VENSTER_NA_DAGEN * DAY_MS);
     const { data: voorbij, error: e3 } = await supabase
@@ -202,6 +348,50 @@ serve(async (req) => {
           });
         }
       } catch (e) { console.error("admin trial alert error for", s.id, e); }
+    }
+
+    // ── 3b. Automatisch betalen: de dag van de eerste afschrijving ──────
+    // De eerste Amsterdamse dag die na het einde van de proef begint = de
+    // startdatum van het Mollie-abonnement (autopayFirstYmd). De cron draait om
+    // 08:00 UTC, dan is het in Amsterdam al die dag. Een salon wiens kaart vóór die tijd al werd belast staat al op
+    // actief en krijgt alleen de factuurmail; zo bedoeld.
+    const { data: apVandaag, error: e3b } = await supabase
+      .from("profiles")
+      .select("id, business_name, email, country_code, plan, trial_ends_at, subscription_status, mollie_subscription_id, referral_credit_days")
+      .eq("subscription_status", "trialing")
+      .not("mollie_subscription_id", "is", null)
+      .not("trial_ends_at", "is", null)
+      .gte("trial_ends_at", new Date(nu.getTime() - 2 * DAY_MS).toISOString())
+      .lte("trial_ends_at", new Date(nu.getTime() + 2 * DAY_MS).toISOString());
+    if (e3b) throw e3b;
+    const vandaagAms = ymdIn(AMS, nu);
+    for (const s of apVandaag || []) {
+      if (!s.email) continue;
+      const end = new Date(String(s.trial_ends_at));
+      if (isNaN(end.getTime()) || autopayFirstYmd(end) !== vandaagAms) continue;
+      if (!(await claim(s.id, s.trial_ends_at, "trial_autopay_today"))) continue;
+      const lang = langOf(s.country_code);
+      const plan = PLAN_PRICES[String(s.plan || "")] ? String(s.plan) : "starter";
+      const amount = PLAN_PRICES[plan].monthly;
+      try {
+        await mail("trial_autopay_today", {
+          owner_email: s.email, owner_id: s.id, owner_lang: lang, country_code: s.country_code || "NL",
+          business_name: s.business_name, salon_name: s.business_name,
+          plan, trial_ends_at: s.trial_ends_at, days_left: 0,
+          first_charge_date: vandaagAms, first_charge_amount: amount,
+          credit_days: s.referral_credit_days || 0,
+        });
+        verstuurd++;
+      } catch (e) { console.error("trial_autopay_today email error for", s.id, e); }
+      try {
+        const bedrag = "€" + fN(amount);
+        await push(
+          s.id,
+          lang === "nl" ? "Je abonnement gaat vandaag in" : "Your subscription starts today",
+          lang === "nl" ? `Vandaag schrijven we ${bedrag} af. Je dashboard blijft gewoon open.` : `Today we charge ${bedrag}. Your dashboard stays open.`,
+          "/owner?tab=billing", `trial-autopay-today-${s.id}`,
+        );
+      } catch (e) { console.error("trial_autopay_today push error for", s.id, e); }
     }
 
     await recordHealth("success", Date.now() - t0, verstuurd, null);

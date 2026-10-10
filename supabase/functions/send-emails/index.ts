@@ -101,7 +101,8 @@ const{type,booking:b}=await req.json();
 // versturen die de app zelf verstuurt (src/shared.jsx sendEmails). Alleen van de
 // server, met x-internal-secret: de platformmails die als "Vellu" uitgaan
 // (payment_failed, trial_ending, trial_expired, renewal_reminder,
-// subscription_invoice), appointment_reminder, owner_cancellation, de
+// subscription_invoice, en sinds 10-10-2026 trial_autopay_on,
+// trial_autopay_ending, trial_autopay_today), appointment_reminder, owner_cancellation, de
 // aanmeldmails van de wachtlijst (waitlist_confirmation, waitlist_joined) en de
 // vooruitbetalingsmails (booking_pending_payment, prepay_reminder,
 // prepay_expired). waitlist_spot_open en de salonfactuur (invoice) blijven vanuit
@@ -273,7 +274,7 @@ const oLang=["nl","en","es"].includes(b.owner_lang)?b.owner_lang:"nl";
 // de tekst zegt "Antwoord gewoon op deze mail". Haar antwoord kwam in haar eigen
 // inbox terecht en nooit bij ons. Deze types gaan daarom altijd uit als Vellu,
 // met ons adres als Reply-To (zelfde als send-source-request).
-const PLATFORM_TYPES=["renewal_reminder","trial_ending","trial_expired","payment_failed","subscription_invoice"];
+const PLATFORM_TYPES=["renewal_reminder","trial_ending","trial_expired","payment_failed","subscription_invoice","trial_autopay_on","trial_autopay_ending","trial_autopay_today"];
 const VELLU_REPLY_TO="mirahventures@vellu.cc";
 const isPlatform=PLATFORM_TYPES.includes(type);
 // Een salon mag niet als "Vellu" (of "Vellu Support") mailen: met een login
@@ -624,20 +625,101 @@ const prijzen=exVat
 ?txt(oLang,"Starter €19 of Professional €35 per maand; jaarlijks betaal je 10 maanden en krijg je er 2 gratis.","Starter €19 or Professional €35 per month; pay yearly and you get 2 months free.","Starter €19 o Professional €35 al mes; pagando anual, 2 meses gratis.")
 :txt(oLang,"Starter €19 of Professional €35 per maand (incl. btw); jaarlijks betaal je 10 maanden en krijg je er 2 gratis.","Starter €19 or Professional €35 per month (incl. VAT); pay yearly and you get 2 months free.","Starter €19 o Professional €35 al mes (IVA incl.); pagando anual, 2 meses gratis.");
 if(type==="trial_ending"){
-await send(plainText(b.owner_email),plainText(txt(oLang,`Je proefperiode van Vellu eindigt ${dagen<=1?"morgen":`over ${dagen} dagen`}`,`Your Vellu trial ends ${dagen<=1?"tomorrow":`in ${dagen} days`}`,`Tu prueba de Vellu termina ${dagen<=1?"mañana":`en ${dagen} días`}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Je proefperiode eindigt bijna","Your trial is almost over","Tu prueba está por terminar")}</h2><p style="color:#666;margin-bottom:8px;">${txt(oLang,`Op <strong>${esc(eindigtOp)}</strong> eindigt je gratis proefperiode van <strong>${esc(planName)}</strong>. Kies vóór die tijd een plan, dan loopt alles gewoon door: je agenda, je klanten en je boekingspagina.`,`Your free trial of <strong>${esc(planName)}</strong> ends on <strong>${esc(eindigtOp)}</strong>. Choose a plan before then and everything simply continues: your agenda, your clients and your booking page.`,`Tu prueba gratuita de <strong>${esc(planName)}</strong> termina el <strong>${esc(eindigtOp)}</strong>. Elige un plan antes y todo sigue igual: tu agenda, tus clientes y tu página de reservas.`)}</p><p style="color:#666;margin-bottom:28px;">${prijzen}</p>${knop}<p style="color:#888;font-size:13px;">${txt(oLang,"Twijfel je nog, of lukt betalen niet? Antwoord gewoon op deze mail.","Still deciding, or having trouble paying? Just reply to this email.","¿Aún lo dudas o no consigues pagar? Responde a este correo.")}</p></div>`);}
+// Sinds 10-10-2026 kan een salon tijdens de proef niet meer meteen betalen
+// (create-subscription weigert dat); zonder onderbreking doorgaan kan alleen met
+// automatisch betalen, dat pas na de proef afschrijft. De oude zin "kies vóór die
+// tijd een plan, dan loopt alles gewoon door" beloofde iets wat niet meer kan.
+const knopOpties=`<p style="text-align:center;margin-bottom:28px;"><a href="https://vellu.cc/owner?tab=billing" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;">${txt(oLang,"Bekijk opties","See options","Ver opciones")}</a></p>`;
+await send(plainText(b.owner_email),plainText(txt(oLang,`Je proefperiode van Vellu eindigt ${dagen<=1?"morgen":`over ${dagen} dagen`}`,`Your Vellu trial ends ${dagen<=1?"tomorrow":`in ${dagen} days`}`,`Tu prueba de Vellu termina ${dagen<=1?"mañana":`en ${dagen} días`}`)),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Je proefperiode eindigt bijna","Your trial is almost over","Tu prueba está por terminar")}</h2><p style="color:#666;margin-bottom:8px;">${txt(oLang,`Op <strong>${esc(eindigtOp)}</strong> eindigt je gratis proefperiode van <strong>${esc(planName)}</strong>. Wil je daarna zonder onderbreking doorgaan? Zet dan automatisch betalen aan onder Instellingen, Abonnement & account: er wordt nu niets afgeschreven, de eerste afschrijving is pas na het einde van je proef. Je agenda, je klanten en je boekingspagina lopen dan gewoon door.`,`Your free trial of <strong>${esc(planName)}</strong> ends on <strong>${esc(eindigtOp)}</strong>. Want to continue without interruption? Turn on automatic payment under Settings, Subscription & account: nothing is charged now, the first charge only comes after your trial ends. Your agenda, your clients and your booking page then simply continue.`,`Tu prueba gratuita de <strong>${esc(planName)}</strong> termina el <strong>${esc(eindigtOp)}</strong>. ¿Quieres seguir sin interrupción? Activa el pago automático en Ajustes, Suscripción y cuenta: ahora no se cobra nada, el primer cobro llega después de que termine tu prueba. Tu agenda, tus clientes y tu página de reservas siguen igual.`)}</p><p style="color:#666;margin-bottom:28px;">${txt(oLang,"Doe je niets, dan kies je na je proef zelf een plan. ","If you do nothing, you choose a plan yourself after your trial. ","Si no haces nada, eliges tú misma un plan después de la prueba. ")}${prijzen}</p>${knopOpties}<p style="color:#888;font-size:13px;">${txt(oLang,"Twijfel je nog, of lukt betalen niet? Antwoord gewoon op deze mail.","Still deciding, or having trouble paying? Just reply to this email.","¿Aún lo dudas o no consigues pagar? Responde a este correo.")}</p></div>`);}
 else{
 await send(plainText(b.owner_email),plainText(txt(oLang,"Je proefperiode van Vellu is afgelopen","Your Vellu trial has ended","Tu prueba de Vellu ha terminado")),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Je proefperiode is afgelopen","Your trial has ended","Tu prueba ha terminado")}</h2><p style="color:#666;margin-bottom:8px;">${txt(oLang,`Je proefperiode van <strong>${esc(planName)}</strong> eindigde op <strong>${esc(eindigtOp)}</strong>. Je boekingspagina blijft online en klanten kunnen gewoon blijven boeken, maar je dashboard (agenda, klanten, facturen) staat op pauze tot je een plan kiest.`,`Your trial of <strong>${esc(planName)}</strong> ended on <strong>${esc(eindigtOp)}</strong>. Your booking page stays online and clients can keep booking, but your dashboard (agenda, clients, invoices) is paused until you choose a plan.`,`Tu prueba de <strong>${esc(planName)}</strong> terminó el <strong>${esc(eindigtOp)}</strong>. Tu página de reservas sigue en línea y los clientes pueden seguir reservando, pero tu panel (agenda, clientes, facturas) está en pausa hasta que elijas un plan.`)}</p><p style="color:#666;margin-bottom:28px;">${txt(oLang,"Alles blijft bewaard: kies een plan en je gaat verder waar je gebleven was. ","Everything is kept: choose a plan and pick up where you left off. ","Todo se conserva: elige un plan y continúa donde lo dejaste. ")}${prijzen}</p>${knop}<p style="color:#888;font-size:13px;">${txt(oLang,"Lukt betalen niet, bijvoorbeeld omdat je bank online betalen weigert? Antwoord op deze mail, dan helpen we je verder.","Trouble paying, for example because your bank refuses online payments? Reply to this email and we will help you.","¿No consigues pagar, por ejemplo porque tu banco rechaza pagos en línea? Responde a este correo y te ayudamos.")}</p></div>`);}}
+// Automatisch betalen na de proef (sinds 10-10-2026). De salon legt tijdens de
+// proef alleen haar betaalgegevens vast (creditcard EUR 0,00, iDEAL EUR 0,01);
+// de eerste afschrijving is pas na het einde van de proef (de eerste Amsterdamse
+// dag die na het einde begint, zie mollie-webhook). Alleen van de server:
+// trial_autopay_on door mollie-webhook zodra de machtiging rond is (geldt ook als
+// SEPA-vooraankondiging: datum en bedrag staan erin), _ending (3 dagen vooraf)
+// en _today (op de dag van de afschrijving) door send-renewal-reminder.
+if(type==="trial_autopay_on"||type==="trial_autopay_ending"||type==="trial_autopay_today"){
+// Uiterste moment om automatisch betalen na de proef uit te zetten (sinds
+// 10-10-2026): het begin van de eerste afschrijvingsdag in Amsterdam, zoals
+// cancel-subscription het hanteert. Getoond op de klok van de salon: in
+// Nederland is dat gewoon "vóór <datum>", op Bonaire/Curaçao/Aruba/Sint Maarten
+// is het 18:00 of 19:00 de avond ervoor, in Engeland 23:00. Alleen "vóór
+// <afschrijvingsdatum>" schrijven liet een Caribische salon na 18:00 nog op de
+// knop drukken en dan toch betalen.
+const offByTxt=(iso,cc,l)=>{const d=new Date(String(iso||""));if(isNaN(d.getTime()))return "";let hm="";try{hm=new Intl.DateTimeFormat("en-GB",{timeZone:tzFor(cc),hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(d);}catch{hm="";}const dt=fmtD(localYmd(d.toISOString(),cc),l);if(!hm||hm==="00:00")return txt(l,`vóór ${dt}`,`before ${dt}`,`antes del ${dt}`);return txt(l,`vóór ${dt} om ${hm}`,`before ${hm} on ${dt}`,`antes de las ${hm} del ${dt}`);};
+const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
+const eindigtOp=esc(b.trial_ends_at?fmtD(localYmd(b.trial_ends_at,b.country_code),oLang):"");
+// Kale datum: localYmd laat hem zoals hij is (Amsterdamse dag = Mollies dag).
+const chargeOp=esc(b.first_charge_date?fmtD(String(b.first_charge_date).slice(0,10),oLang):"");
+const bedrag=esc(fP(b.first_charge_amount));
+const nu=esc(fP(b.amount_now||0));
+const credit=parseInt(String(b.credit_days||0),10)||0;
+const dagen=parseInt(String(b.days_left??""))||0;
+// Uiterste uitzetmoment op de klok van de salon (offByTxt). Oude aanroepers
+// zonder autopay_off_deadline: terugval op "vóór <afschrijvingsdatum>".
+const offIso=b.autopay_off_deadline||"";
+const offBy=offIso?esc(offByTxt(offIso,b.country_code,oLang)):txt(oLang,`vóór ${chargeOp}`,`before ${chargeOp}`,`antes del ${chargeOp}`);
+const offVoorbij=offIso?new Date(String(offIso)).getTime()<=Date.now():false;
+const pS=`style="color:#666;margin-bottom:12px;"`;
+const pL=`style="color:#666;margin-bottom:28px;"`;
+const h2=(t)=>`<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${t}</h2>`;
+const knop=(t)=>`<p style="text-align:center;margin-bottom:28px;"><a href="https://vellu.cc/owner?tab=billing" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;">${t}</a></p>`;
+const voet=`<p style="color:#888;font-size:13px;">${txt(oLang,"Vragen? Antwoord gewoon op deze mail.","Questions? Just reply to this email.","¿Preguntas? Responde a este correo.")}</p></div>`;
+const creditZin=credit>0?`<p ${pS}>${txt(oLang,`Je tegoed van ${credit} dagen komt bij je eerste betaalde maand: je volgende afschrijving schuift zoveel dagen op.`,`Your credit of ${credit} days is added to your first paid month: your next charge moves that many days later.`,`Tu crédito de ${credit} días se suma a tu primer mes de pago: tu siguiente cobro se retrasa esos días.`)}</p>`:"";
+const knopBeheer=knop(txt(oLang,"Naar je abonnement","Go to your subscription","Ir a tu suscripción"));
+if(type==="trial_autopay_on"){
+const subj=txt(oLang,"Automatisch betalen staat aan","Automatic payment is on","El pago automático está activado");
+const p1=(parseFloat(b.amount_now)||0)>0
+?txt(oLang,`Je betaalgegevens zijn vastgelegd. Er is nu alleen ${nu} afgeschreven om je rekening te bevestigen.`,`Your payment details are saved. Only ${nu} was charged to confirm your account.`,`Tus datos de pago están guardados. Solo se cobró ${nu} para confirmar tu cuenta.`)
+:txt(oLang,"Je betaalgegevens zijn vastgelegd. Er is nu niets afgeschreven.","Your payment details are saved. Nothing has been charged.","Tus datos de pago están guardados. No se ha cobrado nada.");
+const p2=txt(oLang,`Je proefperiode van <strong>${esc(planName)}</strong> loopt gewoon door tot <strong>${eindigtOp}</strong>. Op <strong>${chargeOp}</strong> schrijven we <strong>${bedrag}</strong> af, daarna elke maand hetzelfde bedrag.`,`Your trial of <strong>${esc(planName)}</strong> simply continues until <strong>${eindigtOp}</strong>. On <strong>${chargeOp}</strong> we will charge <strong>${bedrag}</strong>, then the same amount every month.`,`Tu prueba de <strong>${esc(planName)}</strong> sigue hasta el <strong>${eindigtOp}</strong>. El <strong>${chargeOp}</strong> cobraremos <strong>${bedrag}</strong> y después el mismo importe cada mes.`);
+// Werd het pas aangezet toen de afschrijvingsdag al begonnen was (de proef was
+// net voorbij), dan kan uitzetten niet meer (cancel-subscription weigert): geen
+// belofte doen die de knop niet waarmaakt.
+const p4=offVoorbij
+?txt(oLang,"Omdat je proef al is afgelopen, start de eerste afschrijving meteen en kan automatisch betalen niet meer uit. Zodra de betaling binnen is, kun je opzeggen; je houdt dan toegang tot het einde van de betaalde maand.","Because your trial has already ended, the first charge starts right away and automatic payment can no longer be turned off. Once the payment is in, you can cancel; you keep access until the end of the paid month.","Como tu prueba ya terminó, el primer cobro empieza enseguida y el pago automático ya no se puede desactivar. Cuando llegue el pago, puedes cancelar; mantienes el acceso hasta el final del mes pagado.")
+:txt(oLang,`Bedenk je je? Zet automatisch betalen uit ${offBy} onder Instellingen, Abonnement & account. Dan wordt er niets afgeschreven en loopt je proef gewoon af.`,`Changed your mind? Turn off automatic payment ${offBy} under Settings, Subscription & account. Nothing will be charged and your trial simply ends.`,`¿Cambias de idea? Desactiva el pago automático ${offBy} en Ajustes, Suscripción y cuenta. No se cobrará nada y tu prueba terminará sin más.`);
+await send(plainText(b.owner_email),plainText(subj),`${W}${lH(b)}${h2(subj)}<p ${pS}>${p1}</p><p ${pS}>${p2}</p>${creditZin}<p ${pL}>${p4}</p>${knopBeheer}${voet}`);}
+else if(type==="trial_autopay_ending"){
+// days_left = kalenderdagen tot de einddatum van de proef op de klok van de
+// salon (send-renewal-reminder), dus "vandaag"/"morgen" klopt met de datum in de mail.
+const subj=dagen<=0
+?txt(oLang,"Je proefperiode eindigt vandaag: automatisch betalen staat aan","Your trial ends today: automatic payment is on","Tu prueba termina hoy: el pago automático está activado")
+:dagen===1
+?txt(oLang,"Je proefperiode eindigt morgen: automatisch betalen staat aan","Your trial ends tomorrow: automatic payment is on","Tu prueba termina mañana: el pago automático está activado")
+:txt(oLang,`Je proefperiode eindigt over ${dagen} dagen: automatisch betalen staat aan`,`Your trial ends in ${dagen} days: automatic payment is on`,`Tu prueba termina en ${dagen} días: el pago automático está activado`);
+const p1=txt(oLang,`Je gratis proefperiode van <strong>${esc(planName)}</strong> eindigt op <strong>${eindigtOp}</strong>. Omdat automatisch betalen aanstaat, loopt alles daarna gewoon door: op <strong>${chargeOp}</strong> schrijven we <strong>${bedrag}</strong> af, daarna elke maand. Je hoeft niets te doen.`,`Your free trial of <strong>${esc(planName)}</strong> ends on <strong>${eindigtOp}</strong>. Because automatic payment is on, everything simply continues: on <strong>${chargeOp}</strong> we will charge <strong>${bedrag}</strong>, then every month. You don't need to do anything.`,`Tu prueba gratuita de <strong>${esc(planName)}</strong> termina el <strong>${eindigtOp}</strong>. Como el pago automático está activado, todo sigue igual: el <strong>${chargeOp}</strong> cobraremos <strong>${bedrag}</strong> y después cada mes. No tienes que hacer nada.`);
+const p3=txt(oLang,`Wil je dit niet? Zet automatisch betalen uit ${offBy}. Dan wordt er niets afgeschreven en loopt je proef op ${eindigtOp} gewoon af.`,`Don't want this? Turn off automatic payment ${offBy}. Nothing will be charged and your trial simply ends on ${eindigtOp}.`,`¿No lo quieres? Desactiva el pago automático ${offBy}. No se cobrará nada y tu prueba terminará el ${eindigtOp}.`);
+await send(plainText(b.owner_email),plainText(subj),`${W}${lH(b)}${h2(txt(oLang,"Je proefperiode eindigt bijna","Your trial is almost over","Tu prueba está por terminar"))}<p ${pS}>${p1}</p>${creditZin}<p ${pL}>${p3}</p>${knop(txt(oLang,"Automatisch betalen beheren","Manage automatic payment","Gestionar el pago automático"))}${voet}`);}
+else{
+const subj=txt(oLang,"Je Vellu-abonnement gaat vandaag in","Your Vellu subscription starts today","Tu suscripción de Vellu empieza hoy");
+// De afschrijvingsdag begint pas na het einde van de proef, dus "is afgelopen".
+const p1=txt(oLang,`Je proefperiode van <strong>${esc(planName)}</strong> is afgelopen en automatisch betalen staat aan. Vandaag schrijven we <strong>${bedrag}</strong> af, daarna elke maand.`,`Your trial of <strong>${esc(planName)}</strong> has ended and automatic payment is on. Today we charge <strong>${bedrag}</strong>, then every month.`,`Tu prueba de <strong>${esc(planName)}</strong> ha terminado y el pago automático está activado. Hoy cobramos <strong>${bedrag}</strong> y después cada mes.`);
+const p2=txt(oLang,"Betaal je via je bankrekening, dan kan het een paar werkdagen duren voor de afschrijving zichtbaar is. Je dashboard blijft gewoon open. Je factuur krijg je per mail zodra de betaling binnen is.","If you pay from your bank account, it can take a few working days before the charge shows. Your dashboard stays open. You will get your invoice by email once the payment is in.","Si pagas desde tu cuenta bancaria, el cargo puede tardar unos días hábiles en aparecer. Tu panel sigue abierto. Recibirás tu factura por correo cuando llegue el pago.");
+await send(plainText(b.owner_email),plainText(subj),`${W}${lH(b)}${h2(txt(oLang,"Je abonnement gaat vandaag in","Your subscription starts today","Tu suscripción empieza hoy"))}<p ${pS}>${p1}</p><p ${pL}>${p2}</p>${knopBeheer}${voet}`);}}
 if(type==="payment_failed"){
 const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
 const intervalLabel=b.billing_interval==="yearly"?txt(oLang,"jaarlijks","yearly","anual"):txt(oLang,"maandelijks","monthly","mensual");
 const bedrag=b.amount?`€ ${fN(b.amount)}`:"";
 const rc=String(b.reason_code||"");
-// Per code: wat er aan de hand is, en wat de salon eraan kan doen.
+// Eerste afschrijving na de proef (automatisch betalen, sinds 10-10-2026)
+// mislukt: mollie-webhook heeft automatisch betalen uitgezet en de salon op
+// past_due gezet. Andere kop, uitleg dat het uit staat, en de knop naar het
+// plan-scherm. Onderwerp en "niets afgeschreven" blijven gelijk.
+const naProef=b.after_trial===true;
+// Per code: wat er aan de hand is, en wat de salon eraan kan doen. Na de proef
+// is het al een maandbedrag, dus daar geen "probeer het maandabonnement".
 const redenen={
   card_declined:[txt(oLang,"Je bank heeft de betaling geweigerd.","Your bank declined the payment.","Tu banco rechazó el pago."),
-                 txt(oLang,"Dat gebeurt vaak bij een limiet voor online of buitenlandse betalingen. Bel je bank, of probeer het maandabonnement — dat is een veel kleiner bedrag.","This often happens with a limit on online or foreign payments. Call your bank, or try the monthly plan — that is a much smaller amount.","Suele ocurrir por un límite en pagos en línea o extranjeros. Llama a tu banco o prueba el plan mensual, que es un importe mucho menor.")],
+                 naProef
+                 ?txt(oLang,"Dat gebeurt vaak bij een limiet voor online of buitenlandse betalingen. Bel je bank, of betaal met een andere kaart.","This often happens with a limit on online or foreign payments. Call your bank, or pay with a different card.","Suele ocurrir por un límite en pagos en línea o extranjeros. Llama a tu banco o paga con otra tarjeta.")
+                 :txt(oLang,"Dat gebeurt vaak bij een limiet voor online of buitenlandse betalingen. Bel je bank, of probeer het maandabonnement — dat is een veel kleiner bedrag.","This often happens with a limit on online or foreign payments. Call your bank, or try the monthly plan — that is a much smaller amount.","Suele ocurrir por un límite en pagos en línea o extranjeros. Llama a tu banco o prueba el plan mensual, que es un importe mucho menor.")],
   insufficient_funds:[txt(oLang,"Er stond niet genoeg saldo op de rekening.","There were insufficient funds.","No había saldo suficiente."),
-                 txt(oLang,"Probeer het opnieuw zodra het saldo toereikend is, of kies het maandabonnement.","Try again once there are sufficient funds, or choose the monthly plan.","Inténtalo de nuevo cuando haya saldo, o elige el plan mensual.")],
+                 naProef
+                 ?txt(oLang,"Zorg voor voldoende saldo of gebruik een andere kaart, en kies daarna opnieuw je plan.","Make sure there are sufficient funds or use a different card, then choose your plan again.","Asegúrate de tener saldo suficiente o usa otra tarjeta, y luego elige tu plan de nuevo.")
+                 :txt(oLang,"Probeer het opnieuw zodra het saldo toereikend is, of kies het maandabonnement.","Try again once there are sufficient funds, or choose the monthly plan.","Inténtalo de nuevo cuando haya saldo, o elige el plan mensual.")],
   expired_card:[txt(oLang,"De kaart is verlopen.","The card has expired.","La tarjeta ha caducado."),
                  txt(oLang,"Probeer het opnieuw met een geldige kaart.","Try again with a valid card.","Inténtalo de nuevo con una tarjeta válida.")],
   invalid_cvv:[txt(oLang,"De beveiligingscode klopte niet.","The security code was incorrect.","El código de seguridad no era correcto."),
@@ -657,17 +739,20 @@ const tEnd=b.trial_ends_at?new Date(String(b.trial_ends_at)).getTime():NaN;
 const trialDate=Number.isFinite(tEnd)&&tEnd>Date.now()?esc(fmtD(localYmd(b.trial_ends_at,b.country_code),oLang)):"";
 await send(plainText(b.owner_email),
 plainText(txt(oLang,"Je betaling is niet gelukt — er is niets afgeschreven","Your payment did not go through — nothing was charged","Tu pago no se completó — no se cobró nada")),
-`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"De betaling is niet gelukt","The payment did not go through","El pago no se completó")}</h2>
+`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${naProef?txt(oLang,"De eerste afschrijving na je proef is niet gelukt","The first charge after your trial did not go through","El primer cobro después de tu prueba no se completó"):txt(oLang,"De betaling is niet gelukt","The payment did not go through","El pago no se completó")}</h2>
 <p style="color:#666;margin-bottom:8px;"><strong>${txt(oLang,"Er is niets van je rekening afgeschreven.","Nothing was charged to your account.","No se cobró nada de tu cuenta.")}</strong></p>
 <p style="color:#666;margin-bottom:28px;">${esc(watErIs)} ${esc(watTeDoen)}</p>
+${naProef?`<p style="color:#666;margin-bottom:28px;">${trialDate
+?txt(oLang,`Automatisch betalen staat daarom uit. Je dashboard blijft open tot het einde van je proef op <strong>${trialDate}</strong>; kies daarna een plan en betaal om verder te gaan. Je boekingspagina blijft gewoon werken en je gegevens blijven bewaard.`,`Automatic payment has therefore been turned off. Your dashboard stays open until your trial ends on <strong>${trialDate}</strong>; after that, choose a plan and pay to continue. Your booking page keeps working and your data is kept.`,`Por eso el pago automático está desactivado. Tu panel sigue abierto hasta que termine tu prueba el <strong>${trialDate}</strong>; después elige un plan y paga para continuar. Tu página de reservas sigue funcionando y tus datos se conservan.`)
+:txt(oLang,"Automatisch betalen staat daarom uit. Kies een plan en betaal om je dashboard weer te openen; je boekingspagina blijft gewoon werken en je gegevens blijven bewaard.","Automatic payment has therefore been turned off. Choose a plan and pay to reopen your dashboard; your booking page keeps working and your data is kept.","Por eso el pago automático está desactivado. Elige un plan y paga para reabrir tu panel; tu página de reservas sigue funcionando y tus datos se conservan.")}</p>`:""}
 <div style="background:#faf8f5;border-radius:8px;padding:16px 20px;margin-bottom:28px;">
 <table style="width:100%;border-collapse:collapse;font-size:14px;">
 <tr><td style="padding:6px 0;color:#888;">${txt(oLang,"Abonnement","Plan","Plan")}</td><td style="padding:6px 0;text-align:right;">${esc(planName)} (${esc(intervalLabel)})</td></tr>
 ${bedrag?`<tr><td style="padding:6px 0;color:#888;">${txt(oLang,"Bedrag","Amount","Importe")}</td><td style="padding:6px 0;text-align:right;">${esc(bedrag)}</td></tr>`:""}
 ${eB?`<tr><td style="padding:6px 0;color:#888;">${txt(oLang,"Salon","Salon","Salón")}</td><td style="padding:6px 0;text-align:right;">${eB}</td></tr>`:""}
 </table></div>
-${trialDate?`<p style="color:#666;margin-bottom:28px;">${txt(oLang,`Je proefperiode loopt nog tot <strong>${trialDate}</strong>, dus je kunt Vellu gewoon blijven gebruiken terwijl je dit regelt.`,`Your trial still runs until <strong>${trialDate}</strong>, so you can keep using Vellu while you sort this out.`,`Tu periodo de prueba dura hasta el <strong>${trialDate}</strong>, así que puedes seguir usando Vellu mientras lo resuelves.`)}</p>`:""}
-<p style="text-align:center;margin-bottom:28px;"><a href="https://vellu.cc/owner?tab=settings" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;">${txt(oLang,"Opnieuw proberen","Try again","Intentar de nuevo")}</a></p>
+${trialDate&&!naProef?`<p style="color:#666;margin-bottom:28px;">${txt(oLang,`Je proefperiode loopt nog tot <strong>${trialDate}</strong>, dus je kunt Vellu gewoon blijven gebruiken terwijl je dit regelt.`,`Your trial still runs until <strong>${trialDate}</strong>, so you can keep using Vellu while you sort this out.`,`Tu periodo de prueba dura hasta el <strong>${trialDate}</strong>, así que puedes seguir usando Vellu mientras lo resuelves.`)}</p>`:""}
+<p style="text-align:center;margin-bottom:28px;"><a href="https://vellu.cc/owner?tab=settings" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;">${naProef?txt(oLang,"Plan kiezen","Choose a plan","Elegir un plan"):txt(oLang,"Opnieuw proberen","Try again","Intentar de nuevo")}</a></p>
 <p style="color:#888;font-size:13px;">${txt(oLang,"Kom je er niet uit? Antwoord gewoon op deze mail, dan kijken we mee.","Stuck? Just reply to this email and we will help.","¿No lo consigues? Responde a este correo y te ayudamos.")}</p></div>`);}
 if(type==="subscription_invoice"){
 const billerName="Mirah Ventures";const billerKvk="42045867";const billerCity="Amersfoort";const billerEmail="info@vellu.cc";

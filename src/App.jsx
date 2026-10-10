@@ -5,6 +5,7 @@ import {
   ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, parseDate, Layout, curSym, fmtAmt,
   AT, AT_COLORS, AT_RADIUS, AtelierSkin, salonNow, ToastContainer
 } from "./shared.jsx";
+import { planIsActive } from "./autopay.js";
 
 // ─── LAZY ROUTE CHUNKS ────────────────────────────────────────
 // Op deze branch (landing-atelier) draait de "Atelier"-richting: ivoor
@@ -29,29 +30,9 @@ const GoogleIntegrationPage = lazy(() => import("./LegalPages.jsx").then(m => ({
 const RateVelluPage = lazy(() => import("./RateVellu.jsx"));
 
 // ─── PLAN-TOEGANG ─────────────────────────────────────────────
-// Mag deze eigenaar de app in? Normaal: een plan én plan_expires_at in de
-// toekomst (een datum zonder tijd geldt tot het EINDE van die dag).
-//
-// Verlengingscoulance (sinds 2026-08-22): voor een LOPEND betaald abonnement
-// (subscription_status 'active' + Mollie-abonnement) geldt 3 dagen speling ná
-// plan_expires_at. Mollie incasseert de verlenging op zijn eigen moment en pas
-// de webhook (recurring.paid) schuift plan_expires_at op; komt die webhook te
-// laat of even niet aan, dan stond een betalende salon tot nu toe op de minuut
-// voor een dichte deur. Mislukt de incasso écht, dan zet de webhook
-// subscription_status op 'past_due' en vervalt de coulance direct. Proefaccounts
-// en jaarklanten-zonder-abonnement (eenmalige betaling) hebben geen
-// mollie_subscription_id en krijgen hem dus nooit.
-const RENEWAL_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
-function planIsActive(owner) {
-  if (!owner?.plan) return false;
-  const raw = owner.plan_expires_at;
-  if (!raw) return true;
-  const exp = new Date(typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw + "T23:59:59" : raw);
-  const now = new Date();
-  if (exp > now) return true;
-  const renewing = owner.subscription_status === "active" && !!owner.mollie_subscription_id;
-  return renewing && (now - exp) < RENEWAL_GRACE_MS;
-}
+// planIsActive (incl. verlengingscoulance en de speling voor automatisch
+// betalen na de proef) staat sinds 10-10-2026 in src/autopay.js: daar is hij
+// zonder JSX met node te testen, en de proefregels staan op één plek.
 
 // Poortje vóór het "Kies een plan"-scherm. Het founder/beheerdersaccount heeft
 // GEEN salonprofiel (het ís geen salon) en viel op /owner daardoor door alle

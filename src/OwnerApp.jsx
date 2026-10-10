@@ -25,6 +25,7 @@ import {
   RESERVED_SLUGS, salonNow, tzFor, localToUtc,
 } from "./shared.jsx";
 import Kasboek from "./Kasboek.jsx";
+import { AUTOPAY_MONTHLY, autopayChargeYmd, autopayChargeDayReached, autopayOffDeadline, autopayPhase } from "./autopay.js";
 import { paymentsAsCashRows } from "./reportData.js";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -2563,6 +2564,12 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
     mollie_payment_failed: lang === "nl" ? "De betaalpagina kon niet worden geopend. Probeer het over een paar minuten opnieuw." : lang === "es" ? "No se pudo abrir la página de pago. Inténtalo de nuevo en unos minutos." : "The payment page could not be opened. Please try again in a few minutes.",
     no_auth: lang === "nl" ? "Je sessie is verlopen. Log opnieuw in." : lang === "es" ? "Tu sesión ha caducado. Inicia sesión de nuevo." : "Your session has expired. Please sign in again.",
     invalid_auth: lang === "nl" ? "Je sessie is verlopen. Log opnieuw in." : lang === "es" ? "Tu sesión ha caducado. Inicia sesión de nuevo." : "Your session has expired. Please sign in again.",
+    // Sinds 10-10-2026 rekent create-subscription tijdens een lopende proef
+    // niet meer meteen af; dan alleen automatisch betalen (Abonnement-tab).
+    // Proef voorbij terwijl de eerste automatische afschrijving nog loopt (SEPA
+    // duurt dagen): een volledige betaling erbij zou dubbel afschrijven.
+    autopay_charging: lang === "nl" ? "Je eerste automatische afschrijving wordt nog verwerkt; via je bankrekening kan dat een paar werkdagen duren. Je hoeft niets te doen: zodra hij binnen is, gaat je dashboard vanzelf weer open." : lang === "es" ? "Tu primer cobro automático aún se está procesando; desde tu cuenta bancaria puede tardar unos días hábiles. No tienes que hacer nada: cuando llegue, tu panel se abre solo." : "Your first automatic charge is still being processed; from a bank account this can take a few working days. You don't need to do anything: once it is in, your dashboard reopens by itself.",
+    trial_use_autopay: lang === "nl" ? "Je proef loopt nog. Wil je zonder onderbreking doorgaan? Zet automatisch betalen aan onder Instellingen, Abonnement & account; er wordt dan pas na het einde van je proef afgeschreven." : lang === "es" ? "Tu prueba sigue activa. ¿Quieres seguir sin interrupción? Activa el pago automático en Ajustes, Suscripción y cuenta; solo se cobra después de que termine tu prueba." : "Your trial is still running. Want to continue without interruption? Turn on automatic payment under Settings, Subscription & account; you are only charged after your trial ends.",
   }[code] || fallback || t.somethingWrong);
 
   const handleStartTrial = async (planId) => {
@@ -5238,6 +5245,12 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
 // grensdag die toevallig tóch al in het geheugen zat — nooit een ontbrekende dag.
 const loadedWindowFrom = () => new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
+// Kolommen voor de abonnementskaart (Instellingen, Abonnement & account).
+// Eén lijst voor elke plek die hem ophaalt: referral_credit_days kwam er op
+// 10-10-2026 bij (tegoedzin bij automatisch betalen) en ontbrak anders na een
+// verversing.
+const BILLING_COLS = "plan, billing_interval, subscription_status, trial_ends_at, plan_expires_at, current_period_start, cancel_at_period_end, mollie_subscription_id, referral_credit_days";
+
 // ─── OWNER DASHBOARD ─────────────────────────────────────────
 function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate }) {
   const { colors: themeC, theme } = useTheme();
@@ -5795,6 +5808,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [cancelBusy, setCancelBusy] = useState(false);
   const [upgradeConfirm, setUpgradeConfirm] = useState(false);
   const [changingPlan, setChangingPlan] = useState(false);
+  // Automatisch betalen na de proef (10-10-2026): methodekiezer, bezig-vlaggen
+  // en de melding na terugkeer van Mollie (?autopay=return).
+  const [autopayChooser, setAutopayChooser] = useState(false);
+  const [autopayMethod, setAutopayMethod] = useState("creditcard");
+  const [autopayBusy, setAutopayBusy] = useState(false);
+  const [autopayOffBusy, setAutopayOffBusy] = useState(false);
+  const [trialPlanBusy, setTrialPlanBusy] = useState(false);
+  const [autopayReturn, setAutopayReturn] = useState(null); // null | "checking" | "on" | "failed" | "processing" | "slow"
   const [staffInvite, setStaffInvite] = useState({}); // { [staffId]: { email, password } }
   const [tempColor, setTempColor] = useState(null); // local color for smooth picker
   const colorDebounceRef = useRef(null);
@@ -6695,7 +6716,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           .limit(50),
         supabase
           .from("profiles")
-          .select("plan, billing_interval, subscription_status, trial_ends_at, plan_expires_at, current_period_start, cancel_at_period_end, mollie_subscription_id")
+          .select(BILLING_COLS)
           .eq("id", user.id)
           .maybeSingle(),
       ]);
@@ -6706,6 +6727,90 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     })();
     return () => { cancelled = true; };
   }, [settingsTab, user.id]);
+
+  // Verse abonnementsstand ophalen na een actie rond automatisch betalen.
+  // Ook salonData bijwerken: de proefbanner op het dashboard en de Pro-
+  // functies lezen daar plan en mollie_subscription_id van, en die bleven
+  // anders op de stand van het inloggen staan.
+  const refreshBillingProfile = async () => {
+    const { data: prof, error } = await supabase.from("profiles").select(BILLING_COLS).eq("id", user.id).maybeSingle();
+    if (error) return null;
+    setBillingProfile(prof || null);
+    if (prof) update(d => { d.mollie_subscription_id = prof.mollie_subscription_id || null; d.plan = prof.plan; return d; });
+    return prof || null;
+  };
+  // Dezelfde vraag als PlanSelection stelt: hoe staat de laatste Mollie-
+  // betaling (hier de machtigingsbetaling van €0,00 / €0,01)? null = onbekend.
+  const lastAutopayPaymentStatus = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("create-subscription", { body: { action: "last_payment_status" } });
+      if (error) return null;
+      return data?.status || null;
+    } catch { return null; }
+  };
+
+  // Terug van Mollie na "automatisch betalen aanzetten":
+  // /owner?tab=billing&autopay=return. Het tab-effect hierboven opent
+  // Abonnement en haalt alleen ?tab weg; dit haalt ?autopay weg en wacht op
+  // de webhook. Die zet mollie_subscription_id pas als de machtiging binnen
+  // is, dus eerst even pollen in plaats van meteen weer de aanzetknop te
+  // tonen (dan start ze een tweede checkout terwijl de eerste nog loopt).
+  // De parameter één keer bij het laden lezen (state, geen effect): in
+  // StrictMode draait een effect twee keer, en de tweede ronde zag de al
+  // weggehaalde parameter niet meer, waardoor "We controleren…" bleef staan.
+  const [autopayReturnOnLoad] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get("autopay") === "return"; } catch { return false; }
+  });
+  useEffect(() => {
+    if (!autopayReturnOnLoad) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("autopay")) {
+        params.delete("autopay");
+        const rest = params.toString();
+        window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
+      }
+    } catch { /* geen history-API: de parameter blijft staan, niet erg */ }
+    let cancelled = false;
+    setAutopayReturn("checking");
+    (async () => {
+      const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+      const FAILED = ["failed", "canceled", "expired"];
+      // ~20 s op de webhook wachten; na ~6 s al bij Mollie navragen, zodat
+      // een afgebroken checkout niet de hele wachttijd kost.
+      for (let i = 0; i < 10; i++) {
+        if (cancelled) return;
+        const prof = await refreshBillingProfile();
+        if (cancelled) return;
+        if (prof?.mollie_subscription_id) { setAutopayReturn("on"); return; }
+        if (i === 2) {
+          const st = await lastAutopayPaymentStatus();
+          if (cancelled) return;
+          if (FAILED.includes(st)) { setAutopayReturn("failed"); return; }
+        }
+        await sleep(2000);
+      }
+      if (cancelled) return;
+      const st = await lastAutopayPaymentStatus();
+      if (cancelled) return;
+      if (FAILED.includes(st)) { setAutopayReturn("failed"); return; }
+      if (!["paid", "authorized", "open", "pending"].includes(st)) { setAutopayReturn("slow"); return; }
+      // Betaald (of nog bezig) maar de webhook is er nog niet: rustig
+      // doorkijken, zodat de melding vanzelf omslaat zodra hij binnen is.
+      setAutopayReturn("processing");
+      for (let j = 0; j < 20; j++) {
+        await sleep(3000);
+        if (cancelled) return;
+        const prof = await refreshBillingProfile();
+        if (cancelled) return;
+        if (prof?.mollie_subscription_id) { setAutopayReturn("on"); return; }
+      }
+      if (!cancelled) setAutopayReturn("slow");
+    })();
+    return () => { cancelled = true; };
+    // Alleen bij het openen van de pagina: de parameter staat er maar één keer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autopayReturnOnLoad]);
 
   // Live availability check — debounced 450ms after last keystroke.
   useEffect(() => {
@@ -6864,6 +6969,158 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       toast.show(t.somethingWrong, "error");
     } finally {
       setChangingPlan(false);
+    }
+  };
+
+  // Foutcode uit een edge function. Bij een niet-2xx-antwoord geeft supabase-js
+  // alleen `error` met de Response erin; de code zit dan in de body.
+  const fnErrorCode = async (data, error) => {
+    const body = data?.error ? data : (error?.context?.json ? await error.context.json().catch(() => null) : null);
+    return body?.error || null;
+  };
+
+  // Wisselen tussen Starter en Professional tijdens de proef MET automatisch
+  // betalen. Er staat dan al een Mollie-abonnement klaar met het oude bedrag;
+  // change-plan past dat bedrag aan (geen pro-rata, er is nog niets betaald).
+  // Een directe profiles-update kan hier niet: de guard-trigger blokkeert
+  // plan-wijzigingen zodra mollie_subscription_id gezet is, en dan zou Mollie
+  // straks het verkeerde bedrag afschrijven. Bewust niet handleChangePlan:
+  // die meldingen gaan over pro-rata en de volgende verlenging.
+  const handleTrialAutopayPlan = async (newPlan, chargeTxt) => {
+    if (trialPlanBusy) return;
+    const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+    const planName = newPlan === "professional" ? t.planProfessional : t.planStarter;
+    const newPrice = fmtAmt("€", AUTOPAY_MONTHLY[newPlan]);
+    const ok = await showConfirm(
+      L(`Je proef wordt ${planName}. De eerste afschrijving op ${chargeTxt} wordt dan ${newPrice}.`,
+        `Your trial becomes ${planName}. The first charge on ${chargeTxt} will then be ${newPrice}.`,
+        `Tu prueba pasa a ${planName}. El primer cobro del ${chargeTxt} será entonces ${newPrice}.`),
+      { tone: "primary", confirmText: L("Wisselen", "Switch", "Cambiar") },
+    );
+    if (!ok) return;
+    setTrialPlanBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("change-plan", { body: { plan: newPlan, billing_interval: "monthly" } });
+      if (error || !data?.success) {
+        const code = await fnErrorCode(data, error);
+        console.error("change-plan (proef):", code || error?.message || "unknown");
+        if (code === "no_change") {
+          // Staat al op dit plan (bv. in een ander tabblad gewisseld): het
+          // scherm bijwerken, anders blijft de wisselknop staan.
+          await refreshBillingProfile();
+          toast.show(L("Je zit al op dit abonnement.", "You're already on this plan.", "Ya tienes este plan."));
+          return;
+        }
+        toast.show(
+          code === "first_charge_started" ? L("De eerste afschrijving is al gestart; wisselen kan zodra je abonnement loopt.", "The first charge has already started; you can switch once your subscription is running.", "El primer cobro ya ha empezado; podrás cambiar cuando tu suscripción esté activa.")
+          : code === "busy" ? L("Er loopt al een wijziging, probeer het zo opnieuw.", "A change is already in progress, please try again in a moment.", "Ya hay un cambio en curso, inténtalo de nuevo en un momento.")
+          : L("Wisselen mislukt, probeer het later opnieuw.", "Plan change failed, please try again later.", "No se pudo cambiar de plan, inténtalo más tarde."),
+          "error",
+        );
+        // De afschrijvingsdag is al begonnen: verversen, dan verdwijnen de
+        // wisselknoppen (fase "charging").
+        if (code === "first_charge_started") await refreshBillingProfile();
+        return;
+      }
+      await refreshBillingProfile();
+      toast.show(
+        L(`Gewisseld naar ${planName}. Op ${chargeTxt} schrijven we ${newPrice} af.`,
+          `Switched to ${planName}. On ${chargeTxt} we will charge ${newPrice}.`,
+          `Cambiado a ${planName}. El ${chargeTxt} cobraremos ${newPrice}.`),
+        "success",
+      );
+    } catch (e) {
+      console.error("change-plan (proef) error:", e);
+      toast.show(t.somethingWrong, "error");
+    } finally {
+      setTrialPlanBusy(false);
+    }
+  };
+
+  // Automatisch betalen aanzetten: alleen de machtiging vastleggen bij Mollie
+  // (creditcard €0,00, iDEAL €0,01). De eigenaar wil niet dat een salon betaalt
+  // op het moment dat ze tijdens de proef "ja" zegt; de eerste echte
+  // afschrijving is pas na het einde van de proef. Plan en bedrag bepaalt de
+  // server (uit het profiel), wij sturen alleen de methode.
+  const startTrialAutopay = async (method) => {
+    if (autopayBusy) return;
+    const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+    // Checkout navigeert hard weg uit de instellingen.
+    if (!(await confirmLeaveSettings(L("de betaalpagina", "the payment page", "la página de pago")))) return;
+    setAutopayBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-subscription", { body: { action: "trial_autopay", method } });
+      if (error || !data?.checkout_url) {
+        const code = await fnErrorCode(data, error);
+        console.error("create-subscription (trial_autopay):", code || error?.message || "unknown");
+        setAutopayBusy(false);
+        if (code === "autopay_already_on") {
+          // Al aan (bv. in een ander tabblad): gewoon de verse stand tonen.
+          setAutopayChooser(false);
+          await refreshBillingProfile();
+          return;
+        }
+        if (code === "trial_ended") {
+          toast.show(L("Je proef is al afgelopen. Kies een plan om verder te gaan.", "Your trial has already ended. Choose a plan to continue.", "Tu prueba ya terminó. Elige un plan para continuar."), "error");
+          setAutopayChooser(false);
+          await refreshBillingProfile();
+          return;
+        }
+        toast.show(L("De betaalpagina kon niet starten. Probeer het later opnieuw.", "Could not start the payment page. Please try again later.", "No se pudo abrir la página de pago. Inténtalo más tarde."), "error");
+        return;
+      }
+      // Bezig-vlag bewust laten staan: de pagina verlaat de app.
+      window.location.href = data.checkout_url;
+    } catch (e) {
+      console.error("create-subscription (trial_autopay) error:", e);
+      setAutopayBusy(false);
+      toast.show(t.somethingWrong, "error");
+    }
+  };
+
+  // Automatisch betalen uitzetten vóór de eerste afschrijving. De server
+  // verwijdert het Mollie-abonnement én de machtiging; de proef zelf loopt
+  // gewoon door tot de einddatum en daarna volgt de normale route.
+  const turnOffTrialAutopay = async (trialEndsTxt) => {
+    if (autopayOffBusy) return;
+    const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+    const ok = await showConfirm(
+      L(`Automatisch betalen uitzetten? Er wordt niets afgeschreven en je betaalgegevens worden verwijderd. Je proef loopt door tot ${trialEndsTxt}; daarna kies je zelf of je verder wilt.`,
+        `Turn off automatic payment? Nothing will be charged and your payment details are removed. Your trial continues until ${trialEndsTxt}; after that you decide whether to continue.`,
+        `¿Desactivar el pago automático? No se cobrará nada y se eliminarán tus datos de pago. Tu prueba sigue hasta el ${trialEndsTxt}; después decides si quieres continuar.`),
+      { tone: "primary", confirmText: L("Uitzetten", "Turn off", "Desactivar") },
+    );
+    if (!ok) return;
+    setAutopayOffBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("cancel-subscription", { body: { action: "trial_autopay_off" } });
+      if (error || !data?.success) {
+        const code = await fnErrorCode(data, error);
+        console.error("cancel-subscription (trial_autopay_off):", code || error?.message || "unknown");
+        if (code === "first_charge_started") {
+          toast.show(L("De eerste afschrijving is vandaag al gestart en kan niet meer worden tegengehouden. Zodra hij binnen is, kun je je abonnement opzeggen; je houdt dan toegang tot het einde van de betaalde maand.",
+            "The first charge already started today and can no longer be stopped. Once it is in, you can cancel your subscription; you keep access until the end of the paid month.",
+            "El primer cobro ya empezó hoy y no se puede detener. Cuando llegue, puedes cancelar tu suscripción; mantienes el acceso hasta el final del mes pagado."), "error");
+          await refreshBillingProfile();
+          return;
+        }
+        // Stond al uit (bv. in een ander tabblad): stil de verse stand tonen.
+        if (code === "autopay_not_on") { await refreshBillingProfile(); return; }
+        toast.show(t.somethingWrong, "error");
+        // Bijv. autopay_changed (net opnieuw aangezet in een ander tabblad):
+        // de verse stand tonen, zodat ze ziet wat er nu aanstaat.
+        await refreshBillingProfile();
+        return;
+      }
+      setAutopayReturn(null);
+      setAutopayChooser(false);
+      toast.show(L("Automatisch betalen staat uit. Er wordt niets afgeschreven.", "Automatic payment is off. Nothing will be charged.", "El pago automático está desactivado. No se cobrará nada."), "success");
+      await refreshBillingProfile();
+    } catch (e) {
+      console.error("cancel-subscription (trial_autopay_off) error:", e);
+      toast.show(t.somethingWrong, "error");
+    } finally {
+      setAutopayOffBusy(false);
     }
   };
 
@@ -12239,17 +12496,46 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const days = Math.round((parseDate(endDay) - parseDate(fmt(salonNow(salonData.country_code)))) / 86400000);
                 if (msLeft <= 0 || days > 5) return null;
                 const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
+                const title = days <= 0 ? L("Je proefperiode eindigt vandaag", "Your trial ends today", "Tu prueba termina hoy") : days === 1 ? L("Je proefperiode eindigt morgen", "Your trial ends tomorrow", "Tu prueba termina mañana") : L(`Je proefperiode eindigt over ${days} dagen`, `Your trial ends in ${days} days`, `Tu prueba termina en ${days} días`);
+                // Automatisch betalen staat aan (10-10-2026): geen waarschuwing
+                // maar een geruststelling, met de dag en het bedrag van de
+                // eerste afschrijving (zelfde regel als Mollie, src/autopay.js).
+                if (salonData.mollie_subscription_id) {
+                  const chargeYmd = autopayChargeYmd(salonData.trial_ends_at);
+                  const chargeTxt = parseDate(chargeYmd).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" });
+                  const price = fmtAmt("€", AUTOPAY_MONTHLY[salonData.plan] || AUTOPAY_MONTHLY.starter);
+                  // Is de afschrijvingsdag al begonnen, dan kan uitzetten niet
+                  // meer (cancel-subscription weigert, de kaart toont "charging"
+                  // zonder knop): dan ook hier niet meer beloven dat het kan.
+                  // De banner staat alleen tijdens de proef en die dag begint
+                  // pas na het einde, maar een klok die net verspringt mag geen
+                  // valse belofte geven.
+                  const charging = autopayChargeDayReached(salonData.trial_ends_at);
+                  const sub = charging
+                    ? L(`Automatisch betalen staat aan: de eerste afschrijving van ${price} is gestart. Je dashboard blijft gewoon open.`, `Automatic payment is on: the first charge of ${price} has started. Your dashboard stays open.`, `El pago automático está activado: el primer cobro de ${price} ha empezado. Tu panel sigue abierto.`)
+                    : L(`Automatisch betalen staat aan: op ${chargeTxt} schrijven we ${price} af. Uitzetten kan bij Abonnement.`, `Automatic payment is on: on ${chargeTxt} we will charge ${price}. You can turn it off under Subscription.`, `El pago automático está activado: el ${chargeTxt} cobraremos ${price}. Puedes desactivarlo en Suscripción.`);
+                  return (
+                    <div data-trial-banner="autopay" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: `${c.success}12`, border: `1px solid ${c.success}44`, borderRadius: 14, marginBottom: 14, flexWrap: "wrap" }}>
+                      <NavIcon name="check" size={14} color={c.success} />
+                      <div style={{ flex: 1, minWidth: 180 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: c.success }}>{title}</div>
+                        <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, lineHeight: 1.45 }}>{sub}</div>
+                      </div>
+                      <button className="btn-ghost" style={{ fontSize: 11, padding: "9px 14px" }} onClick={() => goUpgrade()}>{L("Bekijken", "View", "Ver")}</button>
+                    </div>
+                  );
+                }
                 return (
                   <div data-trial-banner="1" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: `${c.warning}12`, border: `1px solid ${c.warning}44`, borderRadius: 14, marginBottom: 14, flexWrap: "wrap" }}>
                     <NavIcon name="alerttri" size={14} color={c.warning} />
                     <div style={{ flex: 1, minWidth: 180 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: c.warning }}>{days <= 0 ? L("Je proefperiode eindigt vandaag", "Your trial ends today", "Tu prueba termina hoy") : days === 1 ? L("Je proefperiode eindigt morgen", "Your trial ends tomorrow", "Tu prueba termina mañana") : L(`Je proefperiode eindigt over ${days} dagen`, `Your trial ends in ${days} days`, `Tu prueba termina en ${days} días`)}</div>
-                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, lineHeight: 1.45 }}>{L("Kies een plan om zonder onderbreking door te gaan. Je gegevens en je boekingspagina blijven bewaard.", "Choose a plan to continue without interruption. Your data and booking page stay.", "Elige un plan para continuar sin interrupción. Tus datos y tu página de reservas se conservan.")}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: c.warning }}>{title}</div>
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, lineHeight: 1.45 }}>{L("Zet automatisch betalen aan om zonder onderbreking door te gaan, of kies na je proef een plan. Er wordt nu niets afgeschreven.", "Turn on automatic payment to continue without interruption, or choose a plan after your trial. Nothing is charged now.", "Activa el pago automático para seguir sin interrupción, o elige un plan después de tu prueba. Ahora no se cobra nada.")}</div>
                     </div>
                     {/* goUpgrade: view "instellingen" + tab billing + naar boven.
                         Hier stond setView("settings") — die view bestaat niet,
                         dus de knop gaf een leeg scherm (O5-01). */}
-                    <button className="btn-primary" style={{ fontSize: 11, padding: "9px 14px" }} onClick={() => goUpgrade()}>{L("Plan kiezen", "Choose a plan", "Elegir plan")}</button>
+                    <button className="btn-primary" style={{ fontSize: 11, padding: "9px 14px" }} onClick={() => goUpgrade()}>{L("Bekijk opties", "See options", "Ver opciones")}</button>
                   </div>
                 );
               })()}
@@ -20695,6 +20981,44 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 const isYearlyOneOff = isActive && !willCancel && bp.billing_interval === "yearly" && !bp.mollie_subscription_id;
                 const canRenew = isYearlyOneOff && daysLeft !== null && daysLeft <= 30;
 
+                // Automatisch betalen na de proef (10-10-2026). Fase en datum
+                // volgen dezelfde regels als de server (src/autopay.js): de
+                // eerste afschrijving is de eerste Amsterdamse dag die NA het
+                // einde van de proef begint (Mollie schrijft op een onbekend
+                // moment van die dag af), en uitzetten kan tot het begin van die
+                // dag. Dat moment tonen we op de klok van de salon: op Bonaire
+                // is het 18:00 of 19:00 de avond ervoor, en "vóór <datum>"
+                // alleen zou haar daar na 18:00 nog laten proberen.
+                const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+                const phase = autopayPhase(bp);
+                const chargeYmd = autopayChargeYmd(bp.trial_ends_at);
+                const chargeTxt = fmtDay(chargeYmd);
+                const trialEnded = !!trialEnds && trialEnds.getTime() <= Date.now();
+                const offBy = (() => {
+                  try {
+                    const dl = autopayOffDeadline(bp.trial_ends_at);
+                    const tz = tzFor(salonData.country_code);
+                    const hm = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(dl);
+                    const day = dl.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { timeZone: tz, day: "numeric", month: "short", year: "numeric" });
+                    return hm === "00:00"
+                      ? L(`vóór ${day}`, `before ${day}`, `antes del ${day}`)
+                      : L(`vóór ${day} ${hm}`, `before ${hm} on ${day}`, `antes de las ${hm} del ${day}`);
+                  } catch { return L(`vóór ${chargeTxt}`, `before ${chargeTxt}`, `antes del ${chargeTxt}`); }
+                })();
+                const autopayPlan = AUTOPAY_MONTHLY[bp.plan] ? bp.plan : "starter";
+                const price = fmtEUR(AUTOPAY_MONTHLY[autopayPlan]);
+                const creditDays = parseInt(bp.referral_credit_days) || 0;
+                const creditLine = creditDays > 0
+                  ? L(`Je tegoed van ${creditDays} dagen komt bij je eerste betaalde maand.`, `Your credit of ${creditDays} days is added to your first paid month.`, `Tu crédito de ${creditDays} días se suma a tu primer mes de pago.`)
+                  : "";
+                // iDEAL vraagt een Nederlandse rekening; overal anders alleen
+                // de creditcard (€0,00, er wordt echt niets afgeschreven).
+                const idealAllowed = salonData.country_code === "NL";
+                const chosenMethod = idealAllowed ? autopayMethod : "creditcard";
+                // Terug van Mollie en nog niet zeker: geen tweede checkout laten
+                // starten terwijl de eerste nog verwerkt wordt.
+                const autopayPending = autopayReturn === "checking" || autopayReturn === "processing" || autopayReturn === "slow";
+
                 const statusColor = isActive ? c.success : isTrial ? ACCENT : isPastDue ? c.warning : c.textLabel;
                 // c.textLabel is een rgba()-waarde: `${...}18` erachter is
                 // ongeldige CSS (geen vulling, geen rand). Vulling en rand
@@ -20722,7 +21046,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     // Refresh the billing snapshot so the UI reflects the new state.
                     const { data: prof } = await supabase
                       .from("profiles")
-                      .select("plan, billing_interval, subscription_status, trial_ends_at, plan_expires_at, current_period_start, cancel_at_period_end, mollie_subscription_id")
+                      .select(BILLING_COLS)
                       .eq("id", user.id)
                       .maybeSingle();
                     setBillingProfile(prof || null);
@@ -20737,6 +21061,38 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 return (<>
                   {/* Current plan card */}
                   <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 20, marginBottom: 12 }}>
+                    {/* Terug van Mollie na automatisch betalen aanzetten: eerst
+                        zeggen hoe het ervoor staat, anders lijkt het alsof er
+                        niets gebeurd is en start ze een tweede checkout. */}
+                    {autopayReturn && (() => {
+                      const tint = autopayReturn === "on" ? c.success : autopayReturn === "failed" ? c.warning : null;
+                      const msg = autopayReturn === "checking"
+                        ? L("We controleren je betaalgegevens…", "Checking your payment details…", "Comprobando tus datos de pago…")
+                        : autopayReturn === "on"
+                        ? L(`Automatisch betalen staat aan. De eerste afschrijving van ${price} is op ${chargeTxt}.`, `Automatic payment is on. The first charge of ${price} is on ${chargeTxt}.`, `El pago automático está activado. El primer cobro de ${price} es el ${chargeTxt}.`)
+                        : autopayReturn === "failed"
+                        ? L("Je betaalgegevens zijn niet vastgelegd; het is afgebroken of niet gelukt. Er is niets afgeschreven. Je kunt het opnieuw proberen, of na je proef zelf een plan kiezen.", "Your payment details were not saved; it was cancelled or did not go through. Nothing was charged. You can try again, or choose a plan yourself after your trial.", "Tus datos de pago no se guardaron; se canceló o no se completó. No se cobró nada. Puedes intentarlo de nuevo o elegir un plan tú misma después de la prueba.")
+                        : L("Je betaalgegevens worden nog verwerkt. Dit duurt meestal maar even; kijk zo nog eens. Start niet opnieuw.", "Your payment details are still being processed. This usually takes a moment; check back shortly. Don't start again.", "Tus datos de pago aún se están procesando. Suele tardar poco; vuelve a mirar en un momento. No empieces de nuevo.");
+                      return (
+                        <div data-autopay-return={autopayReturn} role="status" style={{
+                          display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 16, padding: "10px 12px", borderRadius: 12,
+                          background: tint ? `${tint}11` : `${c.text}08`, border: `1px solid ${tint ? `${tint}33` : c.border}`,
+                          fontSize: 12, color: c.text, lineHeight: 1.5,
+                        }}>
+                          {autopayReturn === "checking"
+                            ? <div style={{ width: 14, height: 14, flexShrink: 0, marginTop: 2, border: `2px solid ${c.border}`, borderTopColor: ACCENT, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                            : <span style={{ display: "inline-flex", flexShrink: 0, marginTop: 2, color: tint || c.textMuted }}><NavIcon name={autopayReturn === "on" ? "check" : autopayReturn === "failed" ? "alerttri" : "clock"} size={14} color="currentColor" /></span>}
+                          <span style={{ flex: 1, minWidth: 0 }}>{msg}</span>
+                          {autopayReturn !== "checking" && (
+                            <button type="button" onClick={() => setAutopayReturn(null)}
+                              aria-label={L("Melding sluiten", "Close message", "Cerrar aviso")}
+                              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, width: 24, height: 24, padding: 0, border: "none", borderRadius: 8, background: "transparent", color: c.textMuted, cursor: "pointer" }}>
+                              <NavIcon name="xmark" size={14} color="currentColor" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 14 }}>
                       <div>
                         <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>
@@ -20769,7 +21125,22 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             </div>
                             <div style={{ fontSize: 14, color: c.text }}>{fmtDate(trialEnds)}</div>
                             <div style={{ fontSize: 11, color: ACCENT, marginTop: 2 }}>
-                              {trialDaysLeft === 0 ? (lang === "nl" ? "vandaag" : lang === "es" ? "hoy" : "today") : (lang === "nl" ? `nog ${trialDaysLeft} dagen` : lang === "es" ? `${trialDaysLeft} días restantes` : `${trialDaysLeft} days left`)}
+                              {/* Met automatisch betalen blijft het dashboard na
+                                  het einde van de proef open zolang de eerste
+                                  afschrijving loopt (planIsActive); dan niet
+                                  dagenlang "vandaag" tonen. */}
+                              {trialEnded ? L("afgelopen", "ended", "terminada") : trialDaysLeft === 0 ? (lang === "nl" ? "vandaag" : lang === "es" ? "hoy" : "today") : (lang === "nl" ? `nog ${trialDaysLeft} dagen` : lang === "es" ? `${trialDaysLeft} días restantes` : `${trialDaysLeft} days left`)}
+                            </div>
+                          </div>
+                        )}
+                        {(phase === "scheduled" || phase === "charging") && (
+                          <div data-autopay-charge="1">
+                            <div style={{ fontSize: 10, color: c.textLabel, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>
+                              {L("Eerste afschrijving", "First charge", "Primer cobro")}
+                            </div>
+                            <div style={{ fontSize: 14, color: c.text }}>{chargeTxt}</div>
+                            <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
+                              {L(`${price} per maand`, `${price} per month`, `${price} al mes`)}
                             </div>
                           </div>
                         )}
@@ -20791,34 +21162,32 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
 
                     {/* Action buttons */}
                     <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {isTrial && (
+                      {/* "Nu abonneren" is weg (10-10-2026): die rekende tijdens
+                          de proef meteen het volle maandbedrag af, en dat wil de
+                          eigenaar niet. Tijdens de proef is er alleen nog
+                          automatisch betalen (het blok hieronder), dat pas na het
+                          einde van de proef afschrijft.
+
+                          Plan wisselen staat bovenaan en staat los van betalen.
+                          Zonder automatisch betalen loopt er nog geen Mollie-
+                          abonnement, dus dan is het gewoon het plan omzetten.
+                          Mét automatisch betalen past change-plan het bedrag van
+                          het klaarstaande abonnement aan (handleTrialAutopayPlan).
+                          Op de afschrijvingsdag zelf niet meer: Mollie kan de
+                          betaling dan al hebben aangemaakt. */}
+                      {isTrial && phase === "scheduled" && (
                         <button
-                          className="btn-primary"
-                          style={{ width: "auto", flex: "0 0 auto" }}
-                          onClick={async () => {
-                            // Trial → upgrade to paid: kick off Mollie checkout.
-                            // Checkout navigeert hard weg uit de instellingen.
-                            if (!(await confirmLeaveSettings(lang === "nl" ? "de betaalpagina" : lang === "es" ? "la página de pago" : "the payment page"))) return;
-                            try {
-                              const { data, error } = await supabase.functions.invoke("create-subscription", {
-                                body: { plan: bp.plan || "starter", billing_interval: bp.billing_interval || "monthly" },
-                              });
-                              if (error || !data?.checkout_url) {
-                                toast.show(lang === "nl" ? "Checkout kon niet starten" : lang === "es" ? "No se pudo iniciar el pago" : "Could not start checkout", "error");
-                                return;
-                              }
-                              window.location.href = data.checkout_url;
-                            } catch { toast.show(t.somethingWrong, "error"); }
-                          }}
+                          className="btn-ghost"
+                          style={autopayPlan === "starter" ? { color: ACCENT, borderColor: `${ACCENT}55`, opacity: trialPlanBusy ? 0.6 : 1 } : { opacity: trialPlanBusy ? 0.6 : 1 }}
+                          disabled={trialPlanBusy}
+                          onClick={() => handleTrialAutopayPlan(autopayPlan === "starter" ? "professional" : "starter", chargeTxt)}
                         >
-                          {lang === "nl" ? "Nu abonneren" : lang === "es" ? "Suscríbete ahora" : "Subscribe now"}
+                          {trialPlanBusy ? L("Bezig…", "Working…", "Procesando…")
+                            : autopayPlan === "starter" ? L("Upgraden naar Professional", "Upgrade to Professional", "Cambia al plan Professional")
+                            : L("Terug naar Starter", "Back to Starter", "Volver a Starter")}
                         </button>
                       )}
-                      {/* Starter-trial → Professional: er loopt nog geen Mollie-
-                          abonnement, dus upgraden is hier gewoon het plan
-                          omzetten. Gratis tot de proef eindigt; "Nu abonneren"
-                          rekent daarna vanzelf de Professional-prijs. */}
-                      {isTrial && (bp.plan || "starter") === "starter" && (
+                      {isTrial && phase !== "scheduled" && phase !== "charging" && (bp.plan || "starter") === "starter" && (
                         <button
                           className="btn-ghost"
                           style={{ color: ACCENT, borderColor: `${ACCENT}55` }}
@@ -20833,7 +21202,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           {lang === "nl" ? "Upgraden naar Professional" : lang === "es" ? "Cambia al plan Professional" : "Upgrade to Professional"}
                         </button>
                       )}
-                      {isTrial && bp.plan === "professional" && (
+                      {isTrial && phase !== "scheduled" && phase !== "charging" && bp.plan === "professional" && (
                         <button
                           className="btn-ghost"
                           onClick={async () => {
@@ -20990,6 +21359,146 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         </button>
                       )}
                     </div>
+
+                    {/* Automatisch betalen na de proef. Optioneel: doet ze
+                        niets, dan loopt de proef af en kiest ze daarna zelf
+                        een plan (PlanSelection), net als vóór 10-10-2026. */}
+                    {phase === "off" && (
+                      <div data-autopay-panel="off" style={{ marginTop: 14, padding: 12, background: `${c.text}08`, border: `1px solid ${c.border}`, borderRadius: 12, fontSize: 12, color: c.textSub, lineHeight: 1.5 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: c.text, marginBottom: 4 }}>
+                          {L("Automatisch betalen na je proef", "Automatic payment after your trial", "Pago automático después de tu prueba")}
+                        </div>
+                        <div>
+                          {/* De eerste afschrijving valt altijd na het einde van de proef
+                              (src/autopay.js), en uitzetten kan tot het begin van die
+                              dag: "tot het einde van je proef" klopt dus altijd. */}
+                          {L(`Je proef is gratis en er wordt nu niets afgeschreven. Wil je na je proef zonder onderbreking doorgaan? Zet dan automatisch betalen aan: je legt nu alleen je betaalgegevens vast. De eerste afschrijving van ${price} is pas na je proef, op ${chargeTxt}, daarna elke maand. Uitzetten kan met één klik tot het einde van je proef. Doe je niets, dan kies je na je proef gewoon zelf een plan.`,
+                            `Your trial is free and nothing is charged now. Want to continue without interruption after your trial? Turn on automatic payment: you only save your payment details now. The first charge of ${price} only comes after your trial, on ${chargeTxt}, then every month. You can turn it off with one click until your trial ends. If you do nothing, you simply choose a plan yourself after your trial.`,
+                            `Tu prueba es gratis y ahora no se cobra nada. ¿Quieres seguir sin interrupción después de tu prueba? Activa el pago automático: ahora solo guardas tus datos de pago. El primer cobro de ${price} llega después de tu prueba, el ${chargeTxt}, y después cada mes. Puedes desactivarlo con un clic hasta que termine tu prueba. Si no haces nada, eliges tú misma un plan después de la prueba.`)}
+                        </div>
+                        {creditLine && <div style={{ marginTop: 6 }}>{creditLine}</div>}
+                        {bp.billing_interval === "yearly" && (
+                          <div style={{ marginTop: 6 }}>
+                            {L("Automatisch betalen gaat per maand. Liever per jaar betalen? Kies dan na je proef het jaarabonnement.", "Automatic payment is monthly. Prefer yearly? Choose the yearly plan after your trial.", "El pago automático es mensual. ¿Prefieres anual? Elige el plan anual después de tu prueba.")}
+                          </div>
+                        )}
+
+                        {!autopayChooser && !autopayPending && (
+                          <button type="button" className="btn-primary" style={{ width: "auto", marginTop: 12 }}
+                            onClick={() => { setAutopayMethod("creditcard"); setAutopayChooser(true); }}>
+                            {L("Automatisch betalen aanzetten", "Turn on automatic payment", "Activar pago automático")}
+                          </button>
+                        )}
+
+                        {autopayChooser && !autopayPending && (() => {
+                          // Bedrag nu volgt uit de methode: creditcard €0,00
+                          // (niets afgeschreven), iDEAL €0,01 (iDEAL kent geen
+                          // nulbetaling). Die cent storten we niet terug: een
+                          // terugbetaling kost meer dan hij waard is en zet bij
+                          // elke salon een terugbetalingsmelding klaar.
+                          const tiles = [
+                            {
+                              id: "creditcard",
+                              title: L("Creditcard", "Credit card", "Tarjeta de crédito"),
+                              sub: L(`Nu ${fmtAmt("€", 0)}. Er wordt niets afgeschreven.`, `Now ${fmtAmt("€", 0)}. Nothing is charged.`, `Ahora ${fmtAmt("€", 0)}. No se cobra nada.`),
+                              icon: <NavIcon name="creditcard" size={18} color="currentColor" />,
+                            },
+                            ...(idealAllowed ? [{
+                              id: "ideal",
+                              title: "iDEAL",
+                              sub: L(`Nu ${fmtAmt("€", 0.01)} om je rekening te bevestigen; iDEAL vraagt een echte betaling. Die cent wordt niet teruggestort. Daarna schrijven we elke maand automatisch af van deze rekening.`,
+                                `Now ${fmtAmt("€", 0.01)} to confirm your account; iDEAL requires a real payment. This cent is not refunded. After that we charge this account automatically every month.`,
+                                `Ahora ${fmtAmt("€", 0.01)} para confirmar tu cuenta; iDEAL exige un pago real. Este céntimo no se devuelve. Después cobramos automáticamente de esta cuenta cada mes.`),
+                              icon: (
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M3 10 12 4l9 6" /><line x1="5" y1="10" x2="5" y2="18" /><line x1="9.5" y1="10" x2="9.5" y2="18" /><line x1="14.5" y1="10" x2="14.5" y2="18" /><line x1="19" y1="10" x2="19" y2="18" /><line x1="3" y1="20" x2="21" y2="20" />
+                                </svg>
+                              ),
+                            }] : []),
+                          ];
+                          return (
+                            <div data-autopay-chooser="1" style={{ marginTop: 12 }}>
+                              <div role="radiogroup" aria-label={L("Betaalmethode", "Payment method", "Método de pago")} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
+                                {tiles.map(tile => {
+                                  const on = chosenMethod === tile.id;
+                                  return (
+                                    <button key={tile.id} type="button" role="radio" aria-checked={on}
+                                      onClick={() => setAutopayMethod(tile.id)}
+                                      style={{
+                                        display: "flex", alignItems: "flex-start", gap: 10, textAlign: "left", padding: "10px 12px", borderRadius: 8, cursor: "pointer",
+                                        background: on ? `${ACCENT}10` : c.bgCard, border: `1px solid ${on ? ACCENT : c.border}`,
+                                        color: c.text, fontFamily: "inherit", fontSize: 12, lineHeight: 1.45,
+                                      }}>
+                                      <span style={{ display: "inline-flex", flexShrink: 0, marginTop: 1, color: on ? ACCENT : c.textMuted }}>{tile.icon}</span>
+                                      <span style={{ minWidth: 0 }}>
+                                        <span style={{ display: "block", fontWeight: 600 }}>{tile.title}</span>
+                                        <span style={{ display: "block", fontSize: 11, color: c.textSub, marginTop: 2 }}>{tile.sub}</span>
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 12, rowGap: 2, fontSize: 12 }}>
+                                <span style={{ color: c.textMuted }}>{L("Eerste afschrijving", "First charge", "Primer cobro")}</span>
+                                <span style={{ color: c.text }}>{L(`${price} op ${chargeTxt}`, `${price} on ${chargeTxt}`, `${price} el ${chargeTxt}`)}</span>
+                                <span style={{ color: c.textMuted }}>{L("Daarna", "After that", "Después")}</span>
+                                <span style={{ color: c.text }}>{L(`${price} per maand`, `${price} per month`, `${price} al mes`)}</span>
+                              </div>
+                              <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                                <button type="button" className="btn-primary" style={{ width: "auto", opacity: autopayBusy ? 0.6 : 1 }} disabled={autopayBusy}
+                                  onClick={() => startTrialAutopay(chosenMethod)}>
+                                  {autopayBusy ? L("Bezig…", "Working…", "Procesando…") : L("Verder naar betaalpagina", "Continue to payment page", "Continuar a la página de pago")}
+                                </button>
+                                <button type="button" className="btn-ghost" disabled={autopayBusy} onClick={() => setAutopayChooser(false)}>
+                                  {L("Annuleren", "Cancel", "Cancelar")}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {phase === "scheduled" && (
+                      <div data-autopay-panel="scheduled" style={{ marginTop: 14, padding: 12, background: `${c.success}11`, border: `1px solid ${c.success}33`, borderRadius: 12, fontSize: 12, color: c.textSub, lineHeight: 1.5 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: c.text, marginBottom: 4 }}>
+                          <NavIcon name="check" size={13} color={c.success} />
+                          {L("Automatisch betalen staat aan", "Automatic payment is on", "El pago automático está activado")}
+                        </div>
+                        <div>
+                          {/* offBy = begin van de afschrijvingsdag op de klok
+                              van de salon (zie boven); vanaf dat moment weigert
+                              cancel-subscription. Tussen het einde van de proef
+                              en dat moment kan het nog, vandaar trialEnded. */}
+                          {trialEnded
+                            ? L(`Je proef is afgelopen op ${fmtDate(trialEnds)}. Op ${chargeTxt} schrijven we ${price} af, daarna elke maand. Wil je dit niet meer? Zet het uit ${offBy}; dan wordt er niets afgeschreven.`,
+                                `Your trial ended on ${fmtDate(trialEnds)}. On ${chargeTxt} we will charge ${price}, then every month. Don't want this anymore? Turn it off ${offBy}; nothing will be charged.`,
+                                `Tu prueba terminó el ${fmtDate(trialEnds)}. El ${chargeTxt} cobraremos ${price} y después cada mes. ¿Ya no lo quieres? Desactívalo ${offBy}; no se cobrará nada.`)
+                            : L(`Je proef loopt gewoon door tot ${fmtDate(trialEnds)}. Op ${chargeTxt} schrijven we ${price} af, daarna elke maand. Wil je dit niet meer? Zet het uit ${offBy}; dan wordt er niets afgeschreven en loopt je proef gewoon af.`,
+                                `Your trial continues until ${fmtDate(trialEnds)}. On ${chargeTxt} we will charge ${price}, then every month. Don't want this anymore? Turn it off ${offBy}; nothing will be charged and your trial simply ends.`,
+                                `Tu prueba sigue hasta el ${fmtDate(trialEnds)}. El ${chargeTxt} cobraremos ${price} y después cada mes. ¿Ya no lo quieres? Desactívalo ${offBy}; no se cobrará nada y tu prueba terminará sin más.`)}
+                        </div>
+                        {creditLine && <div style={{ marginTop: 6 }}>{creditLine}</div>}
+                        <button type="button" className="btn-ghost"
+                          style={{ marginTop: 12, borderColor: c.danger + "44", color: c.danger, opacity: autopayOffBusy ? 0.6 : 1 }}
+                          disabled={autopayOffBusy}
+                          onClick={() => turnOffTrialAutopay(fmtDate(trialEnds))}>
+                          {autopayOffBusy ? L("Bezig…", "Working…", "Procesando…") : L("Automatisch betalen uitzetten", "Turn off automatic payment", "Desactivar pago automático")}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Afschrijvingsdag bereikt: Mollie kan de betaling al
+                        hebben aangemaakt, dus geen knoppen meer. Een SEPA-
+                        incasso staat dagen op "pending"; planIsActive geeft
+                        daarvoor 14 dagen speling (AUTOPAY_FIRST_CHARGE_GRACE_MS). */}
+                    {phase === "charging" && (
+                      <div data-autopay-panel="charging" style={{ marginTop: 14, padding: 12, background: `${c.text}08`, border: `1px solid ${c.border}`, borderRadius: 12, fontSize: 12, color: c.textSub, lineHeight: 1.5 }}>
+                        {L(`De eerste afschrijving van ${price} is gestart op ${chargeTxt}. Betaal je via je bankrekening, dan kan het een paar werkdagen duren voor hij binnen is; je dashboard blijft gewoon open. Je factuur komt per mail zodra de betaling binnen is.`,
+                          `The first charge of ${price} started on ${chargeTxt}. If you pay from your bank account it can take a few working days to come in; your dashboard stays open. Your invoice arrives by email once the payment is in.`,
+                          `El primer cobro de ${price} empezó el ${chargeTxt}. Si pagas desde tu cuenta bancaria puede tardar unos días hábiles; tu panel sigue abierto. Tu factura llega por correo cuando se reciba el pago.`)}
+                      </div>
+                    )}
 
                     {isYearlyOneOff && (
                       <div style={{ marginTop: 14, padding: 12, background: `${c.text}08`, border: `1px solid ${c.border}`, borderRadius: 12, fontSize: 12, color: c.textSub, lineHeight: 1.5 }}>
