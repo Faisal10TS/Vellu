@@ -1938,6 +1938,65 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     setMode("booking");
   };
 
+  // Diepe link vanaf de eigen site van een salon (een "Boek deze set"-knop in een
+  // prijsbouwer, een prijsregel):
+  //   /<slug>?book=<serviceId>&v=<variantId>&x=<extraId>,<extraId>*<aantal>
+  // opent het boeken met die dienst, optie en extra's al gekozen (stap 1; de klant
+  // kiest daarna stylist en tijd). Alleen id's van díe salon tellen: een onbekende,
+  // verborgen of andermans dienst/optie/extra wordt genegeerd, het aantal van een
+  // extra per stuk blijft binnen [1, max_quantity]. Zonder ?book verandert er niets.
+  // Daarna gaan de parameters uit de adresbalk, zodat herladen of terug niet opnieuw
+  // een boeking opent.
+  const deepLinkDone = useRef(false);
+  useEffect(() => {
+    if (deepLinkDone.current) return;
+    deepLinkDone.current = true;
+    let q;
+    try { q = new URLSearchParams(window.location.search); } catch { return; }
+    const sid = q.get("book");
+    if (!sid) return;
+    const svc = (initialSalon.services || []).find(s => s.id === sid);
+    if (svc) {
+      // v=<id> of v=<id>*<aantal> (een optie per stuk; zelfde grens als setVariantQty)
+      const [vid, vn] = (q.get("v") || "").split("*");
+      const variant = vid ? ((svc.variants || []).find(v => v.id === vid) || null) : null;
+      const variantQty = variant?.per_unit ? Math.max(1, Math.min(parseInt(vn, 10) || 1, variant.max_quantity || 10)) : undefined;
+      // Alleen extra's die de lijst ook toont: een extra die geen enkele medewerker
+      // van deze dienst uitvoert (excluded_staff_ids) blijft weg, anders stond hij
+      // gekozen zonder chip om hem uit te zetten.
+      const svcStaff = staffEligibleForService(svc.id);
+      const extras = [];
+      (q.get("x") || "").split(",").forEach(tok => {
+        const [id, n] = tok.split("*");
+        const e = (svc.extras || []).find(x => x.id === id);
+        if (!e || extras.some(x => x.id === e.id)) return;
+        if (svcStaff.length > 0 && !svcStaff.some(m => extraAllowedFor(e, m.id))) return;
+        const qty = e.per_unit ? Math.max(1, Math.min(parseInt(n, 10) || 1, e.max_quantity || 10)) : 1;
+        extras.push({ ...e, qty });
+      });
+      enterBooking(svc);
+      setSelectedServices([{ service: svc, variant, ...(variantQty ? { variantQty } : {}), extras, staff: null }]);
+      // de lijst op de categorie van die dienst, en de dienst zelf in beeld (op een
+      // telefoon stond hij anders onderaan een lange lijst)
+      if (svc.category_id) setActiveCategory(svc.category_id);
+      // (bovenaan, met ruimte voor de kopbalk: met opties, extra's en stylist is
+      // het blok vaak hoger dan een telefoonscherm, gecentreerd viel de naam weg)
+      setTimeout(() => {
+        try {
+          const el = document.querySelector(`[data-svc="${svc.id}"]`);
+          if (el) { el.style.scrollMarginTop = "84px"; el.scrollIntoView({ block: "start", behavior: "smooth" }); }
+        } catch { /* geen scrollIntoView: dan maar bovenaan */ }
+      }, 400);
+    }
+    try {
+      ["book", "v", "x"].forEach(k => q.delete(k));
+      const rest = q.toString();
+      window.history.replaceState(window.history.state, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
+    } catch { /* geen history-API: de URL blijft staan */ }
+  // Eenmalig bij het openen van de pagina.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Responsive hook
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
   useEffect(() => {
@@ -4297,7 +4356,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   const heroThumb = s.photos?.[0]?.url || s.photos?.[0];
                   const displayPrice = s.variants?.length > 0 ? `${t.from} ${fmtAmt(cur, Math.min(...s.variants.map(v => parseFloat(v.price))))}` : `${fmtAmt(cur, parseFloat(s.price))}`;
                   return (
-                  <div key={s.id} style={{ marginBottom: 8 }}>
+                  <div key={s.id} data-svc={s.id} style={{ marginBottom: 8 }}>
                     {/* Service card — clean, thumbnail-based */}
                     <div
                       role="checkbox" tabIndex={0} aria-checked={isSel}
@@ -5155,7 +5214,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       const staffForService = getStaffForService(s.id);
                       const staffPickable = staffForService.filter(m => (item?.extras || []).every(e => extraAllowedFor(e, m.id)));
                       return (
-                      <div key={s.id}>
+                      <div key={s.id} data-svc={s.id}>
                         <div className={`service-card ${isSel ? "sel" : ""}`} role="checkbox" tabIndex={0} aria-checked={isSel} onClick={() => toggleServiceSelection(s)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleServiceSelection(s); } }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
