@@ -5355,7 +5355,43 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [hasSharedLink, setHasSharedLink] = useState(() => {
     try { return !!localStorage.getItem(`vellu_shared_${salonData.id}`); } catch { return false; }
   });
-  const [newDiscount, setNewDiscount] = useState({ code: "", amount: "", type: "percent", active: true });
+  // Kortingscode afbakenen (11-10-2026): alleen bepaalde behandelingen en/of
+  // alleen afspraken binnen een periode — voor acties als "15% op deze vijf
+  // gezichtsbehandelingen, november t/m januari". Optioneel; een code zonder
+  // deze velden werkt als altijd. book-appointment dwingt het af, de
+  // boekingspagina rekent en meldt hetzelfde.
+  const [newDiscount, setNewDiscount] = useState({ code: "", amount: "", type: "percent", active: true, valid_from: "", valid_until: "", service_ids: [] });
+  const [discountScopeOpen, setDiscountScopeOpen] = useState(false);
+  const discountSvcName = (s) => lang === "nl" ? (s.name_nl || s.name_en) : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl);
+  const discountDay = (d) => {
+    try {
+      return new Date(d + "T12:00:00Z").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+    } catch { return d; }
+  };
+  // Eén regel onder de code in de lijst: periode en/of behandelingen.
+  const discountScope = (cd) => {
+    const parts = [];
+    if (cd.valid_from && cd.valid_until) parts.push(`${discountDay(cd.valid_from)} – ${discountDay(cd.valid_until)}`);
+    else if (cd.valid_from) parts.push((lang === "nl" ? "vanaf " : lang === "es" ? "desde " : "from ") + discountDay(cd.valid_from));
+    else if (cd.valid_until) parts.push((lang === "nl" ? "t/m " : lang === "es" ? "hasta " : "until ") + discountDay(cd.valid_until));
+    const ids = Array.isArray(cd.service_ids) ? cd.service_ids : [];
+    // Alleen behandelingen die nog bestaan tellen en noemen. Is er een
+    // verwijderd, dan zeggen we dat — een code die alleen naar verwijderde
+    // behandelingen wijst stond anders "actief" terwijl elke boeking ermee
+    // werd geweigerd.
+    const names = ids.map(id => (salonData.services || []).find(s => s.id === id)).filter(Boolean).map(discountSvcName);
+    if (names.length) parts.push(names.length === 1 ? names[0] : `${names.length} ${lang === "nl" ? "behandelingen" : lang === "es" ? "tratamientos" : "treatments"}`);
+    // "Verlopen" op de kalenderdag van de SALON, niet die van het apparaat:
+    // een Bonaire-salon die vanuit NL wordt beheerd liep anders een dag voor.
+    const salonDay = fmt(salonNow(salonData.country_code));
+    return {
+      text: parts.join(" · "),
+      title: names.join(", "),
+      expired: !!cd.valid_until && cd.valid_until < salonDay,
+      missing: ids.length > 0 && names.length < ids.length,
+      unusable: ids.length > 0 && names.length === 0,
+    };
+  };
   // Edit states
   const [editingService, setEditingService] = useState(null);
   const [expandedServiceId, setExpandedServiceId] = useState(null);
@@ -9954,6 +9990,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       }));
       return d;
     });
+    // Kortingscodes die op deze behandeling waren afgebakend (11-10-2026): het
+    // id eruit halen. Blijft er dan niets over, dan NIET de lijst leegmaken —
+    // een lege lijst betekent "alle behandelingen" en dan zou een actiecode
+    // stilletjes op alles gaan gelden. Zo'n code laten we naar de verwijderde
+    // behandeling wijzen en zetten we uit; de lijst toont "Behandeling
+    // verwijderd — code werkt niet". Mislukt het opslaan, dan blokkeert dat het
+    // verwijderen niet (de behandeling is al weg): melden en klaar.
+    const codes = salonData.discount_codes || [];
+    if (codes.some(cd => Array.isArray(cd.service_ids) && cd.service_ids.includes(id))) {
+      const next = codes.map(cd => {
+        if (!Array.isArray(cd.service_ids) || !cd.service_ids.includes(id)) return cd;
+        const left = cd.service_ids.filter(x => x !== id);
+        return left.length > 0 ? { ...cd, service_ids: left } : { ...cd, active: false };
+      });
+      const { error: dcErr } = await supabase.from("profiles").update({ discount_codes: next }).eq("id", salonData.owner_id);
+      if (dcErr) {
+        toast.show(lang === "nl" ? "Behandeling verwijderd, maar een kortingscode kon niet worden bijgewerkt" : lang === "es" ? "Tratamiento eliminado, pero no se pudo actualizar un código de descuento" : "Treatment deleted, but a discount code couldn't be updated", "error");
+      } else {
+        update(d => { d.discount_codes = next; return d; });
+      }
+    }
   };
 
   const [photoUploading, setPhotoUploading] = useState(null); // serviceId or null
@@ -21940,6 +21997,27 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             <span style={{ color: accent, fontWeight: 600 }}>{code.type === "percent" ? `${code.amount}%` : `${fmtAmt(cur, code.amount)}`}</span>
                             {" "}{t.discount.toLowerCase()}
                           </div>
+                          {(() => {
+                            const sc = discountScope(code);
+                            if (!sc.text && !sc.missing) return null;
+                            return (
+                              <div title={sc.title || undefined} style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.4, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                                {sc.text && <span>{sc.text}</span>}
+                                {sc.expired && (
+                                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 6, border: `1px solid ${c.border}`, color: c.textMuted }}>
+                                    {lang === "nl" ? "Verlopen" : lang === "es" ? "Caducado" : "Expired"}
+                                  </span>
+                                )}
+                                {sc.missing && (
+                                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 6, border: `1px solid ${c.danger}55`, color: c.danger }}>
+                                    {sc.unusable
+                                      ? (lang === "nl" ? "Behandeling verwijderd — code werkt niet" : lang === "es" ? "Tratamiento eliminado — el código no funciona" : "Treatment deleted — code won't work")
+                                      : (lang === "nl" ? "Behandeling verwijderd" : lang === "es" ? "Tratamiento eliminado" : "Treatment deleted")}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                         {/* Active toggle */}
                         <div
@@ -21989,6 +22067,48 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       <option value="fixed" style={{ background: c.selectBg }}>{cur}</option>
                     </select>
                   </div>
+                  {/* Afbakening — dicht standaard: de meeste codes gelden gewoon
+                      overal. Open voor een actie op bepaalde behandelingen of
+                      voor afspraken in een periode. */}
+                  {!discountScopeOpen ? (
+                    <button type="button" onClick={() => setDiscountScopeOpen(true)}
+                      style={{ background: "none", border: "none", padding: 0, marginBottom: 12, cursor: "pointer", fontFamily: "inherit", fontSize: 11, color: c.textSub, textDecoration: "underline" }}>
+                      {lang === "nl" ? "Beperken tot bepaalde behandelingen of een periode" : lang === "es" ? "Limitar a ciertos tratamientos o a un periodo" : "Limit to certain treatments or a period"}
+                    </button>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: c.textLabel, marginBottom: 6 }}>
+                          {lang === "nl" ? "Geldig voor afspraken van … t/m … (leeg = altijd)" : lang === "es" ? "Válido para citas del … al … (vacío = siempre)" : "Valid for appointments from … to … (empty = always)"}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
+                          <input className="input-field" type="date" value={newDiscount.valid_from}
+                            aria-label={lang === "nl" ? "Geldig vanaf" : lang === "es" ? "Válido desde" : "Valid from"}
+                            onChange={e => setNewDiscount(d => ({ ...d, valid_from: e.target.value }))} style={{ fontSize: 12, padding: "10px 12px" }} />
+                          <input className="input-field" type="date" value={newDiscount.valid_until} min={newDiscount.valid_from || undefined}
+                            aria-label={lang === "nl" ? "Geldig tot en met" : lang === "es" ? "Válido hasta" : "Valid until"}
+                            onChange={e => setNewDiscount(d => ({ ...d, valid_until: e.target.value }))} style={{ fontSize: 12, padding: "10px 12px" }} />
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: c.textLabel, marginBottom: 6 }}>
+                          {lang === "nl" ? `Alleen voor deze behandelingen (niets gekozen = alle)${newDiscount.service_ids.length ? ` · ${newDiscount.service_ids.length} gekozen` : ""}` : lang === "es" ? `Solo para estos tratamientos (nada elegido = todos)${newDiscount.service_ids.length ? ` · ${newDiscount.service_ids.length} elegidos` : ""}` : `Only for these treatments (none chosen = all)${newDiscount.service_ids.length ? ` · ${newDiscount.service_ids.length} chosen` : ""}`}
+                        </div>
+                        <div className="vl-scroll" style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 180, overflowY: "auto" }}>
+                          {(salonData.services || []).map(s => {
+                            const on = newDiscount.service_ids.includes(s.id);
+                            return (
+                              <button type="button" key={s.id} aria-pressed={on}
+                                onClick={() => setNewDiscount(d => ({ ...d, service_ids: on ? d.service_ids.filter(x => x !== s.id) : [...d.service_ids, s.id] }))}
+                                style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${on ? accent : c.inputBorder}`, background: on ? `${accent}18` : "transparent", color: on ? accent : c.textSub, fontSize: 11, cursor: "pointer", fontFamily: "inherit", opacity: s.visible === false ? 0.6 : 1 }}>
+                                {discountSvcName(s)}{s.visible === false ? (lang === "nl" ? " (verborgen)" : lang === "es" ? " (oculto)" : " (hidden)") : ""}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <button className="btn-ghost" style={{ width: "100%", padding: "10px 16px", display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={async (e) => {
                     const code = String(newDiscount.code || "").trim().toUpperCase();
                     const amount = parseFloat(newDiscount.amount);
@@ -22006,16 +22126,36 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       toast.show(lang === "nl" ? "Deze code bestaat al" : lang === "es" ? "Este código ya existe" : "This code already exists", "error");
                       return;
                     }
+                    // Periode: een omgedraaide periode laat de code nooit werken, en
+                    // een einddatum in het verleden ook niet — beter nu zeggen dan
+                    // dat een klant het straks bij het boeken merkt.
+                    const vFrom = newDiscount.valid_from || "";
+                    const vUntil = newDiscount.valid_until || "";
+                    if (vFrom && vUntil && vFrom > vUntil) {
+                      toast.show(lang === "nl" ? "De begindatum ligt na de einddatum" : lang === "es" ? "La fecha de inicio es posterior a la de fin" : "The start date is after the end date", "error");
+                      return;
+                    }
+                    if (vUntil && vUntil < fmt(salonNow(salonData.country_code))) {
+                      toast.show(lang === "nl" ? "De einddatum ligt in het verleden" : lang === "es" ? "La fecha de fin ya pasó" : "The end date is in the past", "error");
+                      return;
+                    }
+                    // Alleen ingevulde afbakening opslaan: een code zonder blijft
+                    // exact het oude object, zodat niets anders iets merkt.
+                    const scope = {};
+                    if (vFrom) scope.valid_from = vFrom;
+                    if (vUntil) scope.valid_until = vUntil;
+                    if (newDiscount.service_ids.length) scope.service_ids = [...newDiscount.service_ids];
                     // Direct opslaan, zoals aan/uit en verwijderen hierboven.
                     // Knop even uit tegen een dubbele klik (twee keer dezelfde code).
                     const btn = e.currentTarget;
                     btn.disabled = true;
                     try {
-                      const next = [...(salonData.discount_codes || []), { ...newDiscount, code, amount }];
+                      const next = [...(salonData.discount_codes || []), { code, amount, type: newDiscount.type, active: true, ...scope }];
                       const { error } = await supabase.from("profiles").update({ discount_codes: next }).eq("id", salonData.owner_id);
                       if (error) { toast.show(t.somethingWrong, "error"); return; }
                       update(d => { d.discount_codes = next; return d; });
-                      setNewDiscount({ code: "", amount: "", type: "percent", active: true });
+                      setNewDiscount({ code: "", amount: "", type: "percent", active: true, valid_from: "", valid_until: "", service_ids: [] });
+                      setDiscountScopeOpen(false);
                       toast.show(lang === "nl" ? "Kortingscode toegevoegd" : lang === "es" ? "Código de descuento añadido" : "Discount code added");
                     } finally {
                       btn.disabled = false;

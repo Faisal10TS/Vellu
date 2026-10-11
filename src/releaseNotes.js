@@ -14,6 +14,24 @@
 
 export const RELEASES = [
   {
+    // My Whims and More (Bonaire) wilde een seizoensactie: 15% op vijf
+    // gezichtsbehandelingen voor afspraken in november–januari. Een code gold
+    // tot nu toe altijd voor alles en bleef geldig tot je hem uitzette.
+    id: "2026-10-11",
+    date: "2026-10-11",
+    title: { nl: "Kortingscodes voor acties", en: "Discount codes for promotions", es: "Códigos de descuento para promociones" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Kortingscodes: je kunt een code nu beperken tot bepaalde behandelingen en tot afspraken in een periode, bijvoorbeeld 15% op je gezichtsbehandelingen voor afspraken in december. Klanten zien op je boekingspagina waar de code voor geldt, en daarbuiten wordt hij niet toegepast. Te vinden bij Instellingen, onder je kortingscodes: \"Beperken tot bepaalde behandelingen of een periode\".",
+          en: "Discount codes: you can now limit a code to certain treatments and to appointments within a period, for example 15% off your facials for appointments in December. Clients see on your booking page what the code applies to, and it isn't applied outside that. Find it in Settings under your discount codes: \"Limit to certain treatments or a period\".",
+          es: "Códigos de descuento: ahora puedes limitar un código a ciertos tratamientos y a citas dentro de un periodo, por ejemplo un 15% en tus faciales para citas en diciembre. Tus clientes ven en tu página de reservas para qué vale el código, y fuera de eso no se aplica. Lo encuentras en Ajustes, en tus códigos de descuento: \"Limitar a ciertos tratamientos o a un periodo\".",
+        },
+      },
+    ],
+  },
+  {
     // De eigenaar wil niet dat een salon betaalt op het moment dat ze tijdens
     // de proef abonneert: "Nu abonneren" rekende meteen het volle maandbedrag
     // af. Nu legt ze alleen haar betaalgegevens vast en schrijven we pas af na

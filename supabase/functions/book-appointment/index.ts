@@ -594,6 +594,9 @@ serve(async (req) => {
       // zonder producten). Zo kan een stylist die één deel van een gecombineerde
       // boeking doet haar eigen aandeel zien i.p.v. de hele boeking — zie
       // staffShareOf in shared.jsx, dat naar rato schaalt naar service_price.
+      // Uitzondering: een AFGEBAKENDE code (bepaalde behandelingen of één
+      // stylist) zet in stap 7 zijn korting op de delen waar hij op geldt, zodat
+      // die schaal niet over de andere delen uitsmeert.
       price: Math.round((price + extrasPrice) * 100) / 100,
     });
     runningOffset += duration;
@@ -673,16 +676,75 @@ serve(async (req) => {
     const boundTo = String(match.client_email || "").trim().toLowerCase();
     if (boundTo && boundTo !== email) return err(403, "discount_not_yours", origin);
     const amt = parseFloat(match.amount) || 0;
-    if (match.staff_id) {
-      // Aan een stylist gebonden code: de korting geldt alleen voor de delen
-      // die zíj in deze boeking doet — anders spaart een klant bij Lady en
-      // verzilvert ze bij Esther. Delen van collega's en producten blijven vol
-      // geprijsd; doet zij niets in deze boeking, dan is de code hier ongeldig.
-      const eligible = serviceBreakdown
-        .filter((p) => p.staff_id === match.staff_id)
-        .reduce((s, p) => s + (Number(p.price) || 0), 0);
-      if (eligible <= 0) return err(403, "discount_staff_mismatch", origin);
-      totalPrice = Math.max(0, totalPrice - eligible * amt / 100);
+    // Afbakening van een eigenaarcode (sinds 11-10-2026, voor seizoensacties als
+    // "15% op deze vijf gezichtsbehandelingen, voor afspraken in nov–jan"):
+    //   - valid_from / valid_until: de AFSPRAAKdatum (kalenderdatum in salontijd,
+    //     dezelfde `date` als overal in deze functie), niet de boekdatum — de
+    //     actie gaat over wanneer de behandeling plaatsvindt;
+    //   - service_ids: korting alleen op die behandelingen; de rest van de
+    //     boeking en producten blijven vol geprijsd.
+    // Alle drie optioneel; een code zonder deze velden werkt precies als altijd.
+    // Alleen een geldige YYYY-MM-DD telt: rommel in het veld mag een code niet
+    // stilletjes ongeldig of juist onbeperkt maken door een rare stringvergelijking.
+    const isDay = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+    if ((isDay(match.valid_from) && date < match.valid_from) || (isDay(match.valid_until) && date > match.valid_until)) {
+      return err(403, "discount_not_valid_date", origin);
+    }
+    const svcIds: string[] = Array.isArray(match.service_ids)
+      ? match.service_ids.filter((x: unknown) => typeof x === "string" && x)
+      : [];
+    if (match.staff_id || svcIds.length > 0) {
+      // Beperkte code: de korting geldt alleen voor de delen die er recht op
+      // hebben. Aan een stylist gebonden (stempelkaart per teamlid): alleen de
+      // delen die zíj doet — anders spaart een klant bij Lady en verzilvert ze
+      // bij Esther. Met service_ids: alleen die behandelingen. Delen daarbuiten
+      // en producten blijven vol geprijsd; valt er niets onder, dan is de code
+      // hier ongeldig, met een foutcode die zegt wáárom.
+      const ofStaff = match.staff_id ? serviceBreakdown.filter((p) => p.staff_id === match.staff_id) : serviceBreakdown;
+      if (ofStaff.length === 0) return err(403, "discount_staff_mismatch", origin);
+      const eligibleParts = ofStaff.filter((p) => svcIds.length === 0 || svcIds.includes(p.service_id));
+      const eligible = eligibleParts.reduce((s, p) => s + (Number(p.price) || 0), 0);
+      if (eligible <= 0) return err(403, svcIds.length > 0 ? "discount_service_mismatch" : "discount_staff_mismatch", origin);
+      // Vast bedrag hooguit tot het bedrag waar de korting op geldt — anders
+      // zou €20 korting op een behandeling van €15 de rest van de boeking
+      // afprijzen. Verjaardags-/stempelcodes zijn altijd een percentage.
+      const off = match.type === "percent" ? eligible * amt / 100 : Math.min(amt, eligible);
+      const beforeCents = Math.round(totalPrice * 100);
+      totalPrice = Math.max(0, totalPrice - off);
+      // De korting ook PER DEEL vastleggen (review 11-10-2026). Alleen het
+      // totaal verlagen liet service_breakdown op brutoprijzen staan, en
+      // partPricesOf (shared.jsx) smeert het verschil met service_price dan
+      // naar rato over ÁLLE delen uit: bij "15% op de facial" + een manicure
+      // zonder korting stonden agenda, omzet per stylist, facturen en "Afspraak
+      // bewerken" allebei op €92,50 in plaats van €85 en €100. Met de korting
+      // op de delen zelf tellen ze precies op tot service_price − producten,
+      // de schaal van partPricesOf wordt 1, en elk deel houdt zijn echte
+      // bedrag. Codes zonder afbakening raken alle delen gelijk en blijven
+      // bruto + schaal, zoals altijd.
+      // Rekenen in HELE CENTEN, vanaf wat de klant echt betaalt (het afgeronde
+      // totaal vóór en ná de korting), niet vanaf round(off): bij een halve cent
+      // ronden die twee verschillend af en kwam er een cent op een deel zónder
+      // korting terecht (€45,01 i.p.v. €45,00, review 11-10). Naar rato over de
+      // delen die eronder vallen en iets kosten; het restje gaat naar het
+      // grootste daarvan, nooit naar een gratis deel.
+      const restCents = beforeCents - Math.round(totalPrice * 100);
+      const paying = eligibleParts.filter((p) => (Number(p.price) || 0) > 0);
+      const grossCents = paying.map((p) => Math.round((Number(p.price) || 0) * 100));
+      const eligibleCents = grossCents.reduce((s, c) => s + c, 0);
+      if (paying.length > 0 && eligibleCents > 0) {
+        let largest = 0;
+        grossCents.forEach((c, i) => { if (c > grossCents[largest]) largest = i; });
+        const shares = grossCents.map((c, i) => i === largest ? 0 : Math.min(c, Math.round(restCents * c / eligibleCents)));
+        shares[largest] = Math.min(grossCents[largest], restCents - shares.reduce((s, v) => s + v, 0));
+        const nets = grossCents.map((c, i) => Math.max(0, c - shares[i]));
+        // Wordt de hele boeking gratis (100% of een vast bedrag dat alles
+        // dekt), laat de delen dan bruto: partPricesOf schaalt ze dan zelf naar
+        // nul. Alle delen op 0 schrijven gaf daar null en geen prijs per deel.
+        const restOfBooking = serviceBreakdown.filter((p) => !paying.includes(p)).reduce((s, p) => s + (Number(p.price) || 0), 0);
+        if (nets.some((n) => n > 0) || restOfBooking > 0) {
+          paying.forEach((p, i) => { p.price = nets[i] / 100; });
+        }
+      }
     } else if (match.type === "percent") {
       totalPrice = Math.max(0, totalPrice * (1 - amt / 100));
     } else {

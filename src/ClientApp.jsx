@@ -1767,21 +1767,37 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     const p = (initialSalon.products || []).find(x => x.id === pid);
     return s + (p ? (parseFloat(p.price) || 0) * q : 0);
   }, 0);
-  // Bij een stylist-gebonden code (stempelkaart per teamlid): het bedrag van
-  // de behandelingen die zíj doet — alleen daar geldt de korting op.
-  const discountEligibleTotal = () => selectedServices
-    .filter(item => appliedDiscount?.staffId && item.staff?.id === appliedDiscount.staffId)
-    .reduce((sum, item) => sum + itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0), 0);
+  // Afbakening van een code (sinds 11-10-2026), exact zoals book-appointment:
+  //   - staffId (stempelkaart per teamlid): alleen de behandelingen die zíj doet;
+  //   - service_ids (eigenaarcode): alleen die behandelingen;
+  //   - valid_from / valid_until (eigenaarcode): alleen voor een AFSPRAAKdatum
+  //     in die periode. Buiten de periode staat de code er wel, maar telt hij
+  //     niet mee en zegt de pagina waarom — de server weigert hem dan ook.
+  const isDay = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const discountSvcIds = (d) => (Array.isArray(d?.service_ids) ? d.service_ids.filter(x => typeof x === "string" && x) : []);
+  const discountDateOk = (d) => !d || ((!isDay(d.valid_from) || date >= d.valid_from) && (!isDay(d.valid_until) || date <= d.valid_until));
+  const discountRestricted = (d) => !!(d && (d.staffId || discountSvcIds(d).length > 0));
+  // Het bedrag waar een beperkte code op geldt: alleen de delen die er recht op hebben.
+  const discountEligibleTotal = () => {
+    const ids = discountSvcIds(appliedDiscount);
+    return selectedServices
+      .filter(item => (!appliedDiscount?.staffId || item.staff?.id === appliedDiscount.staffId)
+        && (ids.length === 0 || ids.includes(item.service.id)))
+      .reduce((sum, item) => sum + itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0), 0);
+  };
   const getPrice = () => {
     let total = selectedServices.reduce((sum, item) => {
       const extrasTotal = item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0);
       return sum + itemBasePrice(item) + extrasTotal;
     }, 0) + productsTotal();
-    if (appliedDiscount) {
-      if (appliedDiscount.staffId) {
-        // Zelfde rekenregel als de server: alleen háár delen, producten en
-        // delen van collega's blijven vol geprijsd.
-        total = Math.max(0, total - discountEligibleTotal() * appliedDiscount.amount / 100);
+    if (appliedDiscount && discountDateOk(appliedDiscount)) {
+      if (discountRestricted(appliedDiscount)) {
+        // Zelfde rekenregel als de server: alleen de delen die er recht op
+        // hebben; producten en de rest blijven vol geprijsd. Een vast bedrag
+        // hooguit tot wat er onder de code valt.
+        const elig = discountEligibleTotal();
+        const off = appliedDiscount.type === "percent" ? elig * appliedDiscount.amount / 100 : Math.min(appliedDiscount.amount, elig);
+        total = Math.max(0, total - off);
       } else if (appliedDiscount.type === "percent") {
         total = Math.max(0, total * (1 - appliedDiscount.amount / 100));
       } else {
@@ -1795,6 +1811,63 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
       const extrasTotal = item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0);
       return sum + itemBasePrice(item) + extrasTotal;
     }, 0) + productsTotal();
+  };
+  // Werkt de gekozen code op dit moment echt (iets afgeprijsd)? Doorgestreepte
+  // oude prijzen alleen dan — een beperkte code buiten zijn periode of zonder
+  // passende behandeling streepte anders dezelfde prijs door.
+  const discountOn = () => !!appliedDiscount && getPrice() < getOriginalPrice() - 0.005;
+  // Eén regel uitleg onder de code: waar hij op geldt, of waarom hij (nog) niet
+  // meetelt. null = niets te melden (gewone code op de hele boeking).
+  const fmtDay = (d) => {
+    try {
+      return new Date(d + "T12:00:00Z").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+    } catch { return d; }
+  };
+  const discountNote = () => {
+    const d = appliedDiscount;
+    if (!d) return null;
+    if (!discountDateOk(d)) {
+      const from = isDay(d.valid_from) ? fmtDay(d.valid_from) : null;
+      const until = isDay(d.valid_until) ? fmtDay(d.valid_until) : null;
+      // "Kies een datum in die periode" is alleen eerlijk als dat ook kan. Is de
+      // actie al voorbij (salontijd), of begint hij pas ná het laatste boekbare
+      // dag, dan zeggen we dat — anders zoekt de klant naar een datum die niet
+      // bestaat (review 11-10).
+      const today = fmt(getToday());
+      const lastBookable = (() => { const x = new Date(today + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + maxAdvanceDays); return x.toISOString().slice(0, 10); })();
+      if (isDay(d.valid_until) && d.valid_until < today) {
+        return { warn: true, text: lang === "nl" ? `Deze actie is afgelopen (hij gold voor afspraken t/m ${until}).` : lang === "es" ? `Esta promoción ha terminado (valía para citas hasta el ${until}).` : `This promotion has ended (it was valid for appointments up to ${until}).` };
+      }
+      if (isDay(d.valid_from) && d.valid_from > lastBookable) {
+        return { warn: true, text: lang === "nl" ? `Deze code geldt pas voor afspraken vanaf ${from}; zo ver vooruit kun je nog niet boeken.` : lang === "es" ? `Este código vale para citas a partir del ${from}; todavía no se puede reservar con tanta antelación.` : `This code is for appointments from ${from}; you can't book that far ahead yet.` };
+      }
+      const span = from && until
+        ? (lang === "nl" ? `van ${from} t/m ${until}` : lang === "es" ? `del ${from} al ${until}` : `from ${from} to ${until}`)
+        : from ? (lang === "nl" ? `vanaf ${from}` : lang === "es" ? `a partir del ${from}` : `from ${from}`)
+          : (lang === "nl" ? `tot en met ${until}` : lang === "es" ? `hasta el ${until}` : `up to ${until}`);
+      return { warn: true, text: lang === "nl" ? `Deze code geldt alleen voor afspraken ${span}. Kies een datum in die periode om de korting te krijgen.` : lang === "es" ? `Este código solo vale para citas ${span}. Elige una fecha en ese periodo para obtener el descuento.` : `This code is only valid for appointments ${span}. Pick a date in that period to get the discount.` };
+    }
+    if (d.staffId) {
+      return discountEligibleTotal() > 0
+        ? { warn: false, text: lang === "nl" ? `Korting geldt op je behandeling(en) bij ${d.staffName}.` : lang === "es" ? `El descuento se aplica a tus tratamientos con ${d.staffName}.` : `Discount applies to your treatment(s) with ${d.staffName}.` }
+        : { warn: true, text: lang === "nl" ? `Deze code geldt alleen bij ${d.staffName} — kies haar bij je behandeling om de korting te krijgen.` : lang === "es" ? `Este código solo vale con ${d.staffName}: elígela para tu tratamiento para obtener el descuento.` : `This code is only valid with ${d.staffName} — pick her for your treatment to get the discount.` };
+    }
+    const ids = discountSvcIds(d);
+    if (ids.length === 0) return null;
+    const join = (arr) => arr.length <= 1 ? (arr[0] || "") : arr.slice(0, -1).join(", ") + (lang === "nl" ? " en " : lang === "es" ? " y " : " and ") + arr[arr.length - 1];
+    const picked = selectedServices.filter(item => ids.includes(item.service.id)).map(item => svcName(item.service));
+    // Alleen "geldt op" als er ook iets áf gaat: een gratis behandeling in de
+    // code levert niets op, en de server weigert de boeking dan
+    // (discount_service_mismatch) — dan hier de waarschuwing, niet "geldt op".
+    if (picked.length > 0 && discountEligibleTotal() > 0) {
+      return { warn: false, text: lang === "nl" ? `Korting geldt op ${join(picked)}.` : lang === "es" ? `El descuento se aplica a ${join(picked)}.` : `Discount applies to ${join(picked)}.` };
+    }
+    // Alleen behandelingen die op deze pagina bestaan noemen (verborgen of
+    // verwijderde diensten staan niet in de publieke lijst).
+    const all = (initialSalon.services || []).filter(s => ids.includes(s.id)).map(svcName).filter(Boolean);
+    return { warn: true, text: all.length
+      ? (lang === "nl" ? `Deze code geldt alleen voor ${join(all)}.` : lang === "es" ? `Este código solo vale para ${join(all)}.` : `This code is only valid for ${join(all)}.`)
+      : (lang === "nl" ? "Deze code geldt niet voor de gekozen behandeling." : lang === "es" ? "Este código no vale para el tratamiento elegido." : "This code doesn't apply to the chosen treatment.") };
   };
   const getDuration = () => {
     return selectedServices.reduce((sum, item) => sum + itemBaseDuration(item) + itemExtrasDuration(item), 0);
@@ -2693,6 +2766,19 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           : isNl
             ? "Deze kortingscode geldt alleen bij de medewerker bij wie je hem hebt gespaard. Kies haar bij je behandeling."
             : "This discount code is only valid with the team member you earned it with. Pick her for your treatment.",
+        // Beperkte eigenaarcode (11-10-2026): buiten de periode van de actie,
+        // of geen enkele behandeling in de boeking valt eronder. De pagina zegt
+        // dat al onder de code; dit is het vangnet als hij toch verstuurd wordt.
+        discount_not_valid_date: lang === "es"
+          ? "Este código de descuento no vale para la fecha elegida. Elige una fecha dentro del periodo de la promoción o quita el código."
+          : isNl
+            ? "Deze kortingscode geldt niet voor de gekozen datum. Kies een datum binnen de actieperiode of haal de code weg."
+            : "This discount code isn't valid for the chosen date. Pick a date within the promotion period or remove the code.",
+        discount_service_mismatch: lang === "es"
+          ? "Este código de descuento no vale para los tratamientos elegidos. Elige uno de los tratamientos de la promoción o quita el código."
+          : isNl
+            ? "Deze kortingscode geldt niet voor de gekozen behandelingen. Kies een behandeling uit de actie of haal de code weg."
+            : "This discount code doesn't apply to the chosen treatments. Pick a treatment from the promotion or remove the code.",
         rate_limited: lang === "es" ? "Demasiados intentos, inténtalo de nuevo en un momento." : isNl ? "Te veel pogingen, probeer het zo opnieuw." : "Too many attempts, try again in a moment.",
         // De salon zette Vooruitbetalen uit (of haalde haar betaalgegevens weg)
         // terwijl deze pagina al open stond.
@@ -3963,16 +4049,14 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               <span style={{ fontSize: 11, color: "#4ade80" }}>
                 <NavIcon name="tag" size={11} color={accent} /> {appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`})
               </span>
-              <span style={{ fontSize: 12, color: c.textLabel, textDecoration: "line-through" }}>{fmtAmt(cur, getOriginalPrice())}</span>
+              {discountOn() && <span style={{ fontSize: 12, color: c.textLabel, textDecoration: "line-through" }}>{fmtAmt(cur, getOriginalPrice())}</span>}
             </div>
           )}
-          {/* Stylist-gebonden code: zeggen waar hij op geldt — en waarschuwen als
-              er (nog) geen behandeling bij die stylist in de selectie zit. */}
-          {appliedDiscount?.staffId && (
-            <div style={{ fontSize: 11, color: discountEligibleTotal() > 0 ? c.textSub : "#f87171", marginBottom: 8, lineHeight: 1.4 }}>
-              {discountEligibleTotal() > 0
-                ? (lang === "nl" ? `Korting geldt op je behandeling(en) bij ${appliedDiscount.staffName}.` : lang === "es" ? `El descuento se aplica a tus tratamientos con ${appliedDiscount.staffName}.` : `Discount applies to your treatment(s) with ${appliedDiscount.staffName}.`)
-                : (lang === "nl" ? `Deze code geldt alleen bij ${appliedDiscount.staffName} — kies haar bij je behandeling om de korting te krijgen.` : lang === "es" ? `Este código solo vale con ${appliedDiscount.staffName}: elígela para tu tratamiento para obtener el descuento.` : `This code is only valid with ${appliedDiscount.staffName} — pick her for your treatment to get the discount.`)}
+          {/* Beperkte code (stylist, behandelingen of periode): zeggen waar hij
+              op geldt — en waarschuwen als hij nu niet meetelt. */}
+          {discountNote() && (
+            <div style={{ fontSize: 11, color: discountNote().warn ? "#f87171" : c.textSub, marginBottom: 8, lineHeight: 1.4 }}>
+              {discountNote().text}
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -4902,6 +4986,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     <div>
                       <div style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}><NavIcon name="tag" size={12} color="#4ade80" /> {t.codeApplied}</div>
                       <div style={{ fontSize: 11, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`}</div>
+                      {discountNote() && <div style={{ fontSize: 11, color: discountNote().warn ? "#f87171" : c.textSub, marginTop: 4, lineHeight: 1.4 }}>{discountNote().text}</div>}
                     </div>
                     <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}><NavIcon name="xmark" size={12} color={c.textLabel} /></div>
                   </div>
@@ -5002,7 +5087,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
                     <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
                     <div>
-                      {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 10 }}>{fmtAmt(cur, getOriginalPrice())}</span>}
+                      {discountOn() && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 10 }}>{fmtAmt(cur, getOriginalPrice())}</span>}
                       <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>{fmtAmt(cur, getPrice())}</span>
                     </div>
                   </div>
@@ -5563,6 +5648,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                         <div>
                           <div style={{ fontSize: 11, color: "#4ade80", fontWeight: 500 }}><NavIcon name="tag" size={12} color="#4ade80" /> {t.codeApplied}</div>
                           <div style={{ fontSize: 10, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`}</div>
+                          {discountNote() && <div style={{ fontSize: 11, color: discountNote().warn ? "#f87171" : c.textSub, marginTop: 4, lineHeight: 1.4 }}>{discountNote().text}</div>}
                         </div>
                         <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}><NavIcon name="xmark" size={12} color={c.textLabel} /></div>
                       </div>
@@ -5652,7 +5738,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
                         <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
                         <div>
-                          {appliedDiscount && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 8 }}>{fmtAmt(cur, getOriginalPrice())}</span>}
+                          {discountOn() && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 8 }}>{fmtAmt(cur, getOriginalPrice())}</span>}
                           <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>{fmtAmt(cur, getPrice())}</span>
                         </div>
                       </div>
