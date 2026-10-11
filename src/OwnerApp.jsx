@@ -17940,13 +17940,19 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                           </div>
                                         ) : (
                                           <div>
-                                          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                                          {/* flexWrap + basis 150px (Faisal 11-10, TTNB-screenshot):
+                                              prijs en knoppen krompen nooit, dus op een telefoon
+                                              kreeg de naam ~50px en brak per woord af. Nu zakken
+                                              prijs + knoppen samen naar een tweede regel (rechts)
+                                              zodra de naam minder dan 150px zou krijgen. */}
+                                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
                                             <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
-                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ flex: "1 1 150px", minWidth: 0 }}>
                                               <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)}</div>
                                               {(lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)) && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)}</div>}
                                               <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                             </div>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: "auto" }}>
                                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: accent, flexShrink: 0 }}>{fmtAmt(cur, parseFloat(v.price))}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
                                               <button aria-label={lang === "nl" ? "Bewerk variant" : lang === "es" ? "Editar variante" : "Edit variant"} onClick={() => { setEditingVariant(v.id); setEditVariantForm({ name_nl: v.name_nl, name_en: v.name_en || "", name_es: v.name_es || "", price: v.price, duration: v.duration, description_nl: v.description_nl || "", description_en: v.description_en || "", description_es: v.description_es || "", per_unit: !!v.per_unit }); }}
@@ -17962,6 +17968,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                               }} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                                 <NavIcon name="xmark" size={11} color="currentColor" />
                                               </button>
+                                            </div>
                                             </div>
                                           </div>
                                           {/* Prijs per teamlid, per variant — dé oplossing voor
@@ -18337,10 +18344,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                             </div>
                                           </div>
                                         ) : (
-                                          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
+                                          // Zelfde als de variantrij: prijs + knoppen zakken naar
+                                          // een tweede regel als de naam anders te smal wordt.
+                                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px", padding: "10px 14px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12 }}>
                                             <DragHandle listeners={listeners} attributes={attributes} color={c.textMuted} />
                                             <span style={{ fontSize: 16, color: accent, lineHeight: 1 }}>+</span>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ flex: "1 1 150px", minWidth: 0 }}>
                                               <div style={{ fontSize: 12, fontWeight: 500, color: c.text }}>{lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}</div>
                                               {(parseInt(e.duration) || 0) > 0 && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>+{parseInt(e.duration)} min</div>}
                                               {(e.excluded_staff_ids || []).length > 0 && (
@@ -18350,6 +18359,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                                 </div>
                                               )}
                                             </div>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: "auto" }}>
                                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: accent, flexShrink: 0 }}>+{fmtAmt(cur, parseFloat(e.price))}</div>
                                             <div style={{ display: "flex", gap: 4 }}>
                                               <button onClick={() => { setEditingExtra(e.id); setEditExtraForm({ name_nl: e.name_nl, name_en: e.name_en || "", name_es: e.name_es || "", price: e.price, duration: e.duration == null ? "" : String(e.duration), per_unit: !!e.per_unit, excluded_staff_ids: e.excluded_staff_ids || [] }); }}
@@ -18365,6 +18375,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                               }} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${c.danger}26`, background: "transparent", color: c.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                                 <NavIcon name="xmark" size={11} color="currentColor" />
                                               </button>
+                                            </div>
                                             </div>
                                           </div>
                                         )}

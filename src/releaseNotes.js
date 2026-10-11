@@ -14,6 +14,32 @@
 
 export const RELEASES = [
   {
+    // Telefoonweergave (TTNB-screenshots 10/11-10): de naam van een optie
+    // brak per woord af naast prijs en knoppen, en de categoriebalk op de
+    // boekingspagina gebruikte maar een deel van de schermbreedte.
+    id: "2026-10-11b",
+    date: "2026-10-11",
+    title: { nl: "Beter leesbaar op je telefoon", en: "Easier to read on your phone", es: "Más fácil de leer en tu teléfono" },
+    items: [
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Diensten: bij de opties en extra's van een dienst krijgt de naam nu de hele breedte; prijs en knoppen staan op je telefoon eronder.",
+          en: "Services: the options and extras of a service now give the name the full width; on your phone the price and buttons sit below it.",
+          es: "Servicios: en las opciones y extras de un servicio el nombre ahora usa todo el ancho; en tu teléfono el precio y los botones van debajo.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Boekingspagina: de balk met categorieën loopt op een telefoon nu van rand tot rand, zodat je klanten meer categorieën tegelijk zien.",
+          en: "Booking page: on a phone the category bar now runs edge to edge, so your clients see more categories at once.",
+          es: "Página de reservas: en un teléfono la barra de categorías ahora va de borde a borde, así tus clientes ven más categorías a la vez.",
+        },
+      },
+    ],
+  },
+  {
     // My Whims and More (Bonaire) wilde een seizoensactie: 15% op vijf
     // gezichtsbehandelingen voor afspraken in november–januari. Een code gold
     // tot nu toe altijd voor alles en bleef geldig tot je hem uitzette.

@@ -3295,8 +3295,14 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     .profile-hero-logo-wrap { margin-top: -32px; }
     .profile-hero-logo { width: 64px; height: 64px; border-width: 3px; }
     .profile-hero-book { height: 40px; padding: 0 16px; font-size: 11px; }
-    /* Categoriechips blijven bovenaan plakken tijdens het scrollen door de lijst. */
-    .profile-cat-scroll { position: sticky; top: calc(48px + env(safe-area-inset-top, 0px)); z-index: 20; background: ${c.bg}; padding-top: 6px; margin-top: -6px; }
+    /* Categoriechips blijven bovenaan plakken tijdens het scrollen door de lijst.
+       Van rand tot rand (Faisal 10-10: "heel compact terwijl er links en rechts
+       ruimte is"): de balk stapt over de zijmarges van de kolom heen, zodat de
+       chips de hele schermbreedte krijgen. calc(50% - 50vw) in plaats van een
+       vast getal: de marge verschilt per breedte (42px op een telefoon, 26px op
+       768px) en een vaste -42px duwde de pijlen op een tablet buiten beeld. De
+       kolom staat gecentreerd, dus links en rechts is het verschil gelijk. */
+    .profile-cat-scroll { position: sticky; top: calc(48px + env(safe-area-inset-top, 0px)); z-index: 20; background: ${c.bg}; padding-top: 6px; margin-top: -6px; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); padding-left: 12px; padding-right: 12px; }
     /* minmax(0, 1fr), nooit kaal 1fr: een 1fr-kolom heeft min-content als
        ondergrens en groeide met de nowrap-chipsrij van een teamkaart tot 635px
        op een scherm van 390px — de kaart viel rechts van het scherm af (15-09). */
