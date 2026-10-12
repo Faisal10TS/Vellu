@@ -14,6 +14,74 @@ import { useTheme, ACCENT, Layout, NavIcon, ThemeToggle, LangToggle, useDashboar
 import { Star } from "./RateVellu.jsx";
 
 const fmtEur = (n) => `€${Math.round(Number(n) || 0).toLocaleString("nl-NL")}`;
+// Op de cent, voor de boekhouding (factuurlijst, btw-kaart).
+const fmtEur2 = (n) => `€${(Number(n) || 0).toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+// Periodesleutel uit een factuurdatum "YYYY-MM-DD".
+const periodKeyOf = (kind, iso) => {
+  const s = String(iso || "");
+  const yy = s.slice(0, 4), mm = Number(s.slice(5, 7)) || 1;
+  return kind === "month" ? `${yy}-${String(mm).padStart(2, "0")}` : kind === "quarter" ? `${yy}-Q${Math.floor((mm - 1) / 3) + 1}` : yy;
+};
+const periodLabelOf = (kind, key) => {
+  if (kind === "month") { const [yy, mm] = key.split("-"); return new Date(Number(yy), Number(mm) - 1, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" }); }
+  if (kind === "quarter") { const [yy, q] = key.split("-"); return `${q} ${yy}`; }
+  return key;
+};
+const isNlVat = (inv) => inv.vat_treatment === "nl_vat";
+const treatmentLabel = (inv) => isNlVat(inv) ? "NL btw 21% (rubriek 1a)" : "Buiten de EU (niet in de aangifte)";
+
+// Excel (eigen schrijver src/xlsx.js) en CSV van de facturen van één periode.
+async function downloadInvoicesXlsx(invoices, periodLabel, fileKey) {
+  const { buildXlsx, saveXlsx } = await import("./xlsx.js");
+  const head = ["Factuurdatum", "Factuurnummer", "Salon", "Land", "Btw-nummer salon", "KvK salon", "Plan", "Interval", "Periode van", "Periode tot", "Omzet excl. btw", "Btw-tarief", "Btw", "Totaal", "Btw-behandeling", "Mollie-betaling"].map((v) => ({ v, s: "header" }));
+  const body = invoices.map((i) => [
+    { d: i.issued_on }, i.invoice_number || "", i.business_name || "", i.country_code || "", i.salon_btw_id || "", i.salon_kvk || "",
+    i.plan || "", i.billing_interval || "", i.period_start ? { d: i.period_start } : "", i.period_end ? { d: i.period_end } : "",
+    { v: r2(i.amount_excl_vat), s: "money" }, isNlVat(i) ? `${Math.round((Number(i.vat_rate) || 0) * 100)}%` : "—",
+    { v: r2(i.vat_amount), s: "money" }, { v: r2(i.total_eur), s: "money" }, treatmentLabel(i), i.mollie_payment_id || "",
+  ]);
+  const last = body.length + 1;
+  const sum = (col, v) => (body.length ? { f: `SUM(${col}2:${col}${last})`, v: r2(v), s: "moneyTotal" } : { v: 0, s: "moneyTotal" });
+  const tot = (k) => invoices.reduce((s, i) => s + (Number(i[k]) || 0), 0);
+  const totalRow = [null, null, null, null, null, null, null, null, null, { v: "Totaal", s: "textTotal" }, sum("K", tot("amount_excl_vat")), null, sum("M", tot("vat_amount")), sum("N", tot("total_eur")), null, null];
+  const nl = invoices.filter(isNlVat), out = invoices.filter((i) => !isNlVat(i));
+  const nlEx = r2(nl.reduce((s, i) => s + (Number(i.amount_excl_vat) || 0), 0));
+  const nlVat = r2(nl.reduce((s, i) => s + (Number(i.vat_amount) || 0), 0));
+  const outTot = r2(out.reduce((s, i) => s + (Number(i.total_eur) || 0), 0));
+  const summary = [
+    [{ v: "Btw-aangifte — abonnementsomzet Vellu", s: "title" }],
+    ["Periode", null, periodLabel],
+    [],
+    [{ v: "Rubriek", s: "header" }, { v: "", s: "header" }, { v: "Omzet", s: "header" }, { v: "Btw", s: "header" }, { v: "Facturen", s: "header" }],
+    ["1a Leveringen/diensten belast met hoog tarief", null, { v: nlEx, s: "money" }, { v: nlVat, s: "money" }, { v: nl.length, s: "int" }],
+    ["Afgerond in hele euro's (in je voordeel)", null, { v: Math.floor(nlEx), s: "int" }, { v: Math.floor(nlVat), s: "int" }],
+    [],
+    ["Buiten de EU — niet in de aangifte", null, { v: outTot, s: "money" }, null, { v: out.length, s: "int" }],
+    [],
+    [{ v: "Rubriek 4a/4b en 5b komen uit je inkoopfacturen (Vercel, Supabase, Resend, Anthropic e.d.), niet uit Vellu.", s: "muted" }],
+    [{ v: "Facturen naar een salon buiten Nederland mét btw erop: die btw staat op de factuur en moet je afdragen (art. 37 Wet OB).", s: "muted" }],
+    [{ v: "Vellu geeft geen fiscaal advies; laat de aangifte zo nodig controleren door een boekhouder.", s: "muted" }],
+  ];
+  const sheets = [
+    { name: "Btw-aangifte", cols: [44, 4, 14, 12, 10], rows: summary, landscape: false },
+    { name: "Facturen", cols: [12, 15, 24, 6, 18, 11, 12, 9, 12, 12, 14, 9, 11, 12, 30, 24], rows: [head, ...body, totalRow], freeze: true, filter: Math.max(1, last), printTitleRow: 1, header: `Facturen Vellu · ${periodLabel}`, footer: "Pagina &P / &N" },
+  ];
+  saveXlsx(`vellu-facturen-${fileKey}.xlsx`, buildXlsx({ sheets, currencySymbol: "€" }));
+}
+function downloadInvoicesCsv(invoices, fileKey) {
+  const money = (n) => r2(n).toFixed(2).replace(".", ",");
+  const esc = (v) => { const s = String(v ?? ""); return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const lines = [
+    ["Factuurdatum", "Factuurnummer", "Salon", "Land", "Btw-nummer salon", "KvK salon", "Plan", "Interval", "Periode van", "Periode tot", "Omzet excl. btw", "Btw-tarief", "Btw", "Totaal", "Btw-behandeling", "Mollie-betaling"],
+    ...invoices.map((i) => [i.issued_on, i.invoice_number, i.business_name, i.country_code, i.salon_btw_id, i.salon_kvk, i.plan, i.billing_interval, i.period_start, i.period_end,
+      money(i.amount_excl_vat), isNlVat(i) ? `${Math.round((Number(i.vat_rate) || 0) * 100)}%` : "", money(i.vat_amount), money(i.total_eur), treatmentLabel(i), i.mollie_payment_id]),
+  ].map((row) => row.map(esc).join(";")).join("\r\n");
+  const blob = new Blob(["﻿" + lines], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = `vellu-facturen-${fileKey}.csv`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" }) : "—";
 const fmtDateTime = (iso) => iso ? new Date(iso).toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
 const relTime = (iso) => {
@@ -71,8 +139,12 @@ export default function AdminDashboard({ onLogout }) {
   // Abonnementsomzet per maand/kwartaal/jaar (admin_subscription_revenue,
   // 06-10-2026: "how much I make a month, a year and quarterly off Vellu
   // subscriptions") — echt geïnde facturen, demo's uitgesloten.
-  const [subRevenue, setSubRevenue] = useState([]);
-  const [revView, setRevView] = useState("month"); // month | quarter | year
+  // 12-10-2026: per factuur (admin_subscription_invoices) voor de boekhouding;
+  // de periodesommen rekent het blok zelf, met de splitsing btw-omzet / buiten
+  // de EU, een factuurlijst per periode, een btw-aangiftekaart en Excel/CSV.
+  const [subInvoices, setSubInvoices] = useState([]);
+  const [revView, setRevView] = useState("quarter"); // month | quarter | year
+  const [revSel, setRevSel] = useState(null); // gekozen periode (sleutel), null = automatisch
   // "Beoordeel Vellu" (16-09-2026): cijfers + toelichting van saloneigenaren,
   // met de knop om een citaat op vellu.cc te zetten (alleen als de salon dat
   // toestond). Zie RateVellu.jsx en migratie beoordeel_vellu.
@@ -118,7 +190,7 @@ export default function AdminDashboard({ onLogout }) {
         supabase.rpc("admin_app_ratings"),
         supabase.rpc("admin_rating_invites"),
         supabase.rpc("admin_rating_site_visibility"),
-        supabase.rpc("admin_subscription_revenue"),
+        supabase.rpc("admin_subscription_invoices"),
       ]);
       if (cancelled) return;
       setOverview(ov.data?.[0] || null);
@@ -128,7 +200,7 @@ export default function AdminDashboard({ onLogout }) {
       setTimeline(tl.data || []);
       setBilling(bo.data?.[0] || null);
       setSubs(sb.data || []);
-      setSubRevenue(sr.data || []);
+      setSubInvoices(sr.data || []);
       setRatings(ar.data || []);
       setInvites(ai.data || []);
       setSiteOn(!!sv.data);
@@ -376,77 +448,188 @@ export default function AdminDashboard({ onLogout }) {
               MRR counts salons with an active Mollie subscription, plus yearly customers with a paid invoice covering today (the yearly flow is a one-off payment, no Mollie subscription) — yearly counts at its monthly equivalent (price ÷ 12). Trials and comped/demo accounts contribute €0 until they convert. All amounts in euro — Vellu always bills in euro, whatever currency the salon itself uses.
             </div>
 
-            {/* ── Subscription income per month / quarter / year (06-10-2026):
-                what Vellu actually collected (payment_invoices), not the run-rate. ── */}
+            {/* ── Subscription income per month / quarter / year (06-10-2026),
+                uitgebreid voor de boekhouding (12-10-2026): per periode de
+                splitsing btw-omzet / buiten de EU, een factuurlijst, een
+                btw-aangiftekaart (kwartaal) en Excel/CSV. Bron: echt geïnde
+                facturen (admin_subscription_invoices), demo's uitgesloten. ── */}
             {(() => {
-              const nowD = new Date(now);
-              const y = nowD.getFullYear(), m = nowD.getMonth();
-              const pad2 = (n) => String(n).padStart(2, "0");
-              const keyOf = (kind, d) => kind === "month" ? `${d.getFullYear()}-${pad2(d.getMonth() + 1)}` : kind === "quarter" ? `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}` : String(d.getFullYear());
-              const prevOf = (kind) => kind === "month" ? new Date(y, m - 1, 1) : kind === "quarter" ? new Date(y, m - 3, 1) : new Date(y - 1, 0, 1);
-              const labelOf = (kind, key) => {
-                if (kind === "month") { const [yy, mm] = key.split("-"); return new Date(Number(yy), Number(mm) - 1, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" }); }
-                if (kind === "quarter") { const [yy, q] = key.split("-"); return `${q} ${yy}`; }
-                return key;
-              };
-              const rowsOf = (kind) => subRevenue.filter((r) => r.kind === kind).slice().sort((a, b) => String(b.period_start).localeCompare(String(a.period_start)));
-              const rows = rowsOf(revView);
-              const find = (kind, key) => subRevenue.find((r) => r.kind === kind && r.period_key === key);
-              const cur = find(revView, keyOf(revView, nowD));
-              const prev = find(revView, keyOf(revView, prevOf(revView)));
-              const ytd = find("year", String(y));
+              const nowIso = (() => { const d = new Date(now); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
+              const y = nowIso.slice(0, 4);
+              const prevIso = (() => {
+                const d = new Date(now); const yy = d.getFullYear(), mm = d.getMonth();
+                const p = revView === "month" ? new Date(yy, mm - 1, 1) : revView === "quarter" ? new Date(yy, mm - 3, 1) : new Date(yy - 1, 0, 1);
+                return `${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, "0")}-01`;
+              })();
+              // Periodesommen uit de facturen.
+              const groups = new Map();
+              for (const inv of subInvoices) {
+                const key = periodKeyOf(revView, inv.issued_on);
+                const g = groups.get(key) || { key, invoices: [], salons: new Set(), nlEx: 0, nlVat: 0, nlCount: 0, outTotal: 0, outCount: 0, total: 0 };
+                g.invoices.push(inv);
+                g.salons.add(inv.salon_id);
+                g.total += Number(inv.total_eur) || 0;
+                if (isNlVat(inv)) { g.nlEx += Number(inv.amount_excl_vat) || 0; g.nlVat += Number(inv.vat_amount) || 0; g.nlCount++; }
+                else { g.outTotal += Number(inv.total_eur) || 0; g.outCount++; }
+                groups.set(key, g);
+              }
+              const rows = [...groups.values()].sort((a, b) => b.key.localeCompare(a.key));
+              const curKey = periodKeyOf(revView, nowIso);
+              const prevKey = periodKeyOf(revView, prevIso);
+              const cur = groups.get(curKey), prev = groups.get(prevKey);
+              const ytdInv = subInvoices.filter((i) => String(i.issued_on || "").startsWith(y));
+              const ytdTotal = ytdInv.reduce((s, i) => s + (Number(i.total_eur) || 0), 0);
+              const ytdNlEx = ytdInv.filter(isNlVat).reduce((s, i) => s + (Number(i.amount_excl_vat) || 0), 0);
+              const ytdNlVat = ytdInv.filter(isNlVat).reduce((s, i) => s + (Number(i.vat_amount) || 0), 0);
+              const ytdOut = ytdInv.filter((i) => !isNlVat(i)).reduce((s, i) => s + (Number(i.total_eur) || 0), 0);
+              // Gekozen periode: zelf aangeklikt, anders de huidige als die
+              // facturen heeft, anders de meest recente met facturen.
+              const selKey = (revSel && groups.has(revSel)) ? revSel : (cur ? curKey : rows[0]?.key || null);
+              const sel = selKey ? groups.get(selKey) : null;
+              const selInvoices = sel ? sel.invoices.slice().sort((a, b) => String(a.issued_on).localeCompare(String(b.issued_on)) || String(a.invoice_number).localeCompare(String(b.invoice_number))) : [];
+              // Btw op een factuur aan een salon buiten Nederland: staat erop,
+              // dus wel afdragen (art. 37 Wet OB) — apart melden.
+              const vatAbroad = selInvoices.filter((i) => isNlVat(i) && i.country_code && i.country_code !== "NL");
               const unit = revView === "month" ? "month" : revView === "quarter" ? "quarter" : "year";
-              const maxTot = Math.max(1, ...rows.map((r) => Number(r.total_eur) || 0));
+              const maxTot = Math.max(1, ...rows.map((r) => r.total));
               const pill = (on) => ({ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "6px 10px", borderRadius: 8, cursor: "pointer", border: `1px solid ${on ? accent : c.border}`, background: on ? `${accent}1a` : "transparent", color: on ? accent : c.textSub, fontFamily: "inherit" });
+              const th = (h, left) => <th key={h} style={{ padding: "10px 12px", textAlign: left ? "left" : "right", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, whiteSpace: "nowrap" }}>{h}</th>;
+              const td = { padding: "10px 12px", textAlign: "right", color: c.textSub, whiteSpace: "nowrap" };
+              const splitSub = (g) => g ? `${fmtEur(g.nlEx)} taxable + ${fmtEur(g.nlVat)} VAT · ${fmtEur(g.outTotal)} outside EU` : "no invoices";
+              const selLabel = selKey ? periodLabelOf(revView, selKey) : "";
+              const nlEx = sel ? r2(sel.nlEx) : 0, nlVat = sel ? r2(sel.nlVat) : 0;
               return (
                 <div data-sub-revenue style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "14px 18px", marginBottom: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
                     <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>Subscription income — collected by Vellu</div>
                     <div style={{ display: "flex", gap: 4 }}>
                       {[["month", "Monthly"], ["quarter", "Quarterly"], ["year", "Yearly"]].map(([k, l]) => (
-                        <button key={k} type="button" data-rev-view={k} onClick={() => setRevView(k)} style={pill(revView === k)}>{l}</button>
+                        <button key={k} type="button" data-rev-view={k} onClick={() => { setRevView(k); setRevSel(null); }} style={pill(revView === k)}>{l}</button>
                       ))}
                     </div>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 14 }}>
-                    <StatCard label={`This ${unit}`} value={fmtEur(cur?.total_eur)} sub={`${labelOf(revView, keyOf(revView, nowD))} · ${cur?.invoice_count ?? 0} invoices · ${cur?.salon_count ?? 0} salons`} accent={accent} c={c} />
-                    <StatCard label={`Previous ${unit}`} value={fmtEur(prev?.total_eur)} sub={`${labelOf(revView, keyOf(revView, prevOf(revView)))} · ${prev?.invoice_count ?? 0} invoices`} accent={c.textSub} c={c} />
-                    <StatCard label="This year to date" value={fmtEur(ytd?.total_eur)} sub={`${y} · ${fmtEur(ytd?.excl_vat_eur)} excl. VAT · ${ytd?.invoice_count ?? 0} invoices`} accent={accent} c={c} />
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 14 }}>
+                    <StatCard label={`This ${unit}`} value={fmtEur(cur?.total)} sub={`${periodLabelOf(revView, curKey)} · ${cur?.invoices.length ?? 0} invoices · ${splitSub(cur)}`} accent={accent} c={c} />
+                    <StatCard label={`Previous ${unit}`} value={fmtEur(prev?.total)} sub={`${periodLabelOf(revView, prevKey)} · ${prev?.invoices.length ?? 0} invoices · ${splitSub(prev)}`} accent={c.textSub} c={c} />
+                    <StatCard label="This year to date" value={fmtEur(ytdTotal)} sub={`${y} · ${fmtEur(ytdNlEx)} taxable + ${fmtEur(ytdNlVat)} VAT · ${fmtEur(ytdOut)} outside EU · ${ytdInv.length} invoices`} accent={accent} c={c} />
                   </div>
                   {rows.length === 0 ? (
                     <div style={{ fontSize: 12, color: c.textMuted }}>No paid invoices yet.</div>
-                  ) : (
+                  ) : (<>
                     <div style={{ overflowX: "auto" }}>
                       <table data-rev-table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                         <thead>
                           <tr style={{ background: c.bg, borderBottom: `1px solid ${c.border}` }}>
-                            {["Period", "Invoices", "Salons", "Excl. VAT", "VAT", "Total", ""].map((h) => (
-                              <th key={h} style={{ padding: "10px 12px", textAlign: h === "Period" || h === "" ? "left" : "right", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{h}</th>
-                            ))}
+                            {th("Period", true)}{th("Invoices")}{th("Salons")}{th("Taxable (excl. VAT)")}{th("VAT 21%")}{th("Outside EU (no VAT)")}{th("Total")}{th("", true)}
                           </tr>
                         </thead>
                         <tbody>
-                          {rows.map((r) => (
-                            <tr key={r.period_key} style={{ borderBottom: `1px solid ${c.border}` }}>
-                              <td style={{ padding: "10px 12px", fontWeight: 500 }}>{labelOf(revView, r.period_key)}</td>
-                              <td style={{ padding: "10px 12px", textAlign: "right", color: c.textSub }}>{r.invoice_count}</td>
-                              <td style={{ padding: "10px 12px", textAlign: "right", color: c.textSub }}>{r.salon_count}</td>
-                              <td style={{ padding: "10px 12px", textAlign: "right", color: c.textSub }}>{fmtEur(r.excl_vat_eur)}</td>
-                              <td style={{ padding: "10px 12px", textAlign: "right", color: c.textMuted }}>{fmtEur(r.vat_eur)}</td>
-                              <td style={{ padding: "10px 12px", textAlign: "right", color: accent, fontFamily: "'Cormorant Garamond',serif", fontSize: 16, whiteSpace: "nowrap" }}>{fmtEur(r.total_eur)}</td>
-                              <td style={{ padding: "10px 12px", width: "30%" }}>
-                                <div style={{ height: 8, borderRadius: 4, background: c.bg, overflow: "hidden" }}>
-                                  <div style={{ height: "100%", width: `${Math.round(((Number(r.total_eur) || 0) / maxTot) * 100)}%`, background: accent, borderRadius: 4 }} />
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                          {rows.map((r) => {
+                            const on = r.key === selKey;
+                            return (
+                              <tr key={r.key} data-rev-row={r.key} onClick={() => setRevSel(r.key)} title="Show the invoices of this period"
+                                style={{ borderBottom: `1px solid ${c.border}`, cursor: "pointer", background: on ? `${accent}12` : "transparent" }}>
+                                <td style={{ padding: "10px 12px", fontWeight: on ? 700 : 500, color: on ? accent : c.text, whiteSpace: "nowrap" }}>{periodLabelOf(revView, r.key)}</td>
+                                <td style={td}>{r.invoices.length}</td>
+                                <td style={td}>{r.salons.size}</td>
+                                <td style={td}>{fmtEur2(r.nlEx)}</td>
+                                <td style={td}>{fmtEur2(r.nlVat)}</td>
+                                <td style={td}>{fmtEur2(r.outTotal)}</td>
+                                <td style={{ ...td, color: accent, fontFamily: "'Cormorant Garamond',serif", fontSize: 16 }}>{fmtEur2(r.total)}</td>
+                                <td style={{ padding: "10px 12px", width: "22%" }}>
+                                  <div style={{ height: 8, borderRadius: 4, background: c.bg, overflow: "hidden", display: "flex" }}>
+                                    <div style={{ height: "100%", width: `${Math.round(((r.nlEx + r.nlVat) / maxTot) * 100)}%`, background: accent }} />
+                                    <div style={{ height: "100%", width: `${Math.round((r.outTotal / maxTot) * 100)}%`, background: `${accent}66` }} />
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
-                  )}
+                    <div style={{ fontSize: 11, color: c.textMuted, marginTop: 8 }}>Click a period to see its invoices. Bar: dark = Dutch VAT revenue, light = outside the EU.</div>
+
+                    {sel && (
+                      <div data-rev-period style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${c.border}` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{selLabel} · {selInvoices.length} invoices · {fmtEur2(sel.total)}</div>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button type="button" data-rev-xlsx className="btn-ghost" style={{ padding: "7px 12px", fontSize: 11 }} onClick={() => downloadInvoicesXlsx(selInvoices, selLabel, selKey)}>Download Excel</button>
+                            <button type="button" data-rev-csv className="btn-ghost" style={{ padding: "7px 12px", fontSize: 11 }} onClick={() => downloadInvoicesCsv(selInvoices, selKey)}>Download CSV</button>
+                          </div>
+                        </div>
+
+                        {/* Btw-aangifte (per kwartaal): rubriek 1a direct af te lezen. */}
+                        {revView === "quarter" ? (
+                          <div data-vat-return style={{ background: `${accent}0d`, border: `1px solid ${accent}33`, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
+                            <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: accent, marginBottom: 8 }}>Btw-aangifte {selLabel} — abonnementsomzet</div>
+                            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", gap: "6px 18px", fontSize: 12, alignItems: "baseline" }}>
+                              <div style={{ color: c.textLabel, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>Rubriek</div>
+                              <div style={{ color: c.textLabel, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", textAlign: "right" }}>Omzet</div>
+                              <div style={{ color: c.textLabel, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", textAlign: "right" }}>Btw</div>
+                              <div>1a Leveringen/diensten belast met hoog tarief</div>
+                              <div data-vat-1a-omzet style={{ textAlign: "right", fontWeight: 700 }}>€ {Math.floor(nlEx).toLocaleString("nl-NL")}</div>
+                              <div data-vat-1a-btw style={{ textAlign: "right", fontWeight: 700 }}>€ {Math.floor(nlVat).toLocaleString("nl-NL")}</div>
+                              <div style={{ color: c.textMuted, fontSize: 11 }}>exact, {sel.nlCount} invoices</div>
+                              <div style={{ textAlign: "right", color: c.textMuted, fontSize: 11 }}>{fmtEur2(nlEx)}</div>
+                              <div style={{ textAlign: "right", color: c.textMuted, fontSize: 11 }}>{fmtEur2(nlVat)}</div>
+                              <div>Buiten de EU — niet opgeven ({sel.outCount} invoices)</div>
+                              <div style={{ textAlign: "right", color: c.textSub }}>{fmtEur2(sel.outTotal)}</div>
+                              <div style={{ textAlign: "right", color: c.textMuted }}>—</div>
+                            </div>
+                            <div style={{ fontSize: 11, color: c.textMuted, marginTop: 10, lineHeight: 1.5 }}>
+                              Afgerond in hele euro's in je voordeel. De rest van rubriek 1 en rubriek 2 en 3 blijven leeg voor de abonnementen. Rubriek 4a/4b en 5b komen uit je inkoopfacturen (Vercel, Supabase, Resend, Anthropic, Mollie-kosten e.d.), niet uit Vellu. Vellu geeft geen fiscaal advies.
+                            </div>
+                            {vatAbroad.length > 0 && (
+                              <div data-vat-abroad style={{ fontSize: 11, color: c.warning, marginTop: 8, lineHeight: 1.5 }}>
+                                {vatAbroad.length === 1 ? "1 invoice" : `${vatAbroad.length} invoices`} to a salon outside the Netherlands carried 21% VAT ({vatAbroad.map((i) => `${i.invoice_number} ${i.business_name} ${i.country_code}`).join(", ")}). The VAT is on the invoice, so it is included in 1a and must be paid (art. 37 Wet OB).
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12 }}>The VAT return is quarterly — switch to Quarterly to see the rubriek 1a figures.</div>
+                        )}
+
+                        <div style={{ overflowX: "auto" }}>
+                          <table data-rev-invoices style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                            <thead>
+                              <tr style={{ background: c.bg, borderBottom: `1px solid ${c.border}` }}>
+                                {th("Date", true)}{th("Invoice", true)}{th("Salon", true)}{th("Country", true)}{th("Plan", true)}{th("Excl. VAT")}{th("VAT")}{th("Total")}{th("VAT treatment", true)}{th("Mollie", true)}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selInvoices.map((i) => (
+                                <tr key={i.invoice_number} style={{ borderBottom: `1px solid ${c.border}` }}>
+                                  <td style={{ ...td, textAlign: "left" }}>{new Date(`${i.issued_on}T12:00:00`).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" })}</td>
+                                  <td style={{ ...td, textAlign: "left", fontFamily: "monospace", color: c.text }}>{i.invoice_number}</td>
+                                  <td style={{ ...td, textAlign: "left", color: c.text }}>{i.business_name || "—"}</td>
+                                  <td style={{ ...td, textAlign: "left" }}>{i.country_code || "—"}</td>
+                                  <td style={{ ...td, textAlign: "left", textTransform: "capitalize" }}>{[i.plan, i.billing_interval].filter(Boolean).join(" · ")}</td>
+                                  <td style={td}>{fmtEur2(i.amount_excl_vat)}</td>
+                                  <td style={td}>{isNlVat(i) ? fmtEur2(i.vat_amount) : "—"}</td>
+                                  <td style={{ ...td, color: c.text, fontWeight: 600 }}>{fmtEur2(i.total_eur)}</td>
+                                  <td style={{ ...td, textAlign: "left" }}>
+                                    <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", padding: "3px 8px", borderRadius: 6, color: isNlVat(i) ? accent : c.textSub, background: isNlVat(i) ? `${accent}1a` : c.bg, border: `1px solid ${isNlVat(i) ? `${accent}44` : c.border}` }}>{isNlVat(i) ? "NL VAT 21%" : "Outside EU"}</span>
+                                  </td>
+                                  <td style={{ ...td, textAlign: "left", fontFamily: "monospace", fontSize: 10, color: c.textMuted }}>{i.mollie_payment_id || "—"}</td>
+                                </tr>
+                              ))}
+                              <tr style={{ borderTop: `2px solid ${c.border}` }}>
+                                <td colSpan={5} style={{ ...td, textAlign: "left", fontWeight: 700, color: c.text }}>Total {selLabel}</td>
+                                <td style={{ ...td, fontWeight: 700, color: c.text }}>{fmtEur2(selInvoices.reduce((s, i) => s + (Number(i.amount_excl_vat) || 0), 0))}</td>
+                                <td style={{ ...td, fontWeight: 700, color: c.text }}>{fmtEur2(selInvoices.reduce((s, i) => s + (Number(i.vat_amount) || 0), 0))}</td>
+                                <td style={{ ...td, fontWeight: 700, color: accent }}>{fmtEur2(sel.total)}</td>
+                                <td colSpan={2} />
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </>)}
                   <div style={{ fontSize: 11, color: c.textMuted, marginTop: 10, lineHeight: 1.5 }}>
-                    Based on invoices actually paid via Mollie (date of issue), demo salons excluded. A yearly subscription lands in full in the month it was paid; MRR above spreads it over twelve months.
+                    Based on invoices actually paid via Mollie (invoice date, Dutch time), demo salons excluded. Taxable = invoices with 21% Dutch VAT; outside EU = invoices without VAT to salons in the Caribbean Netherlands, Aruba, Curaçao or Sint Maarten. A yearly subscription lands in full in the month it was paid; MRR above spreads it over twelve months. Mollie pays out net of its fees: those fees are a cost on Mollie's own invoices.
                   </div>
                 </div>
               );
