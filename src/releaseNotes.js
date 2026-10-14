@@ -14,6 +14,24 @@
 
 export const RELEASES = [
   {
+    // Bee Bare Aesthetics (Curaçao, stad "Willemstad") kreeg een kaart van
+    // Willemstad in Noord-Brabant: de zoekterm had geen land. De optionele
+    // opzegreden van dezelfde dag staat hier bewust niet in (helpt salons niet).
+    id: "2026-10-14",
+    date: "2026-10-14",
+    title: { nl: "De kaart op je boekingspagina", en: "The map on your booking page", es: "El mapa en tu página de reservas" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Boekingspagina: de kaart, de knop Open in Maps en de route na het boeken zoeken je adres nu met je land erbij. Een salon in Willemstad op Curaçao kwam eerst uit bij Willemstad in Nederland.",
+          en: "Booking page: the map, the Open in Maps button and the directions after booking now look up your address together with your country. A salon in Willemstad on Curaçao used to land on Willemstad in the Netherlands.",
+          es: "Página de reservas: el mapa, el botón Abrir en Maps y la ruta después de reservar ahora buscan tu dirección junto con tu país. Un salón en Willemstad, Curazao, aparecía antes en Willemstad, Países Bajos.",
+        },
+      },
+    ],
+  },
+  {
     // Telefoonweergave (TTNB-screenshots 10/11-10): de naam van een optie
     // brak per woord af naast prijs en knoppen, en de categoriebalk op de
     // boekingspagina gebruikte maar een deel van de schermbreedte.

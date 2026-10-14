@@ -14,6 +14,47 @@ import {
   getPageFont, ensurePageFontLoaded, curSym, fmtAmt, Linkify, readableAccent, onAccentInk, blockAppliesOn
 } from "./shared.jsx";
 
+// Zoekterm voor de kaart, "Open in Maps" en de route na het boeken
+// (14-10-2026). Het land komt erachter als het er nog niet in staat: Bee Bare
+// Aesthetics op Curaçao vulde alleen "Willemstad" in en Google toonde
+// Willemstad in Noord-Brabant. NFKC maakt opmaakletters (𝐊𝐚𝐲𝐚, geplakt uit een
+// Instagram-bio) weer gewone letters, anders vindt Google het adres niet. Een
+// stad die al in het adres staat niet nog eens: "Amsterdam, Amsterdam" laat
+// Google uitzoomen naar de hele stad. Land herkennen op hele woorden, zodat
+// "Kaya Sabana" niet als Saba telt.
+const MAPS_COUNTRY = {
+  NL: { name: "Netherlands", seen: ["nederland", "netherlands"] },
+  BQ: { name: "Caribbean Netherlands", seen: ["bonaire", "saba", "sint eustatius", "st. eustatius", "statia", "caribbean netherlands", "caribisch nederland"] },
+  CW: { name: "Curaçao", seen: ["curacao", "korsou"] },
+  AW: { name: "Aruba", seen: ["aruba"] },
+  SX: { name: "Sint Maarten", seen: ["sint maarten", "st. maarten", "st maarten"] },
+};
+const foldMapsText = (s) => String(s || "").normalize("NFKC").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const hasMapsWord = (text, word) => {
+  const w = foldMapsText(word).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${w}($|[^a-z0-9])`).test(foldMapsText(text));
+};
+function mapsQueryOf(address, city, countryCode) {
+  const cc = String(countryCode || "").trim().toUpperCase();
+  const addr = String(address || "").normalize("NFKC").replace(/\s+/g, " ").trim();
+  let town = String(city || "").normalize("NFKC").replace(/\s+/g, " ").trim();
+  // "Nederland" is het invulsel als er geen stad is (aanmelden en het laden van
+  // de boekingspagina doen city || "Nederland"). Bij een salon buiten Nederland
+  // is dat geen plaats: weglaten, anders zoekt Google "…, Nederland, Curaçao".
+  if (cc && cc !== "NL" && ["nederland", "netherlands", "the netherlands", "holland"].includes(foldMapsText(town))) town = "";
+  let q = addr ? (town && !foldMapsText(addr).includes(foldMapsText(town)) ? `${addr}, ${town}` : addr) : town;
+  if (!q) return "";
+  let country = MAPS_COUNTRY[cc] || null;
+  if (!country && /^[A-Z]{2}$/.test(cc)) {
+    try {
+      const n = new Intl.DisplayNames(["en"], { type: "region" }).of(cc);
+      if (n && n !== cc) country = { name: n, seen: [n] };
+    } catch { /* oude browser: dan zonder land, zoals vroeger */ }
+  }
+  if (country && !country.seen.some((w) => hasMapsWord(q, w))) q = `${q}, ${country.name}`;
+  return q;
+}
+
 // Teamfoto met vangnet (Faisal 15-09, Beauty By Eydy): een avatar_url die
 // naar een verdwenen bestand wijst liet de browser een kapot plaatje met de
 // alt-tekst ernaast tekenen. Laadt de foto niet, dan komt hier hetzelfde
@@ -3644,11 +3685,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               {hasAnyLocation ? (
                 <div style={{ display: "grid", gridTemplateColumns: isMobile || (initialSalon.locations || []).length === 1 ? "1fr" : "1fr 1fr", gap: 10 }}>
                   {(initialSalon.locations || []).map(loc => {
-                    const locAddr = (loc.address || "").trim();
-                    const locCity = (loc.city || "").trim();
-                    const locQuery = locAddr
-                      ? (locCity && !locAddr.toLowerCase().includes(locCity.toLowerCase()) ? `${locAddr}, ${locCity}` : locAddr)
-                      : locCity;
+                    const locQuery = mapsQueryOf(loc.address, loc.city, initialSalon.country_code);
                     const locMapsHref = locQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locQuery)}` : null;
                     return (
                       <div key={loc.id} style={{ padding: 16, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
@@ -3690,14 +3727,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   // Zelfde kaartstijl als de locatie-kaartjes hierboven, maar dan
                   // op profiel-adres (salons zonder locations-rijen, zoals Rioghna):
                   // naam + adres + kaart in één brede card i.p.v. een kale embed.
-                  // If the address already contains the city name, don't append it
-                  // again — double "Amsterdam, Amsterdam" makes Google zoom out to
-                  // the whole city instead of the exact street.
-                  const addr = (initialSalon.address || "").trim();
-                  const city = (initialSalon.city || "").trim();
-                  const mainQuery = addr
-                    ? (city && !addr.toLowerCase().includes(city.toLowerCase()) ? `${addr}, ${city}` : addr)
-                    : city;
+                  // Zoekterm met land erachter: zie mapsQueryOf bovenin.
+                  const mainQuery = mapsQueryOf(initialSalon.address, initialSalon.city, initialSalon.country_code);
                   const mapsHref = mainQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mainQuery)}` : null;
                   return (
                     <div style={{ padding: 16, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12 }}>
@@ -4079,7 +4110,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     const where = selectedLocation || null;
     const addr = ((where && where.address) || initialSalon.address || "").trim();
     const city = ((where && where.city) || initialSalon.city || "").trim();
-    const mapsQuery = addr ? (city && !addr.toLowerCase().includes(city.toLowerCase()) ? `${addr}, ${city}` : addr) : city;
+    const mapsQuery = mapsQueryOf(addr, city, initialSalon.country_code);
     const mapsHref = mapsQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}` : null;
     // Agenda-export op de klok van de SALON (05-10-2026): new Date(date+"T"+time)
     // las de tijd in de zone van het toestel, dus een NL-telefoon die een

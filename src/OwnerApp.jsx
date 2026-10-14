@@ -5251,6 +5251,23 @@ const loadedWindowFrom = () => new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).t
 // verversing.
 const BILLING_COLS = "plan, billing_interval, subscription_status, trial_ends_at, plan_expires_at, current_period_start, cancel_at_period_end, mollie_subscription_id, referral_credit_days";
 
+// Opzegreden (14-10-2026): optionele vraag in het opzegvenster. De sleutels
+// staan ook in cancel-subscription (CANCEL_REASONS) en in de check op
+// subscription_cancellations.reason; de admin toont ze met eigen labels.
+// `ask` = de vraag bij het tekstvak voor die keuze.
+const CANCEL_REASON_OPTIONS = [
+  { id: "too_expensive", nl: "Te duur", en: "Too expensive", es: "Demasiado caro" },
+  { id: "not_enough_bookings", nl: "Nog te weinig klanten of boekingen", en: "Not enough clients or bookings yet", es: "Todavía pocos clientes o reservas" },
+  { id: "missing_feature", nl: "Ik mis een functie", en: "I'm missing a feature", es: "Me falta una función",
+    ask: { nl: "Welke functie mis je?", en: "Which feature are you missing?", es: "¿Qué función te falta?" } },
+  { id: "other_app", nl: "Ik stap over naar een andere app", en: "I'm switching to another app", es: "Me cambio a otra app",
+    ask: { nl: "Naar welke app, en waarom?", en: "Which app, and why?", es: "¿A qué app y por qué?" } },
+  { id: "closing_business", nl: "Ik stop of pauzeer mijn zaak", en: "I'm closing or pausing my business", es: "Cierro o pauso mi negocio" },
+  { id: "other", nl: "Iets anders", en: "Something else", es: "Otra cosa",
+    ask: { nl: "Wat is de reden?", en: "What's the reason?", es: "¿Cuál es el motivo?" } },
+];
+const CANCEL_NOTE_MAX = 500;
+
 // ─── OWNER DASHBOARD ─────────────────────────────────────────
 function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate }) {
   const { colors: themeC, theme } = useTheme();
@@ -5842,6 +5859,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [billingProfile, setBillingProfile] = useState(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelReason, setCancelReason] = useState(null); // sleutel uit CANCEL_REASON_OPTIONS of null
+  const [cancelNote, setCancelNote] = useState("");
   const [upgradeConfirm, setUpgradeConfirm] = useState(false);
   const [changingPlan, setChangingPlan] = useState(false);
   // Automatisch betalen na de proef (10-10-2026): methodekiezer, bezig-vlaggen
@@ -21102,7 +21121,14 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   if (cancelBusy) return;
                   setCancelBusy(true);
                   try {
-                    const { data, error } = await supabase.functions.invoke("cancel-subscription", { body: { immediate: !!immediate } });
+                    // Reden en toelichting zijn optioneel; leeg = niet meesturen.
+                    // De toelichting alleen mét een reden: wie de gekozen reden
+                    // weer uitzet ziet het tekstvak verdwijnen en verwacht niet
+                    // dat de tekst nog meegaat.
+                    const note = cancelReason ? cancelNote.trim() : "";
+                    const { data, error } = await supabase.functions.invoke("cancel-subscription", {
+                      body: { immediate: !!immediate, ...(cancelReason ? { reason: cancelReason } : {}), ...(note ? { note } : {}) },
+                    });
                     if (error || !data?.success) {
                       const code = data?.error || error?.message || "unknown";
                       toast.show(lang === "nl" ? `Probleem: ${code}` : lang === "es" ? `Problema: ${code}` : `Error: ${code}`, "error");
@@ -21111,6 +21137,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     }
                     toast.show(lang === "nl" ? "Abonnement opgezegd" : lang === "es" ? "Suscripción cancelada" : "Subscription cancelled", "success");
                     setCancelConfirmOpen(false);
+                    setCancelReason(null);
+                    setCancelNote("");
                     // Refresh the billing snapshot so the UI reflects the new state.
                     const { data: prof } = await supabase
                       .from("profiles")
@@ -21324,7 +21352,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         <button
                           className="btn-ghost"
                           style={{ borderColor: c.danger + "44", color: c.danger }}
-                          onClick={() => setCancelConfirmOpen(true)}
+                          onClick={() => { setCancelReason(null); setCancelNote(""); setCancelConfirmOpen(true); }}
                         >
                           {lang === "nl" ? "Abonnement opzeggen" : lang === "es" ? "Cancelar suscripción" : "Cancel subscription"}
                         </button>
@@ -21601,12 +21629,16 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     )}
                   </div>
 
-                  {/* Cancel confirmation modal */}
-                  {cancelConfirmOpen && (
+                  {/* Cancel confirmation modal. Via een portal op <body>, net
+                      als het upgradevenster: binnen de instellingen hing
+                      position:fixed aan de scrollcontainer en stond het venster
+                      op de telefoon onder de rand van het scherm (alleen de
+                      donkere laag was te zien; gevonden 14-10-2026). */}
+                  {cancelConfirmOpen && createPortal((
                     <div onClick={() => !cancelBusy && setCancelConfirmOpen(false)}
-                         style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}>
-                      <div onClick={(e) => e.stopPropagation()}
-                           style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 24, maxWidth: 420, width: "100%" }}>
+                         style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
+                      <div onClick={(e) => e.stopPropagation()} data-cancel-modal role="dialog" aria-modal="true"
+                           style={{ background: c.bg, border: "1px solid " + c.border, borderRadius: 14, padding: 24, maxWidth: 420, width: "100%", maxHeight: "calc(100vh - 48px)", overflowY: "auto", color: c.text }}>
                         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300, marginBottom: 8 }}>
                           {lang === "nl" ? "Abonnement opzeggen?" : lang === "es" ? "¿Cancelar suscripción?" : "Cancel subscription?"}
                         </div>
@@ -21616,6 +21648,48 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             : lang === "es"
                             ? `Tu acceso sigue activo hasta el ${fmtDate(expires)}. No se te volverá a cobrar. Puedes empezar de nuevo cuando quieras.`
                             : `Your access stays active until ${fmtDate(expires)}. You won't be charged again. You can resubscribe anytime.`}
+                        </div>
+                        {/* Opzegreden (14-10-2026): niet verplicht. Opzeggen
+                            werkt precies zo zonder keuze; nog een keer tikken
+                            op de gekozen reden haalt hem weer weg. */}
+                        <div data-cancel-reason style={{ marginBottom: 18 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: c.text, marginBottom: 2 }}>
+                            {L("Waarom zeg je op?", "Why are you cancelling?", "¿Por qué cancelas?")}
+                            <span style={{ fontWeight: 400, color: c.textMuted }}> {L("(niet verplicht)", "(optional)", "(opcional)")}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 10, lineHeight: 1.4 }}>
+                            {L("Zo kunnen we Vellu beter maken.", "This helps us make Vellu better.", "Así podemos mejorar Vellu.")}
+                          </div>
+                          <div role="radiogroup" aria-label={L("Reden van opzeggen", "Reason for cancelling", "Motivo de la cancelación")} style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {CANCEL_REASON_OPTIONS.map((o) => {
+                              const on = cancelReason === o.id;
+                              return (
+                                <button key={o.id} type="button" role="radio" aria-checked={on} data-reason={o.id} disabled={cancelBusy}
+                                  onClick={() => { if (on) setCancelNote(""); setCancelReason(on ? null : o.id); }}
+                                  style={{
+                                    padding: "7px 10px", borderRadius: 8, cursor: cancelBusy ? "default" : "pointer", textAlign: "left",
+                                    background: on ? `${ACCENT}10` : c.bgCard, border: `1px solid ${on ? ACCENT : c.border}`,
+                                    color: on ? ACCENT : c.textSub, fontFamily: "inherit", fontSize: 12, fontWeight: on ? 600 : 400, lineHeight: 1.35,
+                                  }}>
+                                  {L(o.nl, o.en, o.es)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {cancelReason && (() => {
+                            const opt = CANCEL_REASON_OPTIONS.find((o) => o.id === cancelReason);
+                            const ask = opt?.ask ? L(opt.ask.nl, opt.ask.en, opt.ask.es) : L("Wil je er nog iets over kwijt?", "Anything you'd like to add?", "¿Quieres añadir algo?");
+                            return (
+                              <div style={{ marginTop: 10 }}>
+                                <label htmlFor="cancel-note" style={{ display: "block", fontSize: 11, color: c.textSub, marginBottom: 4 }}>
+                                  {ask} <span style={{ color: c.textMuted }}>{L("(niet verplicht)", "(optional)", "(opcional)")}</span>
+                                </label>
+                                <textarea id="cancel-note" data-cancel-note className="input-field" rows={3} maxLength={CANCEL_NOTE_MAX} disabled={cancelBusy}
+                                  value={cancelNote} onChange={(e) => setCancelNote(e.target.value)}
+                                  style={{ width: "100%", fontSize: 13, padding: "8px 10px", resize: "vertical", fontFamily: "inherit", lineHeight: 1.45 }} />
+                              </div>
+                            );
+                          })()}
                         </div>
                         <div style={{ display: "flex", gap: 8 }}>
                           <button className="btn-ghost" style={{ flex: 1 }} disabled={cancelBusy}
@@ -21629,7 +21703,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         </div>
                       </div>
                     </div>
-                  )}
+                  ), document.body)}
 
                   {/* Invoice history */}
                   <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 20, marginBottom: 12 }}>

@@ -28,6 +28,17 @@ const periodLabelOf = (kind, key) => {
   if (kind === "quarter") { const [yy, q] = key.split("-"); return `${q} ${yy}`; }
   return key;
 };
+// Opzegredenen: dezelfde sleutels als CANCEL_REASON_OPTIONS (OwnerApp) en de
+// check op subscription_cancellations.reason.
+const CANCEL_REASON_LABEL = {
+  too_expensive: "Too expensive",
+  not_enough_bookings: "Not enough clients or bookings yet",
+  missing_feature: "Missing a feature",
+  other_app: "Switching to another app",
+  closing_business: "Closing or pausing the business",
+  other: "Something else",
+};
+const cancelReasonLabel = (r) => (r ? CANCEL_REASON_LABEL[r] || r : "No reason given");
 const isNlVat = (inv) => inv.vat_treatment === "nl_vat";
 const treatmentLabel = (inv) => isNlVat(inv) ? "NL btw 21% (rubriek 1a)" : "Buiten de EU (niet in de aangifte)";
 
@@ -145,6 +156,9 @@ export default function AdminDashboard({ onLogout }) {
   const [subInvoices, setSubInvoices] = useState([]);
   const [revView, setRevView] = useState("quarter"); // month | quarter | year
   const [revSel, setRevSel] = useState(null); // gekozen periode (sleutel), null = automatisch
+  // Opzeggingen met de optionele reden uit het opzegvenster (14-10-2026,
+  // admin_subscription_cancellations), nieuwste eerst.
+  const [cancellations, setCancellations] = useState([]);
   // "Beoordeel Vellu" (16-09-2026): cijfers + toelichting van saloneigenaren,
   // met de knop om een citaat op vellu.cc te zetten (alleen als de salon dat
   // toestond). Zie RateVellu.jsx en migratie beoordeel_vellu.
@@ -179,7 +193,7 @@ export default function AdminDashboard({ onLogout }) {
         return;
       }
       setIsAdmin(true);
-      const [ov, sl, rs, cr, tl, bo, sb, ar, ai, sv, sr] = await Promise.all([
+      const [ov, sl, rs, cr, tl, bo, sb, ar, ai, sv, sr, sc] = await Promise.all([
         supabase.rpc("admin_overview"),
         supabase.rpc("admin_salons_list"),
         supabase.rpc("admin_recent_signups", { p_days: 30 }),
@@ -191,6 +205,7 @@ export default function AdminDashboard({ onLogout }) {
         supabase.rpc("admin_rating_invites"),
         supabase.rpc("admin_rating_site_visibility"),
         supabase.rpc("admin_subscription_invoices"),
+        supabase.rpc("admin_subscription_cancellations"),
       ]);
       if (cancelled) return;
       setOverview(ov.data?.[0] || null);
@@ -201,6 +216,7 @@ export default function AdminDashboard({ onLogout }) {
       setBilling(bo.data?.[0] || null);
       setSubs(sb.data || []);
       setSubInvoices(sr.data || []);
+      setCancellations(sc.data || []);
       setRatings(ar.data || []);
       setInvites(ai.data || []);
       setSiteOn(!!sv.data);
@@ -285,6 +301,12 @@ export default function AdminDashboard({ onLogout }) {
     ),
     [subs, now],
   );
+  // Laatste opzegging per salon (de lijst komt nieuwste eerst binnen).
+  const lastCancelByOwner = useMemo(() => {
+    const m = new Map();
+    for (const x of cancellations) if (!m.has(x.owner_id)) m.set(x.owner_id, x);
+    return m;
+  }, [cancellations]);
 
   if (isAdmin === null) {
     return (
@@ -662,10 +684,20 @@ export default function AdminDashboard({ onLogout }) {
                   <tbody>
                     {subs.map(s => {
                       const badge = statusBadge(s.classification, s.churning, c, accent);
+                      // Opgezegd (loopt af of al gestopt): de laatste opzegging
+                      // met reden onder de naam. Opnieuw betalend = niet tonen.
+                      const leaving = s.churning || s.classification === "cancelled";
+                      const lc = leaving ? lastCancelByOwner.get(s.id) : null;
                       return (
                         <tr key={s.id} style={{ borderBottom: `1px solid ${c.border}` }}>
                           <td style={{ padding: "12px 14px" }}>
                             <a href={`/${s.slug}`} target="_blank" rel="noreferrer" style={{ color: c.text, textDecoration: "none", fontWeight: 500 }}>{s.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</a>
+                            {lc && (
+                              <div data-sub-cancel-reason style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.4, maxWidth: 360 }}>
+                                Cancelled {fmtDate(lc.created_at)} · <span style={{ color: lc.reason ? c.textSub : c.textMuted }}>{cancelReasonLabel(lc.reason)}</span>
+                                {lc.note && <span style={{ color: c.textSub }}> — “{lc.note}”</span>}
+                              </div>
+                            )}
                           </td>
                           <td style={{ padding: "12px 14px", color: c.textSub, textTransform: "capitalize" }}>{s.plan || "—"}</td>
                           <td style={{ padding: "12px 14px" }}>
@@ -674,11 +706,13 @@ export default function AdminDashboard({ onLogout }) {
                           <td style={{ padding: "12px 14px", color: c.textMuted, fontSize: 11 }}>{s.billing_interval || "—"}</td>
                           <td style={{ padding: "12px 14px", color: Number(s.mrr_eur) > 0 ? accent : c.textMuted, fontFamily: "'Cormorant Garamond',serif", fontSize: 15 }}>{fmtEur(s.mrr_eur)}</td>
                           <td style={{ padding: "12px 14px", color: c.textMuted, fontSize: 11 }}>
-                            {s.classification === "paying"
-                              ? (s.plan_expires_at ? `renews ${fmtDate(s.plan_expires_at)}` : "active")
-                              : s.classification === "trialing"
-                                ? (s.trial_ends_at ? `trial ends ${fmtDate(s.trial_ends_at)}` : "trial")
-                                : "—"}
+                            {s.churning
+                              ? (s.plan_expires_at ? `ends ${fmtDate(s.plan_expires_at)}` : "ends at period end")
+                              : s.classification === "paying"
+                                ? (s.plan_expires_at ? `renews ${fmtDate(s.plan_expires_at)}` : "active")
+                                : s.classification === "trialing"
+                                  ? (s.trial_ends_at ? `trial ends ${fmtDate(s.trial_ends_at)}` : "trial")
+                                  : "—"}
                           </td>
                         </tr>
                       );
@@ -688,6 +722,59 @@ export default function AdminDashboard({ onLogout }) {
                 </table>
               </div>
             </div>
+
+            {/* Opzeggingen met reden (14-10-2026): de salon kiest in het
+                opzegvenster optioneel een reden en kan iets toelichten. Elke
+                opzegging staat hier, ook zonder reden. */}
+            {(() => {
+              const tally = new Map();
+              for (const x of cancellations) { const k = x.reason || ""; tally.set(k, (tally.get(k) || 0) + 1); }
+              const tallyRows = [...tally.entries()].sort((a, b) => b[1] - a[1] || (a[0] ? 0 : 1) - (b[0] ? 0 : 1));
+              return (
+                <div data-cancellations style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "14px 18px", marginTop: 16 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 10 }}>
+                    Cancellations — why salons leave{cancellations.length ? ` · ${cancellations.length}` : ""}
+                  </div>
+                  {cancellations.length === 0 ? (
+                    <div style={{ fontSize: 12, color: c.textMuted }}>No cancellations yet.</div>
+                  ) : (<>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                      {tallyRows.map(([k, n]) => (
+                        <span key={k || "none"} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.bg, color: k ? c.text : c.textMuted }}>
+                          {cancelReasonLabel(k || null)} <strong style={{ color: accent, marginLeft: 4 }}>{n}</strong>
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ overflowX: "auto" }}>
+                      <table data-cancellations-table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ background: c.bg, borderBottom: `1px solid ${c.border}` }}>
+                            {["Date", "Salon", "Plan", "Reason", "Note", "Access"].map(h => (
+                              <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, whiteSpace: "nowrap" }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cancellations.map(x => (
+                            <tr key={x.id} style={{ borderBottom: `1px solid ${c.border}`, verticalAlign: "top" }}>
+                              <td style={{ padding: "10px 12px", color: c.textSub, whiteSpace: "nowrap" }}>{fmtDate(x.created_at)}</td>
+                              <td style={{ padding: "10px 12px", color: c.text, fontWeight: 500 }}>{x.business_name || "—"}</td>
+                              <td style={{ padding: "10px 12px", color: c.textSub, textTransform: "capitalize", whiteSpace: "nowrap" }}>{[x.plan, x.billing_interval].filter(Boolean).join(" · ") || "—"}</td>
+                              <td style={{ padding: "10px 12px", color: x.reason ? c.text : c.textMuted }}>{cancelReasonLabel(x.reason)}</td>
+                              <td style={{ padding: "10px 12px", color: c.textSub, minWidth: 180, maxWidth: 420, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{x.note || <span style={{ color: c.textMuted }}>—</span>}</td>
+                              <td style={{ padding: "10px 12px", color: c.textMuted, whiteSpace: "nowrap" }}>{x.mode === "immediate" ? "ended at once" : x.access_until ? `until ${fmtDate(x.access_until)}` : "until period end"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>)}
+                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 10, lineHeight: 1.5 }}>
+                    The reason is optional in the cancel window; cancellations from before 14 Oct 2026 have none. Turning off automatic payment during a trial is not a cancellation and is not listed.
+                  </div>
+                </div>
+              );
+            })()}
           </>
         )}
 

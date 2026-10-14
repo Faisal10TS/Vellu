@@ -24,6 +24,13 @@
 //     die zonder action opzegt komt in een proef met abonnement in deze tak:
 //     de gewone opzegpaden zouden de toegang van de proef afsluiten.
 //
+//   • opzegreden (sinds 14-10-2026) — soft en hard nemen een optionele
+//     `reason` (vaste sleutel, zie CANCEL_REASONS) en `note` (eigen tekst, max
+//     500 tekens) mee uit het opzegvenster. Elke geslaagde opzegging krijgt een
+//     rij in subscription_cancellations, ook zonder reden. Die rij wegschrijven
+//     mag een opzegging nooit tegenhouden: een fout wordt alleen gelogd.
+//     trial_autopay_off is geen opzegging en schrijft niets weg.
+//
 // Auth: requires a valid Supabase JWT (only the owner can cancel their own
 // subscription; admins go through the dashboard).
 
@@ -162,6 +169,49 @@ async function cancelOtherSubscriptions(customerId: string, keepId: string | nul
   return failed;
 }
 
+// ── OPZEGREDEN (sinds 14-10-2026) ───────────────────────────────────────
+// Dezelfde sleutels als de check op subscription_cancellations.reason en de
+// keuzes in het opzegvenster (OwnerApp, CANCEL_REASON_OPTIONS).
+const CANCEL_REASONS = ["too_expensive", "not_enough_bookings", "missing_feature", "other_app", "closing_business", "other"];
+const NOTE_MAX = 500;
+function cleanReason(v: unknown): string | null {
+  return typeof v === "string" && CANCEL_REASONS.includes(v) ? v : null;
+}
+// Eigen tekst: stuurtekens eruit (regeleinden blijven), witruimte bijgeknipt,
+// hooguit NOTE_MAX tekens. Geteld per teken (Array.from), niet per UTF-16-
+// eenheid, zodat de check char_length(note) <= 500 altijd klopt en er nooit een
+// half emoji-teken achterblijft.
+function cleanNote(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const s = Array.from(v.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, "").trim()).slice(0, NOTE_MAX).join("").trim();
+  return s || null;
+}
+// Eén rij per geslaagde opzegging. Gooit nooit: de opzegging zelf is dan al
+// gelukt en moet als gelukt terugkomen bij de salon.
+async function logCancellation(
+  ownerId: string,
+  profile: { plan?: string | null; billing_interval?: string | null },
+  mode: "at_period_end" | "immediate",
+  accessUntil: string | null,
+  reason: string | null,
+  note: string | null,
+): Promise<void> {
+  try {
+    const { error } = await supabase.from("subscription_cancellations").insert({
+      owner_id: ownerId,
+      reason,
+      note,
+      plan: profile.plan ?? null,
+      billing_interval: profile.billing_interval ?? null,
+      mode,
+      access_until: accessUntil,
+    });
+    if (error) console.error("subscription_cancellations insert failed:", ownerId, error);
+  } catch (e) {
+    console.error("subscription_cancellations insert error:", ownerId, e);
+  }
+}
+
 serve(async (req) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
@@ -177,14 +227,16 @@ serve(async (req) => {
   const userId = userData.user.id;
 
   // Parse body
-  let body: { immediate?: boolean; action?: string };
-  try { body = await req.json(); } catch { body = {}; }
+  let body: { immediate?: boolean; action?: string; reason?: unknown; note?: unknown };
+  try { body = (await req.json()) || {}; } catch { body = {}; }
   const immediate = body.immediate === true;
+  const reason = cleanReason(body.reason);
+  const note = cleanNote(body.note);
 
   // Look up profile
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
-    .select("id, mollie_customer_id, mollie_subscription_id, mollie_mandate_id, subscription_status, plan_expires_at, trial_ends_at")
+    .select("id, mollie_customer_id, mollie_subscription_id, mollie_mandate_id, subscription_status, plan_expires_at, trial_ends_at, plan, billing_interval, cancel_at_period_end")
     .eq("id", userId)
     .maybeSingle();
   if (profileErr || !profile) return err(404, "no_profile", origin);
@@ -262,6 +314,13 @@ serve(async (req) => {
   }
   if (body.action === "trial_autopay_off") return err(409, "autopay_not_on", origin);
 
+  // Opzegreden: één rij per echte opzegging. Was het abonnement al opgezegd
+  // (de app toont de knop dan niet meer), dan is een nieuwe aanroep een
+  // herhaling en komt er geen rij bij; zo kan niemand de lijst volspammen.
+  const alreadyCancelled = profile.cancel_at_period_end === true || profile.subscription_status === "cancelled";
+  const recordCancel = (mode: "at_period_end" | "immediate", accessUntil: string | null) =>
+    alreadyCancelled ? Promise.resolve() : logCancellation(userId, profile, mode, accessUntil, reason, note);
+
   // No Mollie subscription to cancel: a trial, a legacy/comped plan granted by
   // hand, or a first payment that never established recurring billing. There is
   // no recurring charge to stop at Mollie, so just reflect the cancellation
@@ -269,15 +328,17 @@ serve(async (req) => {
   // check-trials cron finalises it); immediate ends access now.
   if (!profile.mollie_subscription_id) {
     if (immediate) {
+      const nowIso = new Date().toISOString();
       await supabase
         .from("profiles")
         .update({
           subscription_status: "cancelled",
-          cancelled_at: new Date().toISOString(),
+          cancelled_at: nowIso,
           cancel_at_period_end: false,
-          plan_expires_at: new Date().toISOString(),
+          plan_expires_at: nowIso,
         })
         .eq("id", userId);
+      await recordCancel("immediate", nowIso);
       return ok({ success: true, mode: "immediate" }, origin);
     }
     await supabase
@@ -287,6 +348,7 @@ serve(async (req) => {
         cancelled_at: new Date().toISOString(),
       })
       .eq("id", userId);
+    await recordCancel("at_period_end", profile.plan_expires_at ?? null);
     return ok({ success: true, mode: "at_period_end", access_until: profile.plan_expires_at }, origin);
   }
 
@@ -300,16 +362,18 @@ serve(async (req) => {
       console.error("Mollie cancel failed:", r.status, r.raw);
       return err(502, "mollie_cancel_failed", origin);
     }
+    const nowIso = new Date().toISOString();
     await supabase
       .from("profiles")
       .update({
         subscription_status: "cancelled",
         mollie_subscription_id: null,
-        cancelled_at: new Date().toISOString(),
+        cancelled_at: nowIso,
         cancel_at_period_end: false,
-        plan_expires_at: new Date().toISOString(),
+        plan_expires_at: nowIso,
       })
       .eq("id", userId);
+    await recordCancel("immediate", nowIso);
     return ok({ success: true, mode: "immediate" }, origin);
   }
 
@@ -333,6 +397,7 @@ serve(async (req) => {
       cancelled_at: new Date().toISOString(),
     })
     .eq("id", userId);
+  await recordCancel("at_period_end", profile.plan_expires_at ?? null);
 
   return ok({
     success: true,
