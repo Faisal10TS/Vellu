@@ -795,8 +795,16 @@ export default function AdminDashboard({ onLogout }) {
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: c.bg, borderBottom: `1px solid ${c.border}` }}>
-                      {["Salon", "Plan", "Staff", "Appts", "Revenue", "Last activity", "Signed up", "GCal"].map(h => (
-                        <th key={h} style={{ padding: "12px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{h}</th>
+                      {/* 14-10-2026: "Last activity" was de laatste nieuwe
+                          afspraak; nu "Last booking", en "Last seen" = wanneer
+                          de eigenaar de app laatst open had (admin_salons_list). */}
+                      {[
+                        ["Salon"], ["Plan"], ["Staff"], ["Appts"], ["Revenue"],
+                        ["Last seen", "Last time the owner had Vellu open (login or session refresh, about hourly while the app is open). Staff accounts not counted."],
+                        ["Last booking", "Last time a new appointment was made, by a client online or by the salon."],
+                        ["Signed up"], ["GCal"],
+                      ].map(([h, tip]) => (
+                        <th key={h} title={tip} style={{ padding: "12px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, cursor: tip ? "help" : undefined, whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -816,13 +824,21 @@ export default function AdminDashboard({ onLogout }) {
                           <div style={{ fontSize: 9, color: c.textMuted }}>{s.completed_count} done · {s.upcoming_count} upcoming</div>
                         </td>
                         <td style={{ padding: "12px 14px", color: accent, fontFamily: "'Cormorant Garamond',serif", fontSize: 15 }}>{fmtEur(s.total_revenue)}</td>
-                        <td style={{ padding: "12px 14px", color: c.textMuted, fontSize: 11 }}>{relTime(s.last_activity)}</td>
+                        <td data-last-seen style={{ padding: "12px 14px", color: c.textSub, fontSize: 11, whiteSpace: "nowrap" }} title={s.last_seen ? fmtDateTime(s.last_seen) : undefined}>
+                          {relTime(s.last_seen)}
+                          {/* Nooit teruggekomen na het aanmelden: het signaal
+                              om te bellen, en anders niet te zien. */}
+                          {s.last_seen && s.created_at && new Date(s.last_seen).getTime() - new Date(s.created_at).getTime() < 3_600_000 && now - new Date(s.created_at).getTime() > 864e5 && (
+                            <div style={{ fontSize: 9, color: c.warning }}>only at signup</div>
+                          )}
+                        </td>
+                        <td style={{ padding: "12px 14px", color: c.textMuted, fontSize: 11, whiteSpace: "nowrap" }} title={s.last_activity ? fmtDateTime(s.last_activity) : undefined}>{relTime(s.last_activity)}</td>
                         <td style={{ padding: "12px 14px", color: c.textMuted, fontSize: 11 }}>{fmtDate(s.created_at)}</td>
                         <td style={{ padding: "12px 14px", color: s.google_connected ? c.success : c.textMuted, fontSize: 14 }}>{s.google_connected ? <span role="img" aria-label="connected" style={{ display: "inline-flex" }}><NavIcon name="check" size={14} color="currentColor" /></span> : "—"}</td>
                       </tr>
                     ))}
                     {visibleSalons.length === 0 && (
-                      <tr><td colSpan={8} style={{ padding: "24px", textAlign: "center", color: c.textMuted, fontSize: 12 }}>No salons match.</td></tr>
+                      <tr><td colSpan={9} style={{ padding: "24px", textAlign: "center", color: c.textMuted, fontSize: 12 }}>No salons match.</td></tr>
                     )}
                   </tbody>
                 </table>
