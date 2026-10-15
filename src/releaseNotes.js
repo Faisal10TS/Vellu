@@ -14,6 +14,24 @@
 
 export const RELEASES = [
   {
+    // TTNB 15-10: "Kon largu e por ta geldig na esun di loyalty card. Pero esun
+    // di birthday no. E standard 1 maand." Verjaardagscode kreeg dezelfde keuze
+    // als de stempelkaart (profiles.birthday_code_days).
+    id: "2026-10-15",
+    date: "2026-10-15",
+    title: { nl: "Verjaardagscode: kies hoe lang hij geldig is", en: "Birthday code: choose how long it's valid", es: "Código de cumpleaños: elige cuánto tiempo vale" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Verjaardagsactie: bij \"Code geldig\" kies je nu zelf hoe lang een verjaardagscode geldig is, net als bij de stempelkaart: deze maand (zoals tot nu toe), 1, 2 of 3 maanden, of een eigen aantal dagen. Geldt voor nieuwe codes, in de verjaardagsmail en voor codes die je zelf maakt. De mail noemt nu ook de einddatum.",
+          en: "Birthday codes: under \"Code valid for\" you now choose how long a birthday code is valid, just like the loyalty card: this month (as before), 1, 2 or 3 months, or your own number of days. Applies to new codes, in the birthday email and for codes you make yourself. The email now also shows the end date.",
+          es: "Códigos de cumpleaños: en \"Código válido\" ahora eliges cuánto tiempo vale un código de cumpleaños, igual que con la tarjeta de fidelidad: este mes (como hasta ahora), 1, 2 o 3 meses, o tu propio número de días. Vale para códigos nuevos, en el correo de cumpleaños y para los códigos que creas tú. El correo ahora también muestra la fecha final.",
+        },
+      },
+    ],
+  },
+  {
     // Bee Bare Aesthetics (Curaçao, stad "Willemstad") kreeg een kaart van
     // Willemstad in Noord-Brabant: de zoekterm had geen land. De optionele
     // opzegreden van dezelfde dag staat hier bewust niet in (helpt salons niet).

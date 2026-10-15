@@ -140,7 +140,7 @@ function makeCode(prefix: string, pct: number): string {
 
 // De opbouw (logo, accentkleur, code-blok) is vast; alleen de teksten wisselen
 // per taal, in dezelfde nl/en/es-drieslag als de mails in send-emails.
-function renderHtml({ salonName, logo, accent, firstName, code, pct, slug, lang }: {
+function renderHtml({ salonName, logo, accent, firstName, code, pct, slug, lang, validUntil }: {
   salonName: string;
   logo: string | null;
   accent: string;
@@ -149,6 +149,7 @@ function renderHtml({ salonName, logo, accent, firstName, code, pct, slug, lang 
   pct: number;
   slug: string;
   lang: string;
+  validUntil: string; // "31 oktober" / "31 October" / "31 de octubre" (uitDatum)
 }) {
   const header = logo
     // Alleen de breedte begrenzen (max-width én max-height samen plet het logo)
@@ -172,7 +173,7 @@ function renderHtml({ salonName, logo, accent, firstName, code, pct, slug, lang 
     <div style="background:#f9f7f4;border-radius:14px;padding:22px;text-align:center;margin-bottom:24px;">
       <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#999;margin-bottom:6px;">${txt(lang, "Jouw code", "Your code", "Tu código")}</div>
       <div style="font-family:'Courier New',monospace;font-size:22px;font-weight:700;letter-spacing:0.12em;color:${esc(accent)};">${esc(code)}</div>
-      <div style="font-size:12px;color:#666;margin-top:8px;">${txt(lang, `${pct}% korting · geldig deze maand`, `${pct}% off · valid this month`, `${pct}% de descuento · válido este mes`)}</div>
+      <div style="font-size:12px;color:#666;margin-top:8px;">${txt(lang, `${pct}% korting · geldig t/m ${esc(validUntil)}`, `${pct}% off · valid until ${esc(validUntil)}`, `${pct}% de descuento · válido hasta el ${esc(validUntil)}`)}</div>
     </div>
     ${link ? `<div style="text-align:center;margin-bottom:24px;"><a href="${link}" style="display:inline-block;background:${esc(accent)};color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:100px;font-size:13px;font-weight:600;letter-spacing:0.06em;">${txt(lang, "Boek nu", "Book now", "Reservar ahora")}</a></div>` : ""}
     <p style="font-size:12px;color:#999;text-align:center;line-height:1.5;margin:0;">
@@ -181,12 +182,33 @@ function renderHtml({ salonName, logo, accent, firstName, code, pct, slug, lang 
   </div>`;
 }
 
-// Laatste dag van de maand waarin de mail de deur uit ging. De mail zegt letterlijk
-// "geldig deze maand", dus dat is de vervaldatum die we vastleggen.
+// Laatste dag van de maand waarin de mail de deur uit ging: de standaard
+// ("Deze maand", profiles.birthday_code_days leeg).
 function endOfMonth(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00Z`);
   const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
   return last.toISOString().slice(0, 10);
+}
+
+// Vervaldatum van een nieuwe code (sinds 15-10-2026 kiest de salon zelf hoe
+// lang, TTNB). Leeg = t/m het einde van de maand; anders dagen vanaf vandaag,
+// dezelfde rekenregel als create_birthday_code en de stempelkaart
+// (current_date + dagen), begrensd op 7 t/m 365.
+function expiryFor(sentOn: string, days: unknown): string {
+  const n = Number(days);
+  if (days == null || !Number.isFinite(n)) return endOfMonth(sentOn);
+  const d = new Date(`${sentOn}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + Math.max(7, Math.min(365, Math.round(n))));
+  return d.toISOString().slice(0, 10);
+}
+
+// "31 oktober" in de taal van de mail; het jaar erbij als de code pas in een
+// ander jaar verloopt dan vandaag.
+function uitDatum(ymd: string, lang: string, sentOn: string): string {
+  const locale = lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB";
+  const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", timeZone: "UTC" };
+  if (ymd.slice(0, 4) !== sentOn.slice(0, 4)) opts.year = "numeric";
+  try { return new Date(`${ymd}T12:00:00Z`).toLocaleDateString(locale, opts); } catch { return ymd; }
 }
 
 // Legt de code vast VOORDAT de mail de deur uit gaat, en geeft terug wat er
@@ -212,9 +234,9 @@ async function reserveCode(
   pct: number,
   expiresOn: string,
   taken: Set<string>,
-): Promise<{ code: string; created: boolean } | null> {
+): Promise<{ code: string; created: boolean; expiresOn: string } | null> {
   // Heeft deze klant bij deze salon al een lopende code? Dan die hergebruiken en
-  // de geldigheid oprekken tot het eind van deze maand. limit(1) in plaats van
+  // de geldigheid oprekken tot de nieuwe vervaldatum (nooit inkorten). limit(1) in plaats van
   // maybeSingle(): een afgebroken run uit het verleden kan meer dan één rij
   // hebben achtergelaten en daar mag de mail van vandaag niet op stuklopen.
   // Alleen een ONGEBRUIKTE VERJAARDAGScode (O1-08): zonder kind-filter kon
@@ -222,7 +244,7 @@ async function reserveCode(
   // tot het eind van de maand), en zonder used_at-filter een al ingewisselde code.
   const { data: mine } = await supabase
     .from("birthday_discount_codes")
-    .select("id, code, discount_pct")
+    .select("id, code, discount_pct, expires_on")
     .eq("owner_id", ownerId)
     .eq("client_email", email)
     .eq("kind", "birthday")
@@ -238,9 +260,13 @@ async function reserveCode(
   // lezen (een oude code van vóór deze wijziging heeft een ander formaat).
   const reusable = existing != null && Number(existing.discount_pct) === Number(pct);
   if (existing?.code && reusable) {
+    // Nooit inkorten (sinds 15-10-2026): liep de bestaande code al langer
+    // (eerder langere instelling), dan blijft die datum staan en noemt de mail
+    // die. ISO-datums vergelijken als tekst is veilig.
+    const keep = String(existing.expires_on || "") > expiresOn ? String(existing.expires_on) : expiresOn;
     const { error: extErr } = await supabase.from("birthday_discount_codes")
-      .update({ discount_pct: pct, expires_on: expiresOn }).eq("id", existing.id);
-    if (!extErr) return { code: String(existing.code), created: false };
+      .update({ discount_pct: pct, expires_on: keep }).eq("id", existing.id);
+    if (!extErr) return { code: String(existing.code), created: false, expiresOn: keep };
     console.error("Extend existing birthday code failed:", extErr);
   }
 
@@ -257,7 +283,7 @@ async function reserveCode(
       discount_pct: pct,
       expires_on: expiresOn,
     });
-    if (!error) { taken.add(code); return { code, created: true }; }
+    if (!error) { taken.add(code); return { code, created: true, expiresOn }; }
     if (error.code !== "23505") { console.error("Reserve code failed:", error); return null; }
     // 23505 = de naam was al bezet (andere klant, of een parallelle run).
     taken.add(code);
@@ -285,8 +311,8 @@ async function purgeExpiredCodes(today: string) {
   let removed = 0;
 
   // 1. De eigen tabel: één delete over alle eigenaren heen, geen filter op wie
-  //    dan ook. expires_on is de dag waarop de code nog geldig is (de mail zegt
-  //    "geldig deze maand"), dus pas weg vanaf de dag erna.
+  //    dan ook. expires_on is de laatste dag waarop de code geldig is (de mail
+  //    noemt die datum: "geldig t/m …"), dus pas weg vanaf de dag erna.
   const { data: gone, error: delErr } = await supabase
     .from("birthday_discount_codes").delete().lt("expires_on", today).select("id");
   if (delErr) console.error("Purge birthday_discount_codes failed:", delErr);
@@ -377,7 +403,7 @@ serve(async (req) => {
   // beslissen wat er per salon gebeurt.
   const { data: salons, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, accent_color, logo_url, slug, birthday_email_enabled, birthday_email_discount_pct, birthday_email_code_prefix, birthday_notify_owner, subscription_status, discount_codes, country_code")
+    .select("id, business_name, email, salon_email, accent_color, logo_url, slug, birthday_email_enabled, birthday_email_discount_pct, birthday_email_code_prefix, birthday_code_days, birthday_notify_owner, subscription_status, discount_codes, country_code")
     // Hoofdschakelaar: staat de verjaardagsactie uit, dan doet deze functie
     // voor die salon niets — ook niet als de deelvlaggen nog aan staan.
     .eq("birthday_feature_enabled", true)
@@ -536,7 +562,7 @@ serve(async (req) => {
         .map((c: any) => String(c?.code || "").toUpperCase())
         .filter(Boolean),
     );
-    const expiresOn = endOfMonth(sentOn);
+    const expiresOn = expiryFor(sentOn, salon.birthday_code_days);
 
     for (const t of targets) {
       if (doneSet.has(t.email)) { totalSkipped++; continue; }
@@ -548,7 +574,7 @@ serve(async (req) => {
       const reserved = await reserveCode(salon.id, t.email, prefix, pct, expiresOn, ownerCodeNames);
       if (!reserved) { totalErrors++; continue; }
       const code = reserved.code;
-      const html = renderHtml({ salonName, logo, accent, firstName, code, pct, slug, lang });
+      const html = renderHtml({ salonName, logo, accent, firstName, code, pct, slug, lang, validUntil: uitDatum(reserved.expiresOn, lang, sentOn) });
       const subject = txt(lang,
         `🎉 Gefeliciteerd van ${salonName}`,
         `🎉 Happy birthday from ${salonName}`,

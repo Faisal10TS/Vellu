@@ -702,7 +702,7 @@ function ReferralEventCard({ salonData, lang, c, accent, toast, isMobile }) {
 // de eigenaar mag via RLS alleen zijn EIGEN rijen lezen — vandaar puur een
 // overzicht zonder bewerk- of verwijderknoppen. Laadt pas bij openklappen,
 // zodat het instellingen-scherm er geen extra query bij krijgt.
-function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix, salonName, slug, countryCode = "NL" }) {
+function BirthdayCodesBlock({ lang, c, accent, toast, pct, days = null, prefix, salonName, slug, countryCode = "NL" }) {
   // Voorbeeld in het formaat van déze salon, zodat duidelijk is dat "TTBDAY"
   // het voorvoegsel is en niet de code.
   const voorbeeld = `${(String(prefix || "BDAY").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "BDAY")}-${pct || 10}-K7QM4`;
@@ -763,7 +763,17 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix, salonName, sl
     const naam = contact[k]?.name || String(r.client_email || "").split("@")[0];
     const salon = salonName || "Vellu";
     const p = parseFloat(r.discount_pct);
-    const tot = (() => { try { return new Date(String(r.expires_on) + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long" }); } catch { return r.expires_on; } })();
+    // Jaartal erbij als de code in een ander jaar verloopt (sinds 15-10-2026
+    // kan een code tot 365 dagen gelden): "t/m 15 oktober" op 15 oktober leest
+    // als "alleen vandaag". Zelfde regel als uitDatum in send-birthday-emails.
+    const tot = (() => {
+      try {
+        const ds = String(r.expires_on);
+        const opts = { day: "numeric", month: "long" };
+        if (ds.slice(0, 4) !== String(new Date().getFullYear())) opts.year = "numeric";
+        return new Date(ds + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", opts);
+      } catch { return r.expires_on; }
+    })();
     const link = slug ? `https://vellu.cc/${slug}` : "https://vellu.cc";
     return lang === "nl"
       ? `Hoi ${naam}! 🎉 Van harte gefeliciteerd met je verjaardag, namens ${salon}. Als cadeautje krijg je ${p}% korting op je volgende afspraak met de code ${r.code} — alleen voor jou, geldig t/m ${tot}. Boeken: ${link}`
@@ -871,7 +881,14 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, prefix, salonName, sl
             </div>
             <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, lineHeight: 1.45 }}>
               {pct
-                ? (lang === "nl" ? `${pct}% korting, één keer te gebruiken, geldig tot het einde van deze maand. De code wordt meteen gekopieerd — plak 'm bijvoorbeeld in WhatsApp.` : lang === "es" ? `${pct}% de descuento, un solo uso, válido hasta fin de mes. El código se copia al instante — pégalo en WhatsApp, por ejemplo.` : `${pct}% off, single use, valid until the end of this month. The code is copied straight away — paste it into WhatsApp, for example.`)
+                ? (() => {
+                    // Geldigheid volgt de instelling "Code geldig" hierboven
+                    // (opgeslagen waarde; de RPC leest het profiel).
+                    const geldig = days == null
+                      ? (lang === "nl" ? "geldig tot het einde van deze maand" : lang === "es" ? "válido hasta fin de mes" : "valid until the end of this month")
+                      : (lang === "nl" ? `${days} dagen geldig` : lang === "es" ? `válido ${days} días` : `valid for ${days} days`);
+                    return lang === "nl" ? `${pct}% korting, één keer te gebruiken, ${geldig}. De code wordt meteen gekopieerd — plak 'm bijvoorbeeld in WhatsApp.` : lang === "es" ? `${pct}% de descuento, un solo uso, ${geldig}. El código se copia al instante — pégalo en WhatsApp, por ejemplo.` : `${pct}% off, single use, ${geldig}. The code is copied straight away — paste it into WhatsApp, for example.`;
+                  })()
                 : (lang === "nl" ? "Stel hierboven eerst een kortingspercentage in en sla op." : lang === "es" ? "Configura primero un porcentaje de descuento arriba y guarda." : "Set a discount percentage above first and save.")}
             </div>
           </div>
@@ -6035,6 +6052,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           birthday_email_enabled: data.birthday_email_enabled || false,
           birthday_email_discount_pct: data.birthday_email_discount_pct ?? null,
           birthday_email_code_prefix: data.birthday_email_code_prefix || "",
+          birthday_code_days: Number.isFinite(parseInt(data.birthday_code_days)) ? parseInt(data.birthday_code_days) : null,
           birthday_feature_enabled: !!data.birthday_feature_enabled,
           ask_birthday_on_booking: !!data.ask_birthday_on_booking,
           birthday_notify_owner: !!data.birthday_notify_owner,
@@ -22371,10 +22389,69 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       })()}
                     </div>
                   </div>
+                {/* Code geldig (TTNB 15-10-2026: "Kon largu e por ta geldig na
+                    esun di loyalty card. Pero esun di birthday no."). Zelfde
+                    chips als bij de stempelkaart; "Deze maand" = leeg = t/m de
+                    laatste dag van de maand waarin de code gemaakt wordt (zo
+                    werkte het altijd). Geldt voor de mail én de zelf gemaakte
+                    codes (create_birthday_code), voor nieuwe codes. */}
+                {(() => {
+                  const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
+                  const KEY = "birthday_code_days", PRESETS = [30, 60, 90];
+                  const days = salonData[KEY];
+                  const custom = !!loyaltyCustom[KEY] || (days != null && !PRESETS.includes(days));
+                  const chip = (active, label, onClick) => (
+                    // "Deze maand" past op een telefoon niet op één regel in een
+                    // vijfde van de breedte: mag naar twee regels, alle chips
+                    // even hoog en de tekst in het midden.
+                    <div key={label} onClick={onClick} role="radio" aria-checked={active} data-bday-days={label}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 38, padding: "6px 4px", borderRadius: 8, textAlign: "center", cursor: "pointer", fontSize: 11, fontWeight: 600, lineHeight: 1.2, overflowWrap: "anywhere", border: `1px solid ${active ? accent : c.inputBorder}`, background: active ? `${accent}18` : c.bg, color: active ? accent : c.textSub, transition: "all 0.15s" }}>{label}</div>
+                  );
+                  const pick = (v) => { setLoyaltyCustom(s => ({ ...s, [KEY]: false })); update(d => { d[KEY] = v; return d; }); };
+                  return (
+                    <div data-bday-validity style={{ marginTop: 14 }}>
+                      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>{L("Code geldig", "Code valid for", "Código válido")}</div>
+                      <div role="radiogroup" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+                        {chip(!custom && days == null, L("Deze maand", "This month", "Este mes"), () => pick(null))}
+                        {PRESETS.map(v => chip(!custom && days === v, `${v / 30} ${L("mnd", "mo", "mes")}`, () => pick(v)))}
+                        {chip(custom, L("Anders…", "Other…", "Otro…"), () => { setLoyaltyCustom(s => ({ ...s, [KEY]: true })); if (days == null) update(d => { d[KEY] = 45; return d; }); })}
+                      </div>
+                      {custom && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 11, color: c.textSub }}>
+                          {L("Eigen waarde:", "Your own value:", "Valor propio:")}
+                          <input autoFocus className="input-field" type="number" min={7} max={365} data-bday-days-input
+                            value={days ?? ""}
+                            // Zolang het veld in gebruik is blijft "Anders…" gekozen:
+                            // na herladen is loyaltyCustom leeg, en leegmaken of
+                            // doortypen langs 30/60/90 haalde het veld dan weg.
+                            onFocus={() => setLoyaltyCustom(s => s[KEY] ? s : { ...s, [KEY]: true })}
+                            onChange={e => { setLoyaltyCustom(s => s[KEY] ? s : { ...s, [KEY]: true }); update(d => { const v = parseInt(e.target.value); d[KEY] = Number.isFinite(v) ? v : null; return d; }); }}
+                            onBlur={() => {
+                              // Leeg gelaten = terug naar "Deze maand" (zo wordt het
+                              // ook opgeslagen); anders binnen 7 t/m 365 houden.
+                              if (days == null) { setLoyaltyCustom(s => ({ ...s, [KEY]: false })); return; }
+                              update(d => { d[KEY] = Math.max(7, Math.min(365, d[KEY])); return d; });
+                            }}
+                            style={{ width: 84, fontSize: 12, padding: "8px 10px", textAlign: "center" }} />
+                          {L("dagen", "days", "días")}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, lineHeight: 1.45 }}>
+                        {days == null
+                          ? L("Tot en met de laatste dag van de maand waarin de code gemaakt wordt. Wie op de 28e jarig is, heeft dus maar een paar dagen.",
+                              "Until the last day of the month in which the code is made. Someone whose birthday is on the 28th only has a few days.",
+                              "Hasta el último día del mes en que se crea el código. Quien cumple años el día 28 solo tiene unos días.")
+                          : L(`${days} dagen vanaf de dag dat de code gemaakt wordt (de verjaardag, of de dag dat je hem zelf maakt). Geldt voor nieuwe codes.`,
+                              `${days} days from the day the code is made (the birthday, or the day you make it yourself). Applies to new codes.`,
+                              `${days} días desde el día en que se crea el código (el cumpleaños, o el día en que lo creas tú). Vale para códigos nuevos.`)}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {/* Overzicht van door de cron uitgedeelde codes — ook zichtbaar
                     als de verjaardagsmail (tijdelijk) uitstaat: eerder
                     verstuurde codes blijven immers inwisselbaar. */}
-                <BirthdayCodesBlock lang={lang} c={c} accent={accent} toast={toast} pct={salonData.birthday_email_discount_pct} prefix={salonData.birthday_email_code_prefix} salonName={salonData.name} slug={salonData.id} countryCode={salonData.country_code} />
+                <BirthdayCodesBlock lang={lang} c={c} accent={accent} toast={toast} pct={salonData.birthday_email_discount_pct} days={salonData.birthday_code_days} prefix={salonData.birthday_email_code_prefix} salonName={salonData.name} slug={salonData.id} countryCode={salonData.country_code} />
                 </>)}
               </div>
 
@@ -22705,6 +22782,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   birthday_email_enabled: !!salonData.birthday_email_enabled,
                   birthday_email_discount_pct: salonData.birthday_email_discount_pct ?? null,
                   birthday_email_code_prefix: (salonData.birthday_email_code_prefix || "").trim() || null,
+                  // Leeg = "Deze maand"; anders 7 t/m 365 dagen (check in de database).
+                  birthday_code_days: Number.isFinite(parseInt(salonData.birthday_code_days)) ? Math.max(7, Math.min(365, parseInt(salonData.birthday_code_days))) : null,
                   birthday_feature_enabled: !!salonData.birthday_feature_enabled,
                   ask_birthday_on_booking: !!salonData.ask_birthday_on_booking,
                   birthday_notify_owner: !!salonData.birthday_notify_owner,
