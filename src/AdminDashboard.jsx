@@ -915,7 +915,7 @@ export default function AdminDashboard({ onLogout }) {
               <div data-admin-invites style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 16 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>
-                    Rating email — {invites.filter(i => i.sent_at).length} of {invites.length} sent · {invites.filter(i => i.opened_at).length} opened · {invites.filter(i => i.answered_at).length} answered
+                    Rating email — {invites.filter(i => i.sent_at).length} of {invites.length} sent · {invites.filter(i => i.opened_at).length} opened the link · {invites.filter(i => i.answered_at).length} answered
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn-ghost" data-admin-send-test disabled={sendBusy || !me} onClick={() => sendInvites("test", null, "en")} style={{ fontSize: 10, padding: "8px 12px" }}>
@@ -931,6 +931,7 @@ export default function AdminDashboard({ onLogout }) {
                 </div>
                 <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.5, marginBottom: 10 }}>
                   Every salon gets the English mail, subject "How is Vellu working for you? Rate it in one minute", sent as "Vellu" and signed Team Vellu (no personal name), replies go to mirahventures@vellu.cc. The page behind the link opens in English with a Dutch switch. A test is one mail. Each salon gets its own link vellu.cc/beoordeel/… that also lets them change their answer later. Resend sends the same link again.
+                  {" "}<strong style={{ color: c.textSub, fontWeight: 600 }}>"Opened link" means they clicked the link in the mail and saw the page; whether they opened the mail itself is not tracked.</strong>
                 </div>
                 {sendMsg && <div data-admin-send-msg style={{ fontSize: 12, color: /^Failed/.test(sendMsg) ? c.danger : c.success, marginBottom: 10 }}>{sendMsg}</div>}
                 {invites.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: "8px 0" }}>No active salons.</div>}
@@ -939,7 +940,17 @@ export default function AdminDashboard({ onLogout }) {
                     <span style={{ fontWeight: 500, minWidth: 0 }}>{i.business_name || <em style={{ color: c.textMuted }}>(no name)</em>} <span style={{ color: c.textMuted, fontWeight: 400 }}>· {i.email}</span></span>
                     <span style={{ display: "flex", alignItems: "center", gap: 10, color: c.textSub, whiteSpace: "nowrap" }}>
                       <span>{i.sent_at ? `sent ${relTime(i.sent_at)}${i.sent_count > 1 ? ` (${i.sent_count}x)` : ""}` : "not sent"}</span>
-                      <span style={{ color: i.answered_at ? c.success : i.opened_at ? accent : c.textMuted }}>{i.answered_at ? "answered" : i.opened_at ? "opened" : "not opened"}</span>
+                      {/* 16-10-2026 ("i cant see if they opened the link"): "opened"
+                          las als de mail; het is de link (app_rating_invite zet
+                          opened_at bij het openen van de pagina). Met tijd erbij,
+                          en bij beantwoord staat het openen in de tooltip. */}
+                      <span data-invite-status
+                        title={i.opened_at ? `Link opened ${fmtDateTime(i.opened_at)}${i.answered_at ? ` · answered ${fmtDateTime(i.answered_at)}` : ""}` : undefined}
+                        style={{ color: i.answered_at ? c.success : i.opened_at ? accent : c.textMuted }}>
+                        {i.answered_at ? `answered ${relTime(i.answered_at)}`
+                          : i.opened_at ? `opened link ${relTime(i.opened_at)}`
+                          : i.sent_at ? "link not opened" : "—"}
+                      </span>
                       <button className="btn-ghost" disabled={sendBusy} onClick={() => sendInvites("send", [i.owner_id])} style={{ fontSize: 10, padding: "6px 10px" }}>
                         {i.sent_at ? "Resend" : "Send"}
                       </button>
