@@ -686,6 +686,14 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
       // show what the business actually does.
       const svcByOwner = {};
       const catsByOwner = {};
+      // Salons zonder één zichtbare behandeling niet tonen (Faisal 17-10-2026:
+      // accounts die alleen bij het aanmelden actief waren, zoals ÉLANÉ STUDIO,
+      // stonden als lege kaart op de homepage). Er valt daar niets te boeken;
+      // zodra een salon een behandeling toevoegt staat hij er vanzelf weer.
+      // Mislukt het ophalen van de behandelingen, dan niet filteren: liever een
+      // lege kaart dan een homepage zonder salons.
+      const withServices = new Set();
+      let servicesLoaded = false;
       if (rows.length) {
         const ids = rows.map(r => r.id);
         // Per 100 salons: .in() zet alle id's in de URL (zo'n 37 tekens per
@@ -695,8 +703,8 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
         const idChunks = [];
         for (let i = 0; i < ids.length; i += 100) idChunks.push(ids.slice(i, i + 100));
         const inChunks = (build) => Promise.all(idChunks.map(part => fetchAllRows(() => build(part))))
-          .then(results => ({ data: results.flatMap(r => r.data || []) }));
-        const [{ data: svcs }, { data: cats }] = await Promise.all([
+          .then(results => ({ data: results.flatMap(r => r.data || []), error: results.find(r => r.error)?.error || null }));
+        const [{ data: svcs, error: svcErr }, { data: cats }] = await Promise.all([
           // visible=true: een verborgen dienst ("on hold") mag een salon niet in
           // de zoekresultaten trekken — de bezoeker klikt dan door en vindt hem
           // nergens op de boekingspagina terug. fetchAllRows: met meer salons
@@ -706,16 +714,19 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
           inChunks(part => supabase.from("service_categories").select("owner_id,name_nl,name_en,name_es,position").in("owner_id", part).order("position", { ascending: true }).order("id", { ascending: true })),
         ]);
         for (const s of (svcs || [])) {
+          withServices.add(s.owner_id);
           svcByOwner[s.owner_id] = (svcByOwner[s.owner_id] || "") + " " +
             [s.name, s.name_nl, s.name_en, s.name_es].filter(Boolean).join(" ");
         }
+        servicesLoaded = !svcErr;
         for (const cat of (cats || [])) {
           (catsByOwner[cat.owner_id] = catsByOwner[cat.owner_id] || []).push(cat);
           svcByOwner[cat.owner_id] = (svcByOwner[cat.owner_id] || "") + " " +
             [cat.name_nl, cat.name_en, cat.name_es].filter(Boolean).join(" ");
         }
       }
-      if (!cancelled) setSalons(rows.map(r => ({ ...r, svc: svcByOwner[r.id] || "", cats: (catsByOwner[r.id] || []).slice(0, 3) })));
+      const listed = servicesLoaded ? rows.filter(r => withServices.has(r.id)) : rows;
+      if (!cancelled) setSalons(listed.map(r => ({ ...r, svc: svcByOwner[r.id] || "", cats: (catsByOwner[r.id] || []).slice(0, 3) })));
     })();
     return () => { cancelled = true; };
   }, []);
