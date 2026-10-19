@@ -3589,11 +3589,13 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                         <div key={review.id} className="profile-review-card" data-review-card>
                           <div className="profile-review-head">
                             <div className="profile-review-avatar">{review.anonymous ? "?" : (naam[0] || "?").toUpperCase()}</div>
-                            <div style={{ minWidth: 0 }}>
+                            {/* Naam, sterren en datum: de datum springt als geheel
+                                naar de volgende regel als het smal wordt (19-10-2026). */}
+                            <div className="profile-review-meta">
                               <div style={{ fontWeight: 600, fontSize: 13, color: review.anonymous ? c.textSub : c.text, fontStyle: review.anonymous ? "italic" : "normal" }}>{naam}</div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 1 }}>
+                              <div className="profile-review-stars">
                                 <StarRow rating={review.rating} size={11} />
-                                <span style={{ fontSize: 11, color: c.textMuted }}>· {getRelativeTime(review.created_at)}</span>
+                                <span className="profile-review-when" style={{ fontSize: 11, color: c.textMuted }}>· {getRelativeTime(review.created_at)}</span>
                               </div>
                             </div>
                           </div>

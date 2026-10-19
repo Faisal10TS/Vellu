@@ -37,6 +37,14 @@ export const RELEASES = [
           es: "Reseñas: si una cita se mueve a una fecha posterior, el cliente recibe el correo de reseña el día después de la nueva fecha, aunque ya se hubiera enviado uno para la fecha anterior. Antes, \"¿Cómo fue tu visita?\" podía llegar antes de la visita.",
         },
       },
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Boekingspagina: de reviews passen zich aan de breedte van het scherm aan. In een half scherm of op een tablet liep de tekst eerst uit de kaartjes, en op een telefoon bleven korte reviews op halve breedte staan.",
+          en: "Booking page: reviews now adapt to the width of the screen. In a half-width window or on a tablet the text used to run out of the cards, and on a phone short reviews stayed at half width.",
+          es: "Página de reservas: las reseñas ahora se adaptan al ancho de la pantalla. En una ventana a media pantalla o en una tableta el texto se salía de las tarjetas, y en un teléfono las reseñas cortas quedaban a medio ancho.",
+        },
+      },
     ],
   },
   {

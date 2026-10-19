@@ -3207,10 +3207,17 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .profile-team-modal-bio { font-size: 13.5px; color: ${c.textSub}; line-height: 1.6; margin-top: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .profile-team-modal-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
 
-  /* Reviews (15-09): beoordelingstegel links, reviewkaarten rechts. */
-  .profile-reviews-grid { display: flex; gap: 12px; align-items: flex-start; }
+  /* Reviews (15-09): beoordelingstegel links, reviewkaarten rechts.
+     19-10-2026 (Faisal: "when its not full screen the text starts bleeding
+     out"): in een half scherm naast de boekingskaart bleef het twee kolommen
+     van ~170px; de datum liep het kaartje uit. Nu kijkt het naar de echte
+     breedte van het blok: kaarten krijgen minstens 230px (anders één
+     kolom), en is het blok smaller dan ~600px dan staat de tegel erboven
+     (container query; zonder ondersteuning schuiven de kaarten via
+     flex-wrap alsnog onder de tegel). */
+  .profile-reviews-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; container-type: inline-size; }
   .profile-rating-tile {
-    width: 220px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; text-align: center;
+    width: 220px; flex: 0 0 220px; display: flex; flex-direction: column; align-items: center; text-align: center;
     background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 14px; padding: 18px;
     box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04);
   }
@@ -3221,12 +3228,21 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .profile-rating-bar-track { flex: 1; height: 6px; background: ${c.inputBg}; border-radius: 3px; overflow: hidden; }
   .profile-rating-bar-fill { height: 100%; background: ${accent}; border-radius: 3px; transition: width 0.8s ease; }
   .profile-rating-score { font-family: var(--display-font, 'Cormorant Garamond', serif); font-size: 42px; font-weight: 400; color: ${c.text}; line-height: 1; margin-bottom: 6px; }
-  .profile-review-cards { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  /* Hooguit twee kolommen (zoals het ontwerp), elk minstens 230px breed. */
+  .profile-review-cards { flex: 1 1 340px; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, max(230px, calc(50% - 6px))), 1fr)); gap: 12px; align-items: start; }
+  @container (max-width: 600px) {
+    .profile-rating-tile { flex-basis: 100%; width: 100%; }
+    .profile-review-cards { flex-basis: 100%; width: 100%; }
+  }
   .profile-review-card {
     background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 14px; padding: 14px 16px;
     box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04);
+    min-width: 0; overflow-wrap: anywhere;
   }
-  .profile-review-head { display: flex; align-items: center; gap: 10px; }
+  .profile-review-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .profile-review-meta { flex: 1; min-width: 0; text-align: left; }
+  .profile-review-stars { display: flex; align-items: center; flex-wrap: wrap; column-gap: 6px; row-gap: 2px; margin-top: 1px; }
+  .profile-review-when { white-space: nowrap; }
   .profile-review-avatar {
     width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
     background: ${accent}1a; color: ${accent}; display: flex; align-items: center; justify-content: center;
@@ -3406,7 +3422,9 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     .profile-products-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
     .profile-reviews-grid { flex-direction: column; }
     .profile-rating-tile { width: 100%; }
-    .profile-review-cards { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    /* width: 100%: in de kolom-stand werd het blok zo smal als de inhoud;
+       korte reviews ("10/10") gaven kaartjes op de halve breedte (19-10). */
+    .profile-review-cards { grid-template-columns: minmax(0, 1fr); gap: 10px; width: 100%; }
     .profile-contact-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   }
   @media (prefers-reduced-motion: reduce) {
