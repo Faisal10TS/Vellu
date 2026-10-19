@@ -12,6 +12,7 @@ import {
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, fmtAmt, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, getWhatsAppRefundMsg, partPricesOf, partLabelOf, useDashboardScrollbars,
   salonNow, tzFor, localToUtc, fetchAllRows,
+  EmailTypoHint,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -3645,6 +3646,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       <input className="input-field" placeholder={t.name} value={addApptForm.client_name} onChange={e => setAddApptForm(f => ({...f, client_name: e.target.value}))} style={{ fontSize: 12 }} />
                       <input className="input-field" placeholder={t.email} type="email" value={addApptForm.client_email} onChange={e => setAddApptForm(f => ({...f, client_email: e.target.value}))} style={{ fontSize: 12 }} />
+                      <EmailTypoHint value={addApptForm.client_email} onFix={v => setAddApptForm(f => ({ ...f, client_email: v }))} lang={lang} c={c} accent={accent} style={{ margin: "-2px 0 0" }} />
                       <input className="input-field" placeholder={`${t.phone} (${t.optional})`} value={addApptForm.client_phone} onChange={e => setAddApptForm(f => ({...f, client_phone: e.target.value}))} style={{ fontSize: 12 }} />
                       {/* Verjaardag — alleen als de salon de verjaardagsactie
                           aan heeft staan; zelfde veld als in de eigenaars-app. */}

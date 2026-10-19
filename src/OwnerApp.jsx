@@ -23,6 +23,7 @@ import {
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, isOpenReceivable, receivableKeyOf, ageLabel, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
   useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars, fetchAllRows,
   RESERVED_SLUGS, salonNow, tzFor, localToUtc,
+  EmailTypoHint,
 } from "./shared.jsx";
 import Kasboek from "./Kasboek.jsx";
 import { AUTOPAY_MONTHLY, autopayChargeYmd, autopayChargeDayReached, autopayOffDeadline, autopayPhase } from "./autopay.js";
@@ -879,6 +880,7 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, days = null, prefix, 
                 {creating ? "…" : (lang === "nl" ? "Maak persoonlijke code" : lang === "es" ? "Crear código personal" : "Create personal code")}
               </button>
             </div>
+            <EmailTypoHint value={newEmail} onFix={v => setNewEmail(v)} lang={lang} c={c} accent={accent} style={{ marginTop: 4 }} />
             <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, lineHeight: 1.45 }}>
               {pct
                 ? (() => {
@@ -4741,7 +4743,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
               <div><label style={lbl}>{lang === "nl" ? "Naam" : lang === "es" ? "Nombre" : "Name"}</label><input className="input-field" value={addForm.name} onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} placeholder={lang === "nl" ? "Voor- en achternaam" : lang === "es" ? "Nombre completo" : "Full name"} style={{ width: "100%" }} /></div>
               <div><label style={lbl}>{lang === "nl" ? "Telefoon" : lang === "es" ? "Teléfono" : "Phone"}</label><input className="input-field" type="tel" value={addForm.phone} onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+31 6 ..." style={{ width: "100%" }} /></div>
-              <div><label style={lbl}>{lang === "nl" ? "E-mail" : lang === "es" ? "Correo electrónico" : "Email"}</label><input className="input-field" type="email" value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : lang === "es" ? "cliente@email.com" : "client@email.com"} style={{ width: "100%" }} /></div>
+              <div><label style={lbl}>{lang === "nl" ? "E-mail" : lang === "es" ? "Correo electrónico" : "Email"}</label><input className="input-field" type="email" value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : lang === "es" ? "cliente@email.com" : "client@email.com"} style={{ width: "100%" }} /><EmailTypoHint value={addForm.email} onFix={v => setAddForm(f => ({ ...f, email: v }))} lang={lang} c={c} accent={accent} /></div>
               <div><label style={lbl}>{lang === "nl" ? "Notitie (optioneel)" : lang === "es" ? "Nota (opcional)" : "Note (optional)"}</label><input className="input-field" value={addForm.notes} onChange={(e) => setAddForm((f) => ({ ...f, notes: e.target.value }))} placeholder={lang === "nl" ? "bijv. allergie, voorkeur" : lang === "es" ? "p. ej. alergia, preferencia" : "e.g. allergy, preference"} style={{ width: "100%" }} /></div>
               {/* Zakelijke klant (klantenrekening, 25-09-2026): school, supermarkt —
                   koopt in de Kassa op rekening; de naam is dan de bedrijfsnaam. */}
@@ -5182,7 +5184,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
               <div><label style={lbl}>{lang === "nl" ? "Naam" : lang === "es" ? "Nombre" : "Name"}</label><input className="input-field" value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} placeholder={lang === "nl" ? "Voor- en achternaam" : lang === "es" ? "Nombre completo" : "Full name"} style={{ width: "100%" }} autoFocus /></div>
               <div><label style={lbl}>{lang === "nl" ? "Telefoon" : lang === "es" ? "Teléfono" : "Phone"}</label><input className="input-field" type="tel" value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+31 6 ..." style={{ width: "100%" }} /></div>
-              <div><label style={lbl}>{lang === "nl" ? "E-mail" : lang === "es" ? "Correo electrónico" : "Email"}</label><input className="input-field" type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : lang === "es" ? "cliente@email.com" : "client@email.com"} style={{ width: "100%" }} /></div>
+              <div><label style={lbl}>{lang === "nl" ? "E-mail" : lang === "es" ? "Correo electrónico" : "Email"}</label><input className="input-field" type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} placeholder={lang === "nl" ? "klant@email.nl" : lang === "es" ? "cliente@email.com" : "client@email.com"} style={{ width: "100%" }} /><EmailTypoHint value={editForm.email} onFix={v => setEditForm(f => ({ ...f, email: v }))} lang={lang} c={c} accent={accent} /></div>
               <div><label style={lbl}>{lang === "nl" ? "Notitie" : lang === "es" ? "Nota" : "Note"}</label><input className="input-field" value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} placeholder={lang === "nl" ? "bijv. allergie, voorkeur" : lang === "es" ? "p. ej. alergia, preferencia" : "e.g. allergy, preference"} style={{ width: "100%" }} /></div>
               {/* Zakelijke klant (klantenrekening, 25-09-2026). */}
               <div>
@@ -11314,6 +11316,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
                 <input className="input-field" placeholder={lang === "nl" ? "Naam klant (optioneel)" : lang === "es" ? "Nombre del cliente (opcional)" : "Client name (optional)"} value={walkinName} onChange={e => setWalkinName(e.target.value)} style={{ fontSize: 12 }} />
                 <input className="input-field" type="email" placeholder={lang === "nl" ? "E-mail (optioneel — factuur gaat direct mee)" : lang === "es" ? "Correo (opcional — factura al instante)" : "Email (optional — invoice sent instantly)"} value={walkinEmail} onChange={e => setWalkinEmail(e.target.value)} style={{ fontSize: 12 }} />
+                <EmailTypoHint value={walkinEmail} onFix={v => setWalkinEmail(v)} lang={lang} c={c} accent={accent} style={{ margin: "-2px 0 0" }} />
                 <div style={{ display: "flex", gap: 6 }}>
                   {[
                     ["pin", lang === "es" ? "Tarjeta" : "Pin"],
@@ -13231,6 +13234,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           })()}
                         </div>
                         <input className="input-field" type="email" placeholder={lang === "nl" ? "E-mail (optioneel — factuur gaat direct mee)" : lang === "es" ? "Correo (opcional)" : "Email (optional — invoice sent instantly)"} value={walkinEmail} onChange={e => setWalkinEmail(e.target.value)} style={{ fontSize: 12 }} />
+                        <EmailTypoHint value={walkinEmail} onFix={v => setWalkinEmail(v)} lang={lang} c={c} accent={accent} style={{ margin: "-2px 0 0" }} />
                         {(salonData.staff || []).length > 0 && (
                           <select className="input-field" value={walkinStaff} onChange={e => setWalkinStaff(e.target.value)} style={{ fontSize: 12, color: walkinStaff ? c.text : c.textMuted }}>
                             <option value="">{lang === "nl" ? "Verkocht door (optioneel)" : lang === "es" ? "Vendido por (opcional)" : "Sold by (optional)"}</option>
@@ -23100,6 +23104,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                         <input className="input-field" placeholder={t.name} value={addApptForm.client_name} onChange={e => setAddApptForm(f => ({...f, client_name: e.target.value}))} style={{ fontSize: 12 }} />
                         <input className="input-field" placeholder={`${t.email} (${t.optional})`} type="email" value={addApptForm.client_email} onChange={e => setAddApptForm(f => ({...f, client_email: e.target.value}))} style={{ fontSize: 12 }} />
+                        <EmailTypoHint value={addApptForm.client_email} onFix={v => setAddApptForm(f => ({ ...f, client_email: v }))} lang={lang} c={c} accent={accent} style={{ margin: "-2px 0 0" }} />
                         <input className="input-field" placeholder={`${t.phone} (${t.optional})`} value={addApptForm.client_phone} onChange={e => setAddApptForm(f => ({...f, client_phone: e.target.value}))} style={{ fontSize: 12 }} />
                         {/* E-mail is niet verplicht — in de Klanten-tab mag een
                             klant ook zonder. Zonder adres gaat er alleen geen

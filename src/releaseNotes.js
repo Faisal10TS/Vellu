@@ -14,6 +14,32 @@
 
 export const RELEASES = [
   {
+    // 19-10: een klant van Eydy boekte met "@gmail.vom" (Resend: Bounced) en
+    // kreeg geen enkele mail; in Vellu stonden ~30 van zulke adressen. En bij
+    // Get Niq'd Up ging de reviewmail uit vóór een verzette afspraak.
+    id: "2026-10-19",
+    date: "2026-10-19",
+    title: { nl: "Minder gemiste mails", en: "Fewer missed emails", es: "Menos correos perdidos" },
+    items: [
+      {
+        kind: "new", audience: ["owner", "staff"],
+        text: {
+          nl: "Tikfout in een e-mailadres, zoals gmail.vom of hotmial.com? Onder het e-mailveld staat nu \"Bedoelde je …@gmail.com?\"; één tik en het klopt. Op je boekingspagina, bij een nieuwe klant of afspraak en in de Kassa. Zo komen bevestigingen en herinneringen wél aan.",
+          en: "A typo in an email address, like gmail.vom or hotmial.com? Below the email field you now see \"Did you mean …@gmail.com?\"; one tap fixes it. On your booking page, for a new client or appointment and in the Till. So confirmations and reminders do arrive.",
+          es: "¿Un error en un correo, como gmail.vom o hotmial.com? Debajo del campo de correo ahora aparece \"¿Quisiste decir …@gmail.com?\"; un toque y queda bien. En tu página de reservas, al añadir un cliente o una cita y en la Caja. Así las confirmaciones y los recordatorios sí llegan.",
+        },
+      },
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Reviews: wordt een afspraak naar een latere datum verzet, dan krijgt de klant de reviewmail de dag na de nieuwe datum, ook als er voor de oude datum al een was verstuurd. Eerst kon de vraag \"Hoe was je bezoek?\" al komen vóór het echte bezoek.",
+          en: "Reviews: when an appointment is moved to a later date, the client gets the review email the day after the new date, even if one already went out for the old date. Before, \"How was your visit?\" could arrive before the actual visit.",
+          es: "Reseñas: si una cita se mueve a una fecha posterior, el cliente recibe el correo de reseña el día después de la nueva fecha, aunque ya se hubiera enviado uno para la fecha anterior. Antes, \"¿Cómo fue tu visita?\" podía llegar antes de la visita.",
+        },
+      },
+    ],
+  },
+  {
     // TTNB 15-10: "Kon largu e por ta geldig na esun di loyalty card. Pero esun
     // di birthday no. E standard 1 maand." Verjaardagscode kreeg dezelfde keuze
     // als de stempelkaart (profiles.birthday_code_days).

@@ -659,6 +659,101 @@ export async function fetchAllRows(build, pageSize = 1000) {
   return { data: out, error: null };
 }
 
+// ─── TIKFOUTEN IN E-MAILADRESSEN (19-10-2026) ────────────────
+// Een klant van Beauty_By_Eydy boekte met "…@gmail.vom": Resend gaf "Bounced"
+// en ze kreeg geen enkele mail, ook geen bevestiging. emailTypoSuggestion geeft
+// bij een waarschijnlijke tikfout in het domein het verbeterde adres terug
+// (anders null); EmailTypoHint zet daaronder "Bedoelde je …?" met een tik om
+// het over te nemen. Alleen een HINT, nooit blokkeren: een echt maar onbekend
+// domein (eigen bedrijfsdomein) moet gewoon kunnen.
+const EMAIL_DOMAINS = [
+  "gmail.com", "googlemail.com", "hotmail.com", "hotmail.nl", "hotmail.be", "hotmail.co.uk", "hotmail.fr",
+  "hotmail.de", "hotmail.es", "hotmail.it", "outlook.com", "outlook.be", "outlook.de", "outlook.es", "outlook.fr",
+  "outlook.it", "live.com", "live.nl", "live.be", "live.de", "live.fr", "live.co.uk", "msn.com", "icloud.com",
+  "me.com", "mac.com", "yahoo.com", "yahoo.nl", "yahoo.co.uk", "yahoo.de", "yahoo.fr", "yahoo.es", "ymail.com",
+  "aol.com", "aol.nl", "aol.de", "mail.com", "gmx.com", "gmx.net", "gmx.de", "gmx.at", "gmx.ch", "web.de", "t-online.de",
+  "proton.me", "protonmail.com", "ziggo.nl", "kpnmail.nl", "kpnplanet.nl", "planet.nl", "home.nl",
+  "xs4all.nl", "upcmail.nl", "chello.nl", "casema.nl", "quicknet.nl", "telfort.nl", "hetnet.nl",
+  "online.nl", "tele2.nl", "zeelandnet.nl", "caiway.nl", "solcon.nl", "telenet.be", "skynet.be", "setarnet.aw",
+];
+const EMAIL_DOMAIN_SET = new Set(EMAIL_DOMAINS);
+// Echte landversies van grote providers (yahoo.be, hotmail.pt, gmx.it,
+// hotmail.co.za …) zijn geen tikfout, ook al staan ze niet in de lijst: die
+// nooit naar een ander land "verbeteren" (reviewbevinding 19-10-2026).
+const EMAIL_PROVIDER_REGIONAL = /^(hotmail|outlook|live|windowslive|yahoo|ymail|gmx|aol|msn)\.((co|com)\.)?(nl|be|de|fr|es|pt|it|at|ch|uk|ie|dk|no|se|fi|is|pl|cz|sk|hu|ro|bg|gr|tr|ru|ua|lt|lv|ee|lu|si|hr|rs|us|ca|mx|br|ar|cl|co|pe|ve|uy|ec|sr|aw|cw|jp|kr|cn|tw|hk|sg|my|th|id|ph|vn|in|pk|au|nz|za|eg|ma|ng|ke|il|ae|sa|qa)$/;
+// Eindstukken die niet bestaan maar wel vaak getikt worden.
+const EMAIL_TLD_FIX = { vom: "com", con: "com", cpm: "com", xom: "com", comm: "com", coom: "com", ocm: "com", cmo: "com", cim: "com", c0m: "com", nll: "nl", nlk: "nl" };
+// Afstand met verwisselde buren als één fout (gmial ↔ gmail).
+function emailEditDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length];
+}
+export function emailTypoSuggestion(raw) {
+  const s = String(raw || "").trim();
+  const at = s.lastIndexOf("@");
+  if (at < 1 || at === s.length - 1) return null;
+  const local = s.slice(0, at);
+  const typed = s.slice(at + 1).toLowerCase();
+  // Komma i.p.v. punt ("gmail,com") telt als punt.
+  if (!/^[a-z0-9.,-]+$/.test(typed)) return null;
+  const domain = typed.replace(/,/g, ".").replace(/\.{2,}/g, ".").replace(/^\.+|\.+$/g, "");
+  if (!domain.includes(".")) return null;
+  if (EMAIL_DOMAIN_SET.has(domain)) return domain === typed ? null : `${local}@${domain}`;
+  // Rommel achter een bekend domein geplakt ("gmail.comthert",
+  // "gmail.commail.com"). Niet bij een extra punt-deel (gmail.com.au), en
+  // alleen de lange namen: "me.company.nl" begint ook met "me.com".
+  const glued = EMAIL_DOMAINS.find((k) => k.length >= 9 && domain.startsWith(k) && domain.length > k.length && domain[k.length] !== ".");
+  if (glued) return `${local}@${glued}`;
+  // Dichtstbijzijnde bekende provider: één fout, of twee bij lange namen
+  // mét hetzelfde eindstuk. Twee providers even dichtbij (ail.com: aol of
+  // mail?) = geen hint. Echte landversies overslaan, en providers met een
+  // naam van 3 letters of minder (aol, msn, me, gmx, web): één letter verschil
+  // raakt daar echte bedrijven (bol.com, msd.com, gm.com). Hun eindstuk-
+  // tikfouten (aol.con) vangt EMAIL_TLD_FIX hieronder nog wel.
+  if (!EMAIL_PROVIDER_REGIONAL.test(domain)) {
+    let best = null, bestD = Infinity, tie = false;
+    for (const k of EMAIL_DOMAINS) {
+      if (Math.abs(k.length - domain.length) > 2) continue;
+      const dd = emailEditDistance(domain, k);
+      if (dd < bestD) { bestD = dd; best = k; tie = false; } else if (dd === bestD) tie = true;
+    }
+    // Korte namen tellen mee voor "twijfel", maar worden nooit voorgesteld.
+    const shortName = best && best.split(".")[0].length <= 3;
+    const tTld = domain.split(".").pop(), bTld = best ? best.split(".").pop() : "";
+    const sameTld = bTld === tTld || bTld.startsWith(tTld); // ".co" = afgekapte ".com"
+    if (best && !tie && !shortName && (bestD <= 1 || (bestD === 2 && best.length >= 10 && sameTld))) return `${local}@${best}`;
+  }
+  const parts = domain.split(".");
+  const fix = EMAIL_TLD_FIX[parts[parts.length - 1]];
+  if (fix && parts.length > 1) return `${local}@${parts.slice(0, -1).join(".")}.${fix}`;
+  return domain === typed ? null : `${local}@${domain}`;
+}
+// Pas een poos na het laatste toetsaanslag tonen, anders flitst er bij
+// "gmail.co" al "Bedoelde je gmail.com?" terwijl de m nog komt.
+export function EmailTypoHint({ value, onFix, lang = "nl", c, accent = ACCENT, style }) {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => { const id = setTimeout(() => setSettled(value), 700); return () => clearTimeout(id); }, [value]);
+  const sug = settled === value ? emailTypoSuggestion(value) : null;
+  if (!sug) return null;
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  return (
+    <div role="status" data-email-typo style={{ fontSize: 12, lineHeight: 1.4, color: c?.textSub || "inherit", margin: "6px 0 2px", overflowWrap: "anywhere", ...style }}>
+      {L("Bedoelde je ", "Did you mean ", "¿Quisiste decir ")}
+      <button type="button" data-email-typo-fix onClick={() => onFix(sug)}
+        style={{ background: "none", border: "none", padding: 0, margin: 0, font: "inherit", fontWeight: 600, color: accent, textDecoration: "underline", cursor: "pointer", overflowWrap: "anywhere", textAlign: "left" }}>{sug}</button>
+      {L("?", "?", "?")}
+    </div>
+  );
+}
+
 // ─── WHATSAPP HELPER ─────────────────────────────────────────
 // Telefoonnummer → cijfers zoals wa.me ze wil (landcode, geen + of 0).
 // Zonder landcode is het land van de salon leidend: "06 12345678" bij een

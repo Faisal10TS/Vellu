@@ -11,7 +11,7 @@ import {
   getToday as deviceNow, fmt, parseDate, getDays, salonNow, tzFor, localToUtc, fetchAllRows,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
-  getPageFont, ensurePageFontLoaded, curSym, fmtAmt, Linkify, readableAccent, onAccentInk, blockAppliesOn
+  getPageFont, ensurePageFontLoaded, curSym, fmtAmt, Linkify, readableAccent, onAccentInk, blockAppliesOn, EmailTypoHint
 } from "./shared.jsx";
 
 // Zoekterm voor de kaart, "Open in Maps" en de route na het boeken
@@ -4932,6 +4932,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 <form autoComplete="on" onSubmit={e => e.preventDefault()} style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
                   {/* Email first for client lookup */}
                   <input className="input-field" aria-label={t.email} placeholder={t.email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                  <EmailTypoHint value={form.email} onFix={v => setForm(f => ({ ...f, email: v }))} lang={lang} c={c} accent={accent} style={{ margin: "-4px 0 0" }} />
 
                   {/* Client found indicator */}
                   {clientFound && (
@@ -5605,6 +5606,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     <form autoComplete="on" onSubmit={e => e.preventDefault()} style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
                       {/* Email first for client lookup */}
                       <input className="input-field" aria-label={t.email} placeholder={t.email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                      <EmailTypoHint value={form.email} onFix={v => setForm(f => ({ ...f, email: v }))} lang={lang} c={c} accent={accent} style={{ margin: "-4px 0 0" }} />
                       
                       {/* Client found indicator */}
                       {clientFound && (
@@ -5956,6 +5958,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       <input className="input-field" aria-label={T[lang].lastName} type="text" name="family-name" autoComplete="family-name" placeholder={T[lang].lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
                     </div>
                     <input className="input-field" aria-label={T[lang].email} placeholder={T[lang].email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                    <EmailTypoHint value={form.email} onFix={v => setForm(f => ({ ...f, email: v }))} lang={lang} c={c} accent={accent} style={{ margin: "-4px 0 0" }} />
                     {/* Phone follows the salon's phone_required setting, exactly
                         like the booking form — it made no sense for the same
                         setting to be enforced at booking but ignored here.
