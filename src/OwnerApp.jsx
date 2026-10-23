@@ -2434,6 +2434,14 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
   const [busyPlan, setBusyPlan] = useState(null);
   const busy = busyPlan !== null;
   const [profileBilling, setProfileBilling] = useState(null); // { trial_used, subscription_status }
+  // true zodra het profiel is opgevraagd (ook als dat mislukte): tot dan geen
+  // plannen tonen, anders flitst dit scherm voorbij bij wie automatisch een
+  // proef krijgt (zie autoStarting hieronder).
+  const [billingChecked, setBillingChecked] = useState(false);
+  // Aangemeld via een teamuitnodiging die niet lukte (verlopen, al gebruikt):
+  // dat is een stylist, geen nieuwe salon. Geen automatische proef (en geen
+  // welkomstmail); zij ziet de plannen met de uitleg over de uitnodiging.
+  const [invitedSignup, setInvitedSignup] = useState(false);
   // Lengte van de proef voor DEZE eigenaar: 14 dagen, of 30 als zij zich
   // tijdens een referral-actie met een uitnodigingscode aanmeldde (dan is de
   // gratis maand haar proef; zie start-trial + RPC my_trial_days).
@@ -2476,16 +2484,25 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
       // Strip the query string so a refresh doesn't re-trigger the check
       window.history.replaceState({}, "", "/owner");
     }
+    // Waakhond: blijft het opvragen hangen, dan na 12 s toch de plannen (zoals
+    // de 12 s in OwnerEntryPage), nooit eindeloos het wachtscherm.
+    const billingWatchdog = setTimeout(() => { if (!cancelled) setBillingChecked(true); }, 12000);
     (async () => {
       const { data } = await supabase
         .from("profiles")
         .select("trial_used, subscription_status, mollie_customer_id")
         .eq("id", user.id)
         .maybeSingle();
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!cancelled) setInvitedSignup(session?.user?.user_metadata?.staff_invite === true);
+      } catch { /* geen sessie: dan ook geen automatische proef nodig */ }
       if (!cancelled && data) {
         if (!fromCheckout && data.mollie_customer_id) setPayStatusLoading(true);
         setProfileBilling(data);
       }
+      clearTimeout(billingWatchdog);
+      if (!cancelled) setBillingChecked(true);
       try {
         const { data: td } = await supabase.rpc("my_trial_days");
         const n = Number(td);
@@ -2669,6 +2686,73 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
     }
   };
 
+  // Proef automatisch starten (23-10-2026, Faisal: "start the trial
+  // automatically"). Wie nog nooit een proef had, ziet de plannen niet meer
+  // maar krijgt meteen een proef op Professional, zodat ze alles kan proberen;
+  // de lengte (14 dagen, of langer via een referral-actie) bepaalt start-trial.
+  // Wisselen naar Starter kan tijdens de proef onder Instellingen, Abonnement &
+  // account. Aanleiding: Hair by Lina meldde zich aan, kwam twee weken later
+  // terug en drukte nooit op de proefknop. Niet bij een terugkeer van Mollie en
+  // niet als er al een Mollie-klant is (een eerdere checkout gaat voor). Mislukt
+  // het, dan gewoon de plannen met de knoppen, zoals voorheen.
+  // "idle" (nog niet geprobeerd) | "starting" | "failed" (dan de plannen).
+  const [autoStartPhase, setAutoStartPhase] = useState("idle");
+  const autoStartTried = useRef(false);
+  const autoStartEligible = postCheckout === null && !!profileBilling && !profileBilling.trial_used && !profileBilling.mollie_customer_id && !invitedSignup;
+  // Ook in de render: anders flitsen de plannen één frame voorbij vóór het effect.
+  const autoStarting = autoStartPhase === "starting" || (autoStartPhase === "idle" && autoStartEligible);
+  useEffect(() => {
+    if (autoStartTried.current || !autoStartEligible) return;
+    autoStartTried.current = true;
+    setAutoStartPhase("starting");
+    let redirecting = false;
+    // Liep de proef toch al (de server kan klaar zijn terwijl het antwoord
+    // verloren ging of te laat kwam)? Dan gewoon door naar het dashboard.
+    const trialRunning = async () => {
+      try {
+        const { data: pr } = await supabase.from("profiles").select("trial_used, plan, plan_expires_at").eq("id", user.id).maybeSingle();
+        return !!(pr?.trial_used && pr?.plan && pr?.plan_expires_at && new Date(pr.plan_expires_at).getTime() > Date.now());
+      } catch { return false; }
+    };
+    (async () => {
+      try {
+        // Nooit eindeloos wachten (mobiel netwerk): na 20 s afbreken.
+        const { data, error } = await supabase.functions.invoke("start-trial", {
+          body: { plan: "professional", billing_interval: "monthly" },
+          timeout: 20000,
+        });
+        if (!error && data?.success) {
+          // Zelfde als handleStartTrial: harde herlaadbeurt, dan opent het dashboard.
+          redirecting = true;
+          window.location.href = "/owner";
+          return;
+        }
+        if (await trialRunning()) {
+          redirecting = true;
+          window.location.href = "/owner";
+          return;
+        }
+        const code = await fnErrorCode(data, error);
+        if (code === "trial_already_used") {
+          setProfileBilling((p) => ({ ...(p || {}), trial_used: true }));
+        } else {
+          console.error("auto start-trial failed:", code, error);
+          toast.show(planErrorText(code, lang === "nl" ? "Je proefperiode kon niet automatisch starten. Kies hieronder een plan om te beginnen." : lang === "es" ? "Tu prueba no se pudo iniciar automáticamente. Elige un plan abajo para empezar." : "Your trial could not start automatically. Choose a plan below to begin."), "error");
+        }
+      } catch (e) {
+        console.error("auto start-trial error:", e);
+        if (await trialRunning()) {
+          redirecting = true;
+          window.location.href = "/owner";
+          return;
+        }
+        toast.show(t.somethingWrong, "error");
+      } finally {
+        if (!redirecting) setAutoStartPhase("failed");
+      }
+    })();
+  }, [autoStartEligible]);
+
   const plans = [
     {
       id: "starter",
@@ -2685,6 +2769,30 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
       popular: true,
     },
   ];
+
+  // Profiel nog niet opgevraagd, of de proef start automatisch: een rustig
+  // wachtscherm in plaats van de plannen (zie autoStarting hierboven).
+  if (postCheckout === null && (!billingChecked || autoStarting)) {
+    const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+    return (
+      <Layout>
+        <AtelierSkin />
+        <div className="atelier" data-trial-autostart={autoStarting ? "starting" : "loading"} style={{ background: c.bg, minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, fontFamily: "'Jost',sans-serif", color: c.text, textAlign: "center", position: "relative" }}>
+          {/* Altijd een uitweg, ook als het wachten lang duurt. */}
+          <button className="btn-ghost" data-trial-autostart-logout style={{ position: "absolute", top: 24, right: 24, fontSize: 10, padding: "6px 14px", width: "auto" }} onClick={onLogout}>{t.logout}</button>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300, marginBottom: 12 }}>
+            {autoStarting ? L("Welkom bij Vellu!", "Welcome to Vellu!", "¡Bienvenido a Vellu!") : L("Een momentje", "One moment", "Un momento")}
+          </div>
+          {autoStarting && (
+            <div style={{ fontSize: 14, color: c.textSub, maxWidth: 420 }}>
+              {L("Je gratis proefperiode wordt gestart…", "Starting your free trial…", "Iniciando tu prueba gratuita…")}
+            </div>
+          )}
+          <div style={{ marginTop: 28, width: 32, height: 32, border: `2px solid ${c.border}`, borderTopColor: accent, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        </div>
+      </Layout>
+    );
+  }
 
   // Terug van Mollie: volledig scherm zolang we controleren of activeren.
   // "pending", "failed" en "unknown" tonen gewoon de plannen met een melding
