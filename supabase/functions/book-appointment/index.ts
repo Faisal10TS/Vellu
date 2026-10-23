@@ -258,10 +258,13 @@ serve(async (req) => {
   // ---------- 1. Look up salon ----------
   const { data: salon, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, iban_holder, payment_link, prepay_enabled, prepay_term_hours, country_code, plan, staff_view_revenue, staff_view_client_contact, auto_block_no_show_threshold, cancel_deadline_hours")
+    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, iban_holder, payment_link, prepay_enabled, prepay_term_hours, country_code, plan, staff_view_revenue, staff_view_client_contact, auto_block_no_show_threshold, cancel_deadline_hours, deactivated_at")
     .eq("slug", salon_slug)
     .maybeSingle();
   if (salonErr || !salon) return err(404, "salon_not_found", origin);
+  // Gedeactiveerde salon (23-10-2026): geen nieuwe boekingen, vóór alle
+  // verdere validatie zodat er ook geen slot, mail, sms of push volgt.
+  if (salon.deactivated_at) return err(403, "salon_deactivated", origin);
   if (salon.phone_required && !phone) return err(400, "phone_required", origin);
   // Only require explicit policy agreement when the salon actually has a
   // booking policy to agree to. New salons have none, so the client UI shows

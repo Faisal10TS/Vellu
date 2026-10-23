@@ -74,7 +74,10 @@ serve(async (req) => {
     const { data: salons, error: salonError } = await supabase
       .from("profiles")
       .select("id, business_name, slug, rebook_nudge_days, country_code")
-      .gt("rebook_nudge_days", 0);
+      .gt("rebook_nudge_days", 0)
+      // Gedeactiveerde salon (23-10-2026): geen "tijd om te boeken"-mail. Op
+      // salonniveau overgeslagen, dus rebook_nudge_sent wordt nooit gezet.
+      .is("deactivated_at", null);
 
     if (salonError) {
       console.error("Error fetching salons:", salonError);

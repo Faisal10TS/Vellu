@@ -162,7 +162,9 @@ async function runJob(job: any): Promise<{ result: any; status: number }> {
     .from("profiles")
     .select("id, business_name, email, salon_email, country_code, subscription_status, is_demo")
     .eq("is_demo", false)
-    .in("subscription_status", ["active", "trialing"]);
+    .in("subscription_status", ["active", "trialing"])
+    // Gedeactiveerde salon (23-10-2026): geen "Hoe bevalt Vellu?"-mail.
+    .is("deactivated_at", null);
   if (error) return { result: { error: error.message }, status: 500 };
 
   const list: any[] = [];

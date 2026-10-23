@@ -183,6 +183,14 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/start-trial/index.ts"
 
+[functions.admin-salon]
+enabled = true
+# Salon deactiveren / heractiveren / definitief verwijderen vanuit vellu.cc/admin
+# (23-10-2026). De functie controleert zelf of de aanroeper in app_admins staat
+# (zoals send-rating-request); verify_jwt=false volgens het huispatroon.
+verify_jwt = false
+entrypoint = "./functions/admin-salon/index.ts"
+
 [functions.send-source-request]
 enabled = true
 # Welkomstmail van Team Vellu aan elke nieuwe salon (Faisal 24-09-2026; begon

@@ -168,7 +168,7 @@ serve(async (req) => {
   let staff: { id: string; name: string } | null = null;
   let { data: salon } = await supabase
     .from("profiles")
-    .select("id, business_name, country_code, staff_view_client_contact")
+    .select("id, business_name, country_code, staff_view_client_contact, deactivated_at")
     .eq("calendar_feed_token", token)
     .maybeSingle();
   if (!salon) {
@@ -181,13 +181,16 @@ serve(async (req) => {
       staff = { id: st.id, name: st.name };
       const { data: ownerProfile } = await supabase
         .from("profiles")
-        .select("id, business_name, country_code, staff_view_client_contact")
+        .select("id, business_name, country_code, staff_view_client_contact, deactivated_at")
         .eq("id", st.owner_id)
         .maybeSingle();
       salon = ownerProfile;
     }
   }
   if (!salon) return new Response("Not found", { status: 404 });
+  // Gedeactiveerde salon (23-10-2026): de agenda-feed van eigenaar én
+  // medewerkers stopt, alsof het token niet bestaat.
+  if (salon.deactivated_at) return new Response("Not found", { status: 404 });
 
   // Window: from 30 days ago to 180 days ahead. Skip cancelled/no-show.
   const now = new Date();

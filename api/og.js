@@ -49,7 +49,9 @@ async function loadShell(req) {
 
 async function loadSalon(slug) {
   try {
-    const url = `${SUPABASE_URL}/rest/v1/public_salons?select=business_name,city,country_code,cover_image_url,logo_url&slug=eq.${encodeURIComponent(slug)}&limit=1`;
+    // Gedeactiveerde salon (23-10-2026): deactivated=eq.false, dus geen rij en
+    // daarmee het gewone Vellu-voorbeeld, net als bij een onbekende salon.
+    const url = `${SUPABASE_URL}/rest/v1/public_salons?select=business_name,city,country_code,cover_image_url,logo_url&slug=eq.${encodeURIComponent(slug)}&deactivated=eq.false&limit=1`;
     const r = await fetch(url, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } });
     if (!r.ok) return null;
     const rows = await r.json();

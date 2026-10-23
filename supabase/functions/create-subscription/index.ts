@@ -260,10 +260,12 @@ serve(async (req) => {
     if (method !== "creditcard" && method !== "ideal") return err(400, "invalid_method", origin);
     const { data: tp, error: tpErr } = await supabase
       .from("profiles")
-      .select("id, business_name, email, country_code, plan, subscription_status, trial_ends_at, mollie_customer_id, mollie_subscription_id, referral_credit_days")
+      .select("id, business_name, email, country_code, plan, subscription_status, trial_ends_at, mollie_customer_id, mollie_subscription_id, referral_credit_days, deactivated_at")
       .eq("id", userId)
       .maybeSingle();
     if (tpErr || !tp) return err(404, "no_profile", origin);
+    // Gedeactiveerde salon (23-10-2026): geen machtiging of betaling meer.
+    if (tp.deactivated_at) return err(403, "salon_deactivated", origin);
     if (tp.subscription_status !== "trialing") return err(409, "not_trialing", origin);
     const endMs = tp.trial_ends_at ? new Date(String(tp.trial_ends_at)).getTime() : NaN;
     if (!Number.isFinite(endMs) || endMs <= Date.now()) return err(409, "trial_ended", origin);
@@ -340,10 +342,12 @@ serve(async (req) => {
   // Look up profile
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, mollie_customer_id, subscription_status, mollie_subscription_id, trial_ends_at")
+    .select("id, business_name, email, mollie_customer_id, subscription_status, mollie_subscription_id, trial_ends_at, deactivated_at")
     .eq("id", userId)
     .maybeSingle();
   if (profileErr || !profile) return err(404, "no_profile", origin);
+  // Gedeactiveerde salon (23-10-2026): niet zelf opnieuw kunnen betalen.
+  if (profile.deactivated_at) return err(403, "salon_deactivated", origin);
 
   // Tijdens een lopende proef nooit meer meteen afschrijven (sinds 10-10-2026):
   // dat gaat via automatisch betalen hierboven, ook voor jaarlijks. Beschermt

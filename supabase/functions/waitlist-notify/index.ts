@@ -12,8 +12,9 @@
 // met de waarden van die rijen, en nooit twee keer voor dezelfde (salon,
 // adres, dag) zolang die nog wacht. De invoer wordt gecontroleerd zoals de
 // boekingspagina dat doet: wachtlijst aan, naam en e-mail, telefoon als de
-// salon dat verplicht, dagen tussen vandaag (salontijd) en max_advance_days,
-// stylist en behandelingen van deze salon.
+// salon dat verplicht, dagen tussen vandaag (salontijd) en max_advance_days
+// waarop na nu + min_advance_hours nog iets te boeken valt, stylist en
+// behandelingen van deze salon.
 //
 // Why a server-side function: the recipient addresses — the salon's contact
 // email and the stylist's email — are deliberately NOT in the public salon
@@ -103,6 +104,21 @@ function salonToday(tz: string): string {
     return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   } catch { return new Date().toISOString().slice(0, 10); }
 }
+// Datum en minuut-van-de-dag van een moment, in salontijd.
+function salonClock(at: Date, tz: string): { date: string; min: number } {
+  try {
+    const p: Record<string, string> = {};
+    for (const part of new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    }).formatToParts(at)) p[part.type] = part.value;
+    return { date: `${p.year}-${p.month}-${p.day}`, min: (+p.hour % 24) * 60 + +p.minute };
+  } catch {
+    const iso = at.toISOString();
+    return { date: iso.slice(0, 10), min: +iso.slice(11, 13) * 60 + +iso.slice(14, 16) };
+  }
+}
+const toMin = (hm: string) => { const [h, m] = String(hm || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
 function addDays(dateStr: string, days: number): string {
   const d = new Date(`${dateStr}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
@@ -161,10 +177,12 @@ serve(async (req) => {
   // Resolve the salon. If it doesn't exist, do nothing (can't leak anything).
   const { data: salon } = await supabase
     .from("profiles")
-    .select("business_name, accent_color, logo_url, slug, salon_email, email, country_code, staff_view_revenue, staff_view_client_contact, waitlist_enabled, phone_required, max_advance_days")
+    .select("business_name, accent_color, logo_url, slug, salon_email, email, country_code, staff_view_revenue, staff_view_client_contact, waitlist_enabled, phone_required, max_advance_days, min_advance_hours, business_hours, day_overrides, account_type, deactivated_at")
     .eq("id", ownerId)
     .maybeSingle();
   if (!salon) return json(404, { error: "salon_not_found" }, origin);
+  // Gedeactiveerde salon (23-10-2026): geen nieuwe wachtlijstrijen en geen mails.
+  if (salon.deactivated_at) return json(403, { error: "salon_deactivated" }, origin);
   // Wachtlijst uitgezet: de pagina toont de knop dan niet, dus dit is een
   // verzoek buiten de pagina om.
   if (salon.waitlist_enabled === false) return json(403, { error: "waitlist_disabled" }, origin);
@@ -174,9 +192,55 @@ serve(async (req) => {
 
   // Alleen dagen die de boekingspagina zelf aanbiedt: vandaag (salontijd) t/m
   // vandaag + max_advance_days.
-  const today = salonToday(tzFor(salon.country_code));
+  const salonTz = tzFor(salon.country_code);
+  const today = salonToday(salonTz);
   const lastDay = addDays(today, parseInt(salon.max_advance_days) || 60);
-  const dates = datesIn.filter((d) => d >= today && d <= lastDay).sort();
+  let dates = datesIn.filter((d) => d >= today && d <= lastDay).sort();
+
+  // En alleen dagen waarop nog iets te boeken valt. Vroegst boekbare moment =
+  // nu + min_advance_hours (dezelfde grens als too_soon in book-appointment).
+  // Valt dat op een latere dag, dan vallen de dagen ervoor af. Valt het op een
+  // gekozen dag, dan moet die dag daarna nog open zijn: Bloom 05-10 om 18:05,
+  // sluiting 18:30, twee uur voorlooptijd — die wachtlijstrij kon nooit meer
+  // iets worden. "Open tot" is hier bewust ruim (laatste sluitingstijd van
+  // salon, teamleden en uitzonderingen samen), zodat een dag die de pagina
+  // nog aanbiedt nooit wordt geweigerd.
+  const earliest = salonClock(new Date(Date.now() + (Number(salon.min_advance_hours) || 0) * 60 * 60 * 1000), salonTz);
+  dates = dates.filter((d) => d >= earliest.date);
+  if (dates.includes(earliest.date)) {
+    const d = earliest.date;
+    const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
+    const fb = salon.business_hours?.[dow];
+    const closes: string[] = [];
+    // Geen weekdag-uren opgeslagen: de pagina valt dan terug op standaarduren
+    // die we hier niet kennen. Net als bij een mislukte opvraging: niet weigeren.
+    if (!fb) closes.push("23:59");
+    else if (!fb.closed) closes.push(fb.close || "17:30");
+    if (salon.account_type === "team") {
+      const { data: team, error: teamErr } = await supabase
+        .from("staff_members")
+        .select("working_hours")
+        .eq("owner_id", ownerId)
+        .eq("active", true);
+      if (teamErr) closes.push("23:59");
+      for (const s of team || []) {
+        const w = (s as any).working_hours?.[dow];
+        if (w && !w.closed) closes.push(w.close || fb?.close || "17:30");
+      }
+    }
+    const { data: excRows, error: excErr } = await supabase
+      .from("staff_day_overrides")
+      .select("block_time_end")
+      .eq("owner_id", ownerId)
+      .eq("date", d)
+      .eq("kind", "exception");
+    if (excErr) closes.push("23:59");
+    for (const r of excRows || []) if ((r as any).block_time_end) closes.push((r as any).block_time_end);
+    const legacy = salon.day_overrides?.[d];
+    if (legacy?.type === "exception" && legacy.close) closes.push(legacy.close);
+    const laatsteSluiting = closes.length ? Math.max(...closes.map(toMin)) : -1;
+    if (earliest.min >= laatsteSluiting) dates = dates.filter((x) => x !== d);
+  }
   if (dates.length === 0) return json(400, { error: "invalid_dates" }, origin);
 
   const salonLang = DUTCH_COUNTRIES.has(salon.country_code || "NL") ? "nl" : "en";

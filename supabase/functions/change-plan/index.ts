@@ -198,7 +198,7 @@ serve(async (req) => {
     .update({ plan_change_started_at: lockIso })
     .eq("id", userId)
     .or(`plan_change_started_at.is.null,plan_change_started_at.lt."${staleIso}"`)
-    .select("id, business_name, email, plan, billing_interval, subscription_status, mollie_customer_id, mollie_subscription_id, mollie_mandate_id, plan_expires_at, current_period_start, trial_ends_at")
+    .select("id, business_name, email, plan, billing_interval, subscription_status, mollie_customer_id, mollie_subscription_id, mollie_mandate_id, plan_expires_at, current_period_start, trial_ends_at, deactivated_at")
     .maybeSingle();
   if (profileErr) {
     console.error("change-plan: lock/profile lookup failed", profileErr);
@@ -210,6 +210,9 @@ serve(async (req) => {
   }
 
   try {
+    // Gedeactiveerde salon (23-10-2026): niets wisselen. Binnen de try, zodat
+    // finally de vergrendeling weer vrijgeeft.
+    if (profile.deactivated_at) return err(403, "salon_deactivated", origin);
     return await changePlan(profile, userId, newPlan, newInterval, origin);
   } finally {
     const { error: unlockErr } = await supabase

@@ -407,7 +407,9 @@ serve(async (req) => {
     // Hoofdschakelaar: staat de verjaardagsactie uit, dan doet deze functie
     // voor die salon niets — ook niet als de deelvlaggen nog aan staan.
     .eq("birthday_feature_enabled", true)
-    .or("birthday_email_enabled.eq.true,birthday_notify_owner.eq.true");
+    .or("birthday_email_enabled.eq.true,birthday_notify_owner.eq.true")
+    // Gedeactiveerde salon (23-10-2026): geen klantmails en geen push.
+    .is("deactivated_at", null);
   if (salonErr) {
     console.error("Load salons failed:", salonErr);
     await recordHealth("error", Date.now() - t0, 0, `load salons: ${salonErr.message}`);

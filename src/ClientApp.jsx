@@ -2845,6 +2845,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             ? "Online boeken lukt op dit moment niet. Neem even contact op met de salon om je afspraak te maken."
             : "Online booking isn't available for you right now. Please contact the salon to arrange your appointment.",
         salon_not_found: lang === "es" ? "Salón no encontrado." : isNl ? "Salon niet gevonden." : "Salon not found.",
+        // Gedeactiveerde salon (23-10-2026): book-appointment weigert met
+        // salon_deactivated terwijl deze pagina nog open stond.
+        salon_deactivated: lang === "es" ? "Este salón ya no acepta reservas en línea." : isNl ? "Deze salon neemt geen online boekingen meer aan." : "This salon is no longer taking online bookings.",
         invalid_service: lang === "es" ? "Este tratamiento ya no está disponible — recarga la página." : isNl ? "Deze behandeling is niet meer beschikbaar — ververs de pagina." : "This service is no longer available — please reload.",
         invalid_variant: lang === "es" ? "Esta variante ya no está disponible — recarga la página." : isNl ? "Deze variant is niet meer beschikbaar — ververs de pagina." : "This variant is no longer available — please reload.",
         invalid_extra: lang === "es" ? "Este extra ya no está disponible — recarga la página." : isNl ? "Deze extra is niet meer beschikbaar — ververs de pagina." : "This extra is no longer available — please reload.",

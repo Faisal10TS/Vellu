@@ -92,7 +92,7 @@ const sendMail = (type: string, booking: Record<string, unknown>) =>
     .then(async (r) => { if (!r.ok) console.error(`send-emails ${type} → ${r.status}`, await r.text().catch(() => "")); })
     .catch((e) => console.error(`send-emails ${type} failed:`, e));
 
-const SELECT = "id, owner_id, date, time, service_name, service_price, service_duration, client_name, client_email, client_phone, lang, payment_due_at, created_at, staff_id, staff_assignments, service_breakdown, profiles(business_name, slug, accent_color, logo_url, salon_email, email, country_code, iban, iban_holder, payment_link, staff_view_client_contact, waitlist_enabled)";
+const SELECT = "id, owner_id, date, time, service_name, service_price, service_duration, client_name, client_email, client_phone, lang, payment_due_at, created_at, staff_id, staff_assignments, service_breakdown, profiles(business_name, slug, accent_color, logo_url, salon_email, email, country_code, iban, iban_holder, payment_link, staff_view_client_contact, waitlist_enabled, deactivated_at)";
 
 // Betaalgegevens van een reservering (Esther/TTNB 25-09-2026): staat er precies
 // één teamlid op en heeft zij eigen IBAN/betaallink, dan haar rekening — anders
@@ -227,6 +227,9 @@ serve(async () => {
     // kon niet op tijd betalen en zit misschien al in de stoel. De salon rondt
     // hem zelf af (betaald, afgerond of no-show).
     const expired = (expiredRaw || []).filter((a: any) => {
+      // Gedeactiveerde salon (23-10-2026): reservering blijft onaangeroerd staan
+      // — niet annuleren, geen mails/push, geen wachtlijst.
+      if (a.profiles?.deactivated_at) return false;
       const start = a.date && a.time ? localToUtc(String(a.date), String(a.time).slice(0, 5), tzFor(a.profiles?.country_code)) : null;
       return !(start && new Date(a.payment_due_at).getTime() >= start.getTime());
     }).slice(0, MAX_PER_RUN);
@@ -268,6 +271,9 @@ serve(async () => {
     if (e2) throw e2;
     for (const a of due || []) {
       if (!a.client_email) continue;
+      // Gedeactiveerde salon (23-10-2026): overslaan vóór de claim, zodat er
+      // niets als verstuurd gemarkeerd wordt.
+      if (a.profiles?.deactivated_at) continue;
       const windowMs = new Date(a.payment_due_at).getTime() - new Date(a.created_at).getTime();
       const patch = { prepay_reminded_at: nowIso };
       const { data: hit } = await supabase.from("appointments").update(patch)

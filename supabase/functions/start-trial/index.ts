@@ -129,6 +129,9 @@ serve(async (req) => {
     })
     .eq("id", userId)
     .eq("trial_used", false)
+    // Gedeactiveerde salon (23-10-2026): nooit een proef starten; hieronder
+    // wordt dat 403 salon_deactivated.
+    .is("deactivated_at", null)
     .select("id, plan, subscription_status, trial_ends_at")
     .maybeSingle();
 
@@ -142,10 +145,11 @@ serve(async (req) => {
     // error code (PlanSelection can show "trial already used, please subscribe").
     const { data: existing } = await supabase
       .from("profiles")
-      .select("trial_used, subscription_status")
+      .select("trial_used, subscription_status, deactivated_at")
       .eq("id", userId)
       .maybeSingle();
     if (!existing) return err(404, "no_profile", origin);
+    if (existing.deactivated_at) return err(403, "salon_deactivated", origin);
     if (existing.trial_used) return err(409, "trial_already_used", origin);
     return err(500, "unknown", origin);
   }

@@ -135,10 +135,13 @@ serve(async (req) => {
   // Owner profile (for branding + reply-to)
   const { data: profile } = await supabase
     .from("profiles")
-    .select("business_name, email, salon_email, logo_url, slug")
+    .select("business_name, email, salon_email, logo_url, slug, deactivated_at")
     .eq("id", ownerId)
     .maybeSingle();
   if (!profile) return json(404, { error: "no_profile" }, origin);
+  // Gedeactiveerde salon (23-10-2026): geen nieuwsbrief, ook niet met een nog
+  // geldige login.
+  if (profile.deactivated_at) return json(403, { error: "salon_deactivated" }, origin);
 
   const salonName = profile.business_name || "Vellu";
   const replyTo = profile.salon_email || profile.email || undefined;

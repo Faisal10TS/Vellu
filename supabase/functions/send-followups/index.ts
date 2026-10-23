@@ -158,7 +158,7 @@ serve(async (req) => {
 
     const { data: appointments, error } = await supabase
       .from("appointments")
-      .select("id, owner_id, date, time, service_name, client_name, client_email, lang, status, is_sale, service_id, service_duration, products, staff_id, service_breakdown, profiles(business_name, slug, accent_color, country_code, google_place_id, loyalty_enabled, loyalty_visits, loyalty_discount_pct, loyalty_since, loyalty_per_staff)")
+      .select("id, owner_id, date, time, service_name, client_name, client_email, lang, status, is_sale, service_id, service_duration, products, staff_id, service_breakdown, profiles(business_name, slug, accent_color, country_code, google_place_id, loyalty_enabled, loyalty_visits, loyalty_discount_pct, loyalty_since, loyalty_per_staff, deactivated_at)")
       // IS NOT TRUE: de kolom mag NULL zijn (default false).
       .not("followup_sent", "is", true)
       .gte("date", fromStr)
@@ -182,6 +182,9 @@ serve(async (req) => {
       // Tweede slot op de deur: nooit op of na de dag van de afspraak zelf.
       if (!appt.date || appt.date >= todayStr) { skipped++; continue; }
       if (isSaleRow(appt)) { skipped++; continue; }
+      // Gedeactiveerde salon (23-10-2026): geen reviewmail, en overslaan vóór
+      // de claim zodat followup_sent niet op true gaat.
+      if ((appt.profiles as any)?.deactivated_at) { skipped++; continue; }
 
       // Eerst claimen, dan pas mailen (E2-04): twee runs tegelijk lazen
       // dezelfde rij en stuurden allebei. Alleen wie de vlag omzet, mailt; een

@@ -144,8 +144,11 @@ const deny=(code,status=403)=>new Response(JSON.stringify({error:code}),{status,
 const enc=encodeURIComponent;
 const me=(await rest(`staff_members?user_id=eq.${enc(callerId)}&owner_id=neq.${enc(callerId)}&active=eq.true&select=id,owner_id,name,email,address,kvk_number,btw_id,iban,iban_holder,payment_link&limit=1`))?.[0]||null;
 const salonId=me?me.owner_id:callerId;
-const pr=(await rest(`profiles?id=eq.${enc(salonId)}&select=business_name,salon_email,email,logo_url,accent_color,slug,country_code,iban,iban_holder,payment_link,address,kvk_number,btw_id,invoice_profiles,show_logo_on_invoice,staff_view_client_contact,staff_view_revenue,staff_see_all`))?.[0];
+const pr=(await rest(`profiles?id=eq.${enc(salonId)}&select=business_name,salon_email,email,logo_url,accent_color,slug,country_code,iban,iban_holder,payment_link,address,kvk_number,btw_id,invoice_profiles,show_logo_on_invoice,staff_view_client_contact,staff_view_revenue,staff_see_all,deactivated_at`))?.[0];
 if(!pr)return deny("no_salon");
+// Gedeactiveerde salon (23-10-2026): ook met een nog geldige login geen mails
+// meer vanuit de app.
+if(pr.deactivated_at)return deny("salon_deactivated");
 const salonName=String(pr.business_name||"");
 // Vroeg de app om een mail aan de eigenaar (booking_notification)? Vastleggen
 // vóór owner_email hieronder door het adres uit de database wordt vervangen.

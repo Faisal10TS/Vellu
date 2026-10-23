@@ -453,7 +453,10 @@ async function saveOutcome(id: string, outcome: Outcome): Promise<boolean> {
 // ("<soort>.chargeback" / "<soort>.refund", één keer per betaling), een seintje
 // aan de beheerder, en bij een storno gaat een actief abonnement op past_due
 // (geen verlengingscoulance meer; de beheerder beslist over de toegang).
-async function handleReversals(p: MolliePayment, ownerId: string | null): Promise<void> {
+// Verwijderde salon (23-10-2026): goneSalon is dan het label uit
+// deletedSalonLabel en ownerId is null, zodat de rij er zonder owner_id in komt
+// (origineel in raw_payload) en de melding niet meer stil verloren gaat.
+async function handleReversals(p: MolliePayment, ownerId: string | null, goneSalon: string | null = null): Promise<void> {
   const seq = p.sequenceType || "oneoff";
   const chargedBack = parseFloat(p.amountChargedBack?.value || "0") || 0;
   const refunded = parseFloat(p.amountRefunded?.value || "0") || 0;
@@ -481,7 +484,7 @@ async function handleReversals(p: MolliePayment, ownerId: string | null): Promis
       if (code !== "23505") console.error("payment_events reversal insert error:", error);
       continue; // al eerder gemeld (of niet vast te leggen): niet opnieuw alarmeren
     }
-    let salon = "?";
+    let salon = goneSalon || "?";
     if (ownerId) {
       const { data: prof } = await supabase.from("profiles").select("business_name, email").eq("id", ownerId).maybeSingle();
       if (prof) salon = `${(prof as Record<string, unknown>).business_name || "?"} (${(prof as Record<string, unknown>).email || "?"})`;
@@ -500,12 +503,38 @@ async function handleReversals(p: MolliePayment, ownerId: string | null): Promis
         `Betaling: ${p.id} (${p.sequenceType || "oneoff"}, EUR ${p.amount.value})`,
         `${k.chargeback ? "Teruggeboekt" : "Terugbetaald"}: EUR ${k.amount.toFixed(2)}`,
         p.subscriptionId ? `Abonnement: ${p.subscriptionId}` : "",
-        k.chargeback
-          ? "Een actief abonnement staat nu op past_due. De toegang (plan_expires_at) is NIET ingekort: beslis zelf of het abonnement bij Mollie moet stoppen."
-          : "Toegang en abonnement zijn niet aangepast.",
+        goneSalon
+          ? "Deze salon is verwijderd: in Vellu is niets aangepast. Handel het zo nodig met de hand af in Mollie."
+          : k.chargeback
+            ? "Een actief abonnement staat nu op past_due. De toegang (plan_expires_at) is NIET ingekort: beslis zelf of het abonnement bij Mollie moet stoppen."
+            : "Toegang en abonnement zijn niet aangepast.",
       ],
     );
   }
+}
+
+// ── Verwijderde salon (23-10-2026) ────────────────────────────────────────
+// owner_id komt uit de metadata van de betaling, niet uit de database. Is de
+// salon definitief verwijderd, dan faalde elke insert in payment_events op de
+// foreign key (23503): de webhook gaf eeuwig 500, Mollie bleef het proberen en
+// een storno-melding ging stil verloren. Geeft het label van de verwijderde
+// salon terug (naam uit deleted_salons), of null als het profiel bestaat. Kan
+// het profiel niet worden opgezocht, dan ook null: dan loopt alles zoals vroeger.
+async function deletedSalonLabel(ownerId: string): Promise<string | null> {
+  const { data: prof, error } = await supabase.from("profiles").select("id").eq("id", ownerId).maybeSingle();
+  if (error) {
+    console.error("profile exists check error:", ownerId, error);
+    return null;
+  }
+  if (prof) return null;
+  const { data: gone, error: goneErr } = await supabase
+    .from("deleted_salons")
+    .select("business_name, email")
+    .eq("id", ownerId)
+    .maybeSingle();
+  if (goneErr) console.error("deleted_salons lookup error:", ownerId, goneErr);
+  const g = (gone || {}) as Record<string, unknown>;
+  return `${g.business_name || "onbekende salon"} (${g.email || "?"}; verwijderd, id ${ownerId})`;
 }
 
 // \u2500\u2500 BTW op Vellu's EIGEN abonnementsfactuur \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -673,13 +702,18 @@ serve(async (req) => {
   }
   const payment = fetched.data as MolliePayment;
   const ownerId = (payment.metadata as { owner_id?: string } | null)?.owner_id || null;
+  // Verwijderde salon (23-10-2026): de gebeurtenis komt zonder owner_id in
+  // payment_events (geen 23503 meer), de beheerder krijgt een seintje en Mollie
+  // krijgt "ok". Bestaat het profiel, dan is goneSalon null en blijft alles gelijk.
+  const goneSalon = ownerId ? await deletedSalonLabel(ownerId) : null;
+  const eventOwnerId = goneSalon ? null : ownerId;
   // Storno's en terugbetalingen laten de status op "paid" staan en vallen dus
   // buiten de gewone gebeurtenis hieronder; die worden hier apart bekeken.
-  await handleReversals(payment, ownerId);
+  await handleReversals(payment, eventOwnerId, goneSalon);
   const eventType = classifyEvent(payment);
   let claim: Claim;
   try {
-    claim = await claimEvent(ownerId, payment, eventType);
+    claim = await claimEvent(eventOwnerId, payment, eventType);
   } catch (e) {
     console.error("logEvent error:", e);
     return plain(500, "log error");
@@ -688,6 +722,33 @@ serve(async (req) => {
   // Een andere aanroep is er nu mee bezig. Een foutcode, zodat Mollie het later
   // nog eens probeert als die andere aanroep onverhoopt mislukt.
   if (claim.state === "busy") return plain(503, "busy (in progress)");
+  if (goneSalon) {
+    // Niets verwerken: er is geen salon meer. Eén seintje per eindstand (de
+    // claim ontdubbelt), daarna verwerkt. Een betaling van vóór het verwijderen
+    // heeft nog een factuur (die blijft) maar geen gebeurtenis meer (die ging
+    // met de cascade mee): komt die terug door een storno of terugbetaling, dan
+    // heeft handleReversals al gemeld en is er niets "onverwerkt" te melden.
+    let invoiced = false;
+    if (payment.status === "paid") {
+      const { data: inv, error: invErr } = await supabase.from("payment_invoices")
+        .select("id").eq("mollie_payment_id", payment.id).limit(1).maybeSingle();
+      if (invErr) console.error("deleted salon invoice lookup error:", payment.id, invErr);
+      invoiced = !!inv;
+    }
+    if (TERMINAL_STATUSES.includes(payment.status) && !invoiced) {
+      await alertAdmin(`Betaling voor verwijderde salon: ${goneSalon}`, [
+        `Salon: ${goneSalon}`,
+        `Betaling: ${payment.id} (${payment.sequenceType || "oneoff"}, ${payment.status}, EUR ${payment.amount.value})`,
+        payment.customerId ? `Mollie-klant: ${payment.customerId}` : "",
+        payment.subscriptionId ? `Abonnement van deze betaling: ${payment.subscriptionId}` : "",
+        payment.status === "paid"
+          ? "Er is betaald, maar deze salon bestaat niet meer: er is niets verwerkt. Mogelijk handmatig terugbetalen in Mollie, en stop daar een abonnement of machtiging die nog loopt."
+          : "Er is niets afgeschreven en niets verwerkt.",
+      ]);
+    }
+    await markProcessed(claim.id);
+    return plain(200, "ok (deleted salon)");
+  }
   let res: Result;
   try {
     res = await processEvent(payment, ownerId, claim.id, claim.outcome);
@@ -729,7 +790,7 @@ async function processEvent(
   const meta = payment.metadata as { plan?: string; billing_interval?: string; kind?: string } | null;
   const { data: profile, error: profErr } = await supabase
     .from("profiles")
-    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, cancel_at_period_end, cancelled_at, referral_credit_days, referral_credit_days_redeemed, email, business_name, country_code, btw_id, trial_ends_at")
+    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, cancel_at_period_end, cancelled_at, referral_credit_days, referral_credit_days_redeemed, email, business_name, country_code, btw_id, trial_ends_at, deactivated_at")
     .eq("id", ownerId)
     .maybeSingle();
   if (profErr) {
@@ -743,6 +804,29 @@ async function processEvent(
   const country = (profile as Record<string, unknown>).country_code as string | null;
   const btwId = (profile as Record<string, unknown>).btw_id as string | null;
   const salonLabel = `${profile.business_name || "?"} (${profile.email || ownerId})`;
+
+  // ── GEDEACTIVEERDE SALON (23-10-2026) ─────────────────────────────────
+  // Vellu heeft deze salon gedeactiveerd (profiles.deactivated_at, admin-salon).
+  // Een betaling die daarna nog binnenkomt (een checkout die al open stond, een
+  // incasso die al liep, check-pending-payments) activeert en verlengt niets:
+  // geen Mollie-abonnement, geen factuur, geen mail aan de salon. Alleen een
+  // seintje aan de beheerder en "ok", zodat Mollie stopt met opnieuw proberen
+  // (zelfde afhandeling als een genegeerde betaling van een ander abonnement).
+  if (profile.deactivated_at) {
+    if (terminal) {
+      await alertAdmin(`Betaling van gedeactiveerde salon: ${profile.business_name || ownerId}`, [
+        `Salon: ${salonLabel}`,
+        `Gedeactiveerd sinds: ${String(profile.deactivated_at).slice(0, 16).replace("T", " ")} UTC`,
+        `Betaling: ${payment.id} (${payment.sequenceType || "oneoff"}${meta?.kind ? `, ${meta.kind}` : ""}, ${payment.status}, EUR ${payment.amount.value})`,
+        payment.subscriptionId ? `Abonnement van deze betaling: ${payment.subscriptionId}` : "",
+        savedOutcome?.subscription_id ? `Abonnement uit een eerdere poging: ${savedOutcome.subscription_id}` : "",
+        payment.status === "paid"
+          ? "Er is betaald, maar er is NIETS verwerkt: geen toegang, geen verlenging, geen abonnement, geen factuur en geen mail aan de salon. Mogelijk handmatig terugbetalen in Mollie, en stop daar een abonnement of machtiging die nog loopt."
+          : "Er is niets afgeschreven en niets aangepast; de salon heeft geen mail gekregen.",
+      ]);
+    }
+    return { status: 200, body: "ok (deactivated salon)", done: terminal };
+  }
 
   // ── JAARBETALING (eenmalig, GEEN machtiging) ──────────────────────────
   // create-subscription stuurt jaarabonnementen als sequenceType "oneoff" met

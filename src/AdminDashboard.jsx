@@ -142,6 +142,12 @@ export default function AdminDashboard({ onLogout }) {
   const [isAdmin, setIsAdmin] = useState(null); // null = loading, false = denied, true = ok
   const [overview, setOverview] = useState(null);
   const [salons, setSalons] = useState([]);
+  // Salon deactiveren / verwijderen (23-10-2026): { kind, salon } of null.
+  const [salonAction, setSalonAction] = useState(null);
+  const [salonActionBusy, setSalonActionBusy] = useState(false);
+  const [salonActionMsg, setSalonActionMsg] = useState("");
+  const [salonReason, setSalonReason] = useState("");
+  const [salonConfirm, setSalonConfirm] = useState("");
   const [recent, setRecent] = useState([]);
   const [cron, setCron] = useState([]);
   const [timeline, setTimeline] = useState([]);
@@ -261,6 +267,50 @@ export default function AdminDashboard({ onLogout }) {
       if (error) { window.alert(error.message); return; }
       setSiteOn(!!data);
     } finally { setSiteBusy(false); }
+  };
+
+  // Salon deactiveren / heractiveren / definitief verwijderen (23-10-2026,
+  // edge function admin-salon). Eerst deactiveren (terug te draaien); verwijderen
+  // kan pas daarna en vraagt de salonnaam of slug ter bevestiging.
+  const runSalonAction = async () => {
+    if (!salonAction || salonActionBusy) return;
+    const { kind, salon } = salonAction;
+    setSalonActionBusy(true); setSalonActionMsg("");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-salon", {
+        body: { action: kind, owner_id: salon.id, reason: kind === "deactivate" ? salonReason : undefined, confirm: kind === "delete" ? salonConfirm : undefined },
+      });
+      let res = data;
+      if (error) { try { res = await error.context?.json?.(); } catch { res = null; } }
+      if (error || res?.error) {
+        const code = res?.error || error?.message || "unknown";
+        const why = {
+          mollie_failed: `Mollie could not be stopped (${(res?.detail || []).join(", ")}). Nothing was changed in Vellu (some Mollie items may already be stopped); try again or stop it in the Mollie dashboard.`,
+          unban_failed: `Logins could not be unblocked (${(res?.detail || []).join(", ")}). The salon is still deactivated; try again.`,
+          confirm_mismatch: "The name you typed does not match this salon. Nothing was deleted.",
+          not_deactivated: "Deactivate the salon first.",
+          demo: "The demo salon cannot be changed here.",
+          unauthorized: "You are not signed in as admin (refresh the page).",
+          delete_failed: `Deleting failed: ${res?.detail || ""}. The salon's data is still there.`,
+          owner_is_staff_elsewhere: "This login is also a team member at another salon, so it cannot be deleted here. Nothing was deleted.",
+        }[code] || `Failed: ${code}${res?.detail ? ` (${typeof res.detail === "string" ? res.detail : JSON.stringify(res.detail)})` : ""}`;
+        // Venster dicht, anders staat de melding erachter.
+        setSalonActionMsg(why); setSalonAction(null);
+        return;
+      }
+      const name = salon.business_name || salon.slug;
+      const warn = res?.warnings?.length ? ` Warnings: ${res.warnings.join("; ")}` : "";
+      setSalonActionMsg(kind === "deactivate"
+        ? `${name} is deactivated${res?.already ? " (already was)" : ""}. Billing stopped, booking page closed, ${res?.logins_blocked ?? 1} login(s) blocked.${warn}`
+        : kind === "reactivate"
+        ? `${name} is active again. If their paid period is over, they choose a plan in the app.${warn}`
+        : `${name} is deleted: ${res?.removed?.appointments ?? 0} appointments, ${res?.removed?.services ?? 0} services, ${res?.removed?.files ?? 0} files, ${res?.removed?.staff_logins ?? 0} staff logins. Kept: ${res?.invoices_kept ?? 0} invoice(s) for your bookkeeping.${warn}`);
+      setSalonAction(null); setSalonReason(""); setSalonConfirm("");
+      const [{ data: sl }, { data: sb }, { data: bo }] = await Promise.all([
+        supabase.rpc("admin_salons_list"), supabase.rpc("admin_subscriptions_list"), supabase.rpc("admin_billing_overview"),
+      ]);
+      setSalons(sl || []); setSubs(sb || []); setBilling(bo?.[0] || null);
+    } finally { setSalonActionBusy(false); }
   };
 
   const sendInvites = async (mode, only, testLang = "en") => {
@@ -790,6 +840,12 @@ export default function AdminDashboard({ onLogout }) {
                 style={{ fontSize: 13, padding: "10px 14px", width: "100%", maxWidth: 400 }}
               />
             </div>
+            {salonActionMsg && (
+              <div data-salon-action-msg style={{ fontSize: 12, lineHeight: 1.5, color: /^(Failed|Mollie|Deleting|The name|Deactivate the|The demo|You are|This login|Logins could)/.test(salonActionMsg) ? c.danger : c.success, background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 14px", marginBottom: 12, display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <span>{salonActionMsg}</span>
+                <button type="button" onClick={() => setSalonActionMsg("")} aria-label="Close" style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 16, lineHeight: 1 }}>&times;</button>
+              </div>
+            )}
             <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, overflow: "hidden" }}>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -803,6 +859,7 @@ export default function AdminDashboard({ onLogout }) {
                         ["Last seen", "Last time the owner had Vellu open (login or session refresh, about hourly while the app is open). Staff accounts not counted."],
                         ["Last booking", "Last time a new appointment was made, by a client online or by the salon."],
                         ["Signed up"], ["GCal"],
+                        ["Actions", "Deactivate: reversible (billing stops, booking page closed, logins blocked, data kept). Delete: only after deactivating; removes everything except your invoices."],
                       ].map(([h, tip]) => (
                         <th key={h} title={tip} style={{ padding: "12px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, cursor: tip ? "help" : undefined, whiteSpace: "nowrap" }}>{h}</th>
                       ))}
@@ -810,10 +867,15 @@ export default function AdminDashboard({ onLogout }) {
                   </thead>
                   <tbody>
                     {visibleSalons.map(s => (
-                      <tr key={s.id} style={{ borderBottom: `1px solid ${c.border}` }}>
+                      <tr key={s.id} data-salon-row={s.slug} style={{ borderBottom: `1px solid ${c.border}`, opacity: s.deactivated_at ? 0.7 : 1 }}>
                         <td style={{ padding: "12px 14px" }}>
                           <a href={`/${s.slug}`} target="_blank" rel="noreferrer" style={{ color: c.text, textDecoration: "none", fontWeight: 500 }}>{s.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</a>
                           <div style={{ fontSize: 10, color: c.textMuted }}>{s.email} · {s.city || "—"}</div>
+                          {s.deactivated_at && (
+                            <div data-salon-deactivated style={{ fontSize: 10, color: c.danger, marginTop: 3 }}>
+                              Deactivated {fmtDate(s.deactivated_at)}{s.deactivated_reason ? ` · ${s.deactivated_reason}` : ""}
+                            </div>
+                          )}
                         </td>
                         <td style={{ padding: "12px 14px" }}>
                           <span style={{ fontSize: 11, color: s.plan ? accent : c.textMuted, fontWeight: s.plan ? 600 : 400 }}>{s.plan || "—"}</span>
@@ -835,15 +897,86 @@ export default function AdminDashboard({ onLogout }) {
                         <td style={{ padding: "12px 14px", color: c.textMuted, fontSize: 11, whiteSpace: "nowrap" }} title={s.last_activity ? fmtDateTime(s.last_activity) : undefined}>{relTime(s.last_activity)}</td>
                         <td style={{ padding: "12px 14px", color: c.textMuted, fontSize: 11 }}>{fmtDate(s.created_at)}</td>
                         <td style={{ padding: "12px 14px", color: s.google_connected ? c.success : c.textMuted, fontSize: 14 }}>{s.google_connected ? <span role="img" aria-label="connected" style={{ display: "inline-flex" }}><NavIcon name="check" size={14} color="currentColor" /></span> : "—"}</td>
+                        <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                          {!s.deactivated_at ? (
+                            <button type="button" data-salon-deactivate className="btn-ghost" onClick={() => { setSalonReason(""); setSalonAction({ kind: "deactivate", salon: s }); }}
+                              style={{ fontSize: 10, padding: "6px 10px", color: c.danger, borderColor: `${c.danger}55` }}>Deactivate</button>
+                          ) : (
+                            <span style={{ display: "inline-flex", gap: 6 }}>
+                              <button type="button" data-salon-reactivate className="btn-ghost" onClick={() => setSalonAction({ kind: "reactivate", salon: s })}
+                                style={{ fontSize: 10, padding: "6px 10px" }}>Reactivate</button>
+                              <button type="button" data-salon-delete className="btn-ghost" onClick={() => { setSalonConfirm(""); setSalonAction({ kind: "delete", salon: s }); }}
+                                style={{ fontSize: 10, padding: "6px 10px", color: "#fff", background: c.danger, borderColor: c.danger }}>Delete</button>
+                            </span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                     {visibleSalons.length === 0 && (
-                      <tr><td colSpan={9} style={{ padding: "24px", textAlign: "center", color: c.textMuted, fontSize: 12 }}>No salons match.</td></tr>
+                      <tr><td colSpan={10} style={{ padding: "24px", textAlign: "center", color: c.textMuted, fontSize: 12 }}>No salons match.</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
             </div>
+
+            {/* Bevestigen: deactiveren (reden optioneel), heractiveren, of
+                definitief verwijderen (salonnaam of slug overtikken). */}
+            {salonAction && (() => {
+              const { kind, salon } = salonAction;
+              const name = salon.business_name || salon.slug;
+              const norm = (v) => String(v || "").trim().toLowerCase();
+              const typedOk = kind !== "delete" || [norm(salon.slug), norm(salon.business_name)].includes(norm(salonConfirm));
+              return (
+                <div onClick={() => !salonActionBusy && setSalonAction(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 400 }}>
+                  <div onClick={e => e.stopPropagation()} data-salon-action-modal={kind} role="dialog" aria-modal="true"
+                    style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 24, maxWidth: 480, width: "100%", color: c.text, maxHeight: "calc(100vh - 48px)", overflowY: "auto" }}>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 300, marginBottom: 10 }}>
+                      {kind === "deactivate" ? `Deactivate ${name}?` : kind === "reactivate" ? `Reactivate ${name}?` : `Delete ${name} permanently?`}
+                    </div>
+                    <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.6, marginBottom: 14 }}>
+                      {kind === "deactivate" && <>
+                        <div>This can be undone. What happens:</div>
+                        <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                          <li>Billing stops: every Mollie subscription and mandate of this salon is cancelled.</li>
+                          <li>The booking page shows "no longer taking online bookings" and the salon disappears from vellu.cc.</li>
+                          <li>The owner and staff can no longer sign in; they see that the account is deactivated.</li>
+                          <li>No more automatic emails to their clients (reminders, reviews, birthdays …).</li>
+                          <li>All data stays: appointments, clients, services, photos, invoices.</li>
+                        </ul>
+                      </>}
+                      {kind === "reactivate" && <>
+                        Logins work again, the booking page opens and the salon shows on vellu.cc again. Billing does not restart by itself: if their paid period is over, they choose a plan in the app.
+                      </>}
+                      {kind === "delete" && <>
+                        <div style={{ color: c.danger, fontWeight: 600 }}>This cannot be undone.</div>
+                        <div style={{ marginTop: 6 }}>Removed: the account and staff logins, all appointments, clients, services, photos, reviews and settings, and the Mollie customer.</div>
+                        <div style={{ marginTop: 6 }}>Kept: your invoices to this salon, with their name and details, for the 7-year tax retention. Nightly backups keep a copy for up to 30 days.</div>
+                      </>}
+                    </div>
+                    {kind === "deactivate" && (
+                      <div style={{ marginBottom: 14 }}>
+                        <label style={{ display: "block", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>Reason (optional, only for you)</label>
+                        <input className="input-field" data-salon-reason value={salonReason} maxLength={300} onChange={e => setSalonReason(e.target.value)} placeholder="e.g. requested by the owner" style={{ width: "100%", fontSize: 13, padding: "10px 12px" }} />
+                      </div>
+                    )}
+                    {kind === "delete" && (
+                      <div style={{ marginBottom: 14 }}>
+                        <label style={{ display: "block", fontSize: 11, color: c.textSub, marginBottom: 6 }}>Type <strong style={{ color: c.text }}>{salon.slug}</strong> to confirm</label>
+                        <input className="input-field" data-salon-confirm value={salonConfirm} onChange={e => setSalonConfirm(e.target.value)} autoComplete="off" style={{ width: "100%", fontSize: 13, padding: "10px 12px", fontFamily: "monospace" }} />
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button type="button" className="btn-ghost" disabled={salonActionBusy} onClick={() => setSalonAction(null)} style={{ flex: 1 }}>Cancel</button>
+                      <button type="button" className="btn-primary" data-salon-action-go disabled={salonActionBusy || !typedOk} onClick={runSalonAction}
+                        style={{ flex: 1, opacity: salonActionBusy || !typedOk ? 0.5 : 1, ...(kind === "reactivate" ? {} : { background: c.danger, color: "#fff" }) }}>
+                        {salonActionBusy ? "Working…" : kind === "deactivate" ? "Deactivate" : kind === "reactivate" ? "Reactivate" : "Delete permanently"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </>
         )}
 

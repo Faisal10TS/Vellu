@@ -115,6 +115,16 @@ serve(async (req) => {
     }
   }
 
+  // Gedeactiveerde salon (23-10-2026): geen stempelkaartmail en geen push.
+  // Al in de query uitfilteren, dus vóór de claim — notified_at blijft null en
+  // de code gaat na heractiveren alsnog uit. In de query en niet in de lus,
+  // anders vullen 25 codes van zo'n salon de limit en blokkeren ze de rest.
+  const { data: deact, error: deactErr } = await supabase
+    .from("profiles").select("id").not("deactivated_at", "is", null);
+  if (deactErr) { console.error("loyalty deactivated:", deactErr); return json(500, { error: "db_error" }, origin); }
+  const deactIds = (deact || []).map((d: any) => String(d.id));
+  if (ownerScope && deactIds.includes(ownerScope)) return json(403, { error: "salon_deactivated" }, origin);
+
   let q = supabase
     .from("birthday_discount_codes")
     .select("id, owner_id, code, client_email, discount_pct, expires_on, visits_at, reward_no, staff_id")
@@ -123,6 +133,7 @@ serve(async (req) => {
     .order("created_at", { ascending: true })
     .limit(25);
   if (ownerScope) q = q.eq("owner_id", ownerScope);
+  else if (deactIds.length > 0) q = q.not("owner_id", "in", `(${deactIds.join(",")})`);
   const { data: rows, error: rowsErr } = await q;
   if (rowsErr) { console.error("loyalty rows:", rowsErr); return json(500, { error: "db_error" }, origin); }
 

@@ -677,6 +677,8 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
         .select("id,slug,business_name,city,country_code,accent_color,logo_url,cover_image_url")
         .eq("directory_visible", true)
         .in("subscription_status", ["active", "trialing"])
+        // Gedeactiveerde salon (23-10-2026): nooit in de salonzoeker.
+        .eq("deactivated", false)
         .order("created_at", { ascending: true })
         .order("id", { ascending: true }));
       const rows = data || [];
@@ -1676,10 +1678,22 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         }
       }
 
-      onLogin({ name: businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null, account_type: form.accountType, inviteOutcome });
+      // deactivated_at: een nieuw profiel is nooit gedeactiveerd (23-10-2026).
+      onLogin({ name: businessName, email: form.email, slug, city: form.city || "Nederland", id: data.user.id, plan: null, plan_expires_at: null, account_type: form.accountType, deactivated_at: null, inviteOutcome });
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
-      if (error) { setError(t.wrongCredentials); setLoading(false); return; }
+      if (error) {
+        // Gedeactiveerde salon (23-10-2026): een geblokkeerde login (auth-ban)
+        // is geen verkeerd wachtwoord; zeg dan eerlijk wat er aan de hand is.
+        const banned = error.code === "user_banned" || /banned/i.test(error.message || "");
+        setError(banned
+          ? (lang === "nl" ? "Dit account is gedeactiveerd. Neem contact op met Vellu via mirahventures@vellu.cc."
+            : lang === "es" ? "Esta cuenta ha sido desactivada. Ponte en contacto con Vellu en mirahventures@vellu.cc."
+            : "This account has been deactivated. Contact Vellu at mirahventures@vellu.cc.")
+          : t.wrongCredentials);
+        setLoading(false);
+        return;
+      }
       // Honour the "Onthoud mij" checkbox — save just the email locally so the
       // next visit pre-fills it. The password is never stored.
       try {
@@ -1691,7 +1705,8 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
       // then routes them to StaffApp via resolveUserRole.
       const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).maybeSingle();
       const slug = profile?.slug || data.user.email.split("@")[0];
-      onLogin({ name: profile?.business_name || "Mijn Studio", email: form.email, slug, city: profile?.city || "Nederland", id: data.user.id, accent: profile?.accent_color, plan: profile?.plan || null, plan_expires_at: profile?.plan_expires_at || null, subscription_status: profile?.subscription_status || null, mollie_subscription_id: profile?.mollie_subscription_id || null, account_type: profile?.account_type || "joint" });
+      // deactivated_at: gedeactiveerde salon (23-10-2026), zie AccountDeactivated in App.jsx.
+      onLogin({ name: profile?.business_name || "Mijn Studio", email: form.email, slug, city: profile?.city || "Nederland", id: data.user.id, accent: profile?.accent_color, plan: profile?.plan || null, plan_expires_at: profile?.plan_expires_at || null, subscription_status: profile?.subscription_status || null, mollie_subscription_id: profile?.mollie_subscription_id || null, account_type: profile?.account_type || "joint", deactivated_at: profile?.deactivated_at || null });
     }
     setLoading(false);
   };

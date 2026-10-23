@@ -354,10 +354,14 @@ serve(async (req) => {
   // Plan gate: only Professional-tier salons send SMS.
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
-    .select("plan, subscription_status, business_name, country_code")
+    .select("plan, subscription_status, business_name, country_code, deactivated_at")
     .eq("id", b.owner_id)
     .maybeSingle();
   if (profileErr || !profile) return err(404, "no_profile", origin);
+  // Gedeactiveerde salon (23-10-2026): nooit een sms, ongeacht plan of status.
+  if (profile.deactivated_at) {
+    return ok({ success: true, sent: false, skipped_reason: "salon_deactivated" }, origin);
+  }
   const plan = String(profile.plan || "");
   if (plan !== "professional") {
     return ok({ success: true, sent: false, skipped_reason: "plan_not_professional" }, origin);

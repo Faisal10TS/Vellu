@@ -12,7 +12,8 @@ export default async function handler(req, res) {
     // Alleen salons die in de zoeker mogen staan, met een lopend abonnement,
     // en nooit de demo-salon. (public/sitemap.xml is weg: dat statische
     // bestand ging vóór deze functie en had geen enkele salon.)
-    const url = `${SUPABASE_URL}/rest/v1/public_salons?select=slug&directory_visible=eq.true&subscription_status=in.(active,trialing)`;
+    // Gedeactiveerde salon (23-10-2026): deactivated=eq.false, nooit in de sitemap.
+    const url = `${SUPABASE_URL}/rest/v1/public_salons?select=slug&directory_visible=eq.true&subscription_status=in.(active,trialing)&deactivated=eq.false`;
     const headers = {
       apikey: SUPABASE_KEY,
       Authorization: `Bearer ${SUPABASE_KEY}`,

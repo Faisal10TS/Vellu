@@ -58,6 +58,45 @@ function PlanSelectionGate(props) {
   return <PlanSelection {...props} />;
 }
 
+// ─── GEDEACTIVEERD ACCOUNT ───────────────────────────────────
+// Gedeactiveerde salon (23-10-2026): Vellu zette profiles.deactivated_at
+// (edge function admin-salon). De eigenaar kan de app dan niet gebruiken; alle
+// gegevens blijven bewaard. Dit scherm staat VÓÓR de plan-muur: anders kon een
+// gedeactiveerde salon zich via "Kies een plan" zelf weer inkopen. Nooit een
+// persoonsnaam noemen, alleen Vellu.
+function AccountDeactivated({ lang, onLogout }) {
+  const c = AT_COLORS;
+  const [busy, setBusy] = useState(false);
+  const T3 = (nl, es, en) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  const mail = "mirahventures@vellu.cc";
+  return (
+    <Layout accent={AT.EARTH}>
+      <AtelierSkin />
+      <div className="atelier" style={{ minHeight: "100dvh", background: c.bg, color: c.text, fontFamily: "'Jost',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ width: "100%", maxWidth: 400 }} className="fade-up">
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 300 }}>
+              {T3("Je account is gedeactiveerd", "Tu cuenta ha sido desactivada", "Your account has been deactivated")}
+            </div>
+          </div>
+          <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 24, padding: 28 }}>
+            <div style={{ fontSize: 13.5, lineHeight: 1.6, color: c.textSub, marginBottom: 16 }}>
+              {T3("Je salon is gedeactiveerd, daarom kun je Vellu nu niet gebruiken. Wil je dit terugdraaien? Neem contact op met Vellu via ",
+                  "Tu salón ha sido desactivado, por eso ahora no puedes usar Vellu. ¿Quieres revertirlo? Ponte en contacto con Vellu en ",
+                  "Your salon has been deactivated, so you can't use Vellu right now. Want to undo this? Contact Vellu at ")}
+              <a href={`mailto:${mail}`} style={{ color: "inherit", textDecoration: "underline", wordBreak: "break-all" }}>{mail}</a>.
+            </div>
+            <button className="btn-primary" style={{ width: "100%" }} disabled={busy}
+              onClick={async () => { setBusy(true); try { await onLogout?.(); } finally { setBusy(false); } }}>
+              {busy ? "…" : T3("Uitloggen", "Cerrar sesión", "Log out")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
 // ─── ROLE RESOLUTION ─────────────────────────────────────────
 // Figure out whether a logged-in auth user is a SALON OWNER or a STAFF member.
 //
@@ -123,8 +162,15 @@ async function resolveUserRole(user) {
       const { data: legacy } = await supabase.from("profiles").select("*").eq("id", staffMember.owner_id).maybeSingle();
       salonProfile = legacy || null;
     }
-    if (salonProfile) {
+    // Gedeactiveerde salon (23-10-2026): de rpc geeft deactivated_at gewoon
+    // mee (hele profielrij minus geheimen). Teamleden van zo'n salon mogen de
+    // app niet gebruiken; heeft ze een eigen salon, dan gaat ze daar heen.
+    const salonDeactivated = !!salonProfile?.deactivated_at;
+    if (salonProfile && !salonDeactivated) {
       return { role: "staff", staffUser: { staffMember, profile: salonProfile, email: user.email }, inviteOutcome };
+    }
+    if (salonDeactivated && !ownerProfile) {
+      return { role: "staff_inactive", reason: "salon_deactivated", inviteOutcome };
     }
     // Geen salonprofiel: de rpc geeft alleen een ACTIEF teamlid haar salon
     // (gedeactiveerd), of de salon was niet te laden. Niet doorvallen naar het
@@ -224,6 +270,11 @@ function OwnerEntryPage({ lang, setLang }) {
       ? (lang === "nl" ? "Je teamaccount is gedeactiveerd. Neem contact op met je salon."
         : lang === "es" ? "Tu cuenta de equipo ha sido desactivada. Ponte en contacto con tu salón."
         : "Your team account has been deactivated. Please contact your salon.")
+      // Gedeactiveerde salon (23-10-2026): de hele salon staat uit, niet alleen het teamlid.
+      : reason === "salon_deactivated"
+      ? (lang === "nl" ? "Deze salon is gedeactiveerd. Neem contact op met je salon."
+        : lang === "es" ? "Este salón ha sido desactivado. Ponte en contacto con tu salón."
+        : "This salon has been deactivated. Please contact your salon.")
       : (lang === "nl" ? "Je salon kon niet worden geladen. Log opnieuw in."
         : lang === "es" ? "No se pudo cargar tu salón. Vuelve a iniciar sesión."
         : "Your salon could not be loaded. Please sign in again.");
@@ -297,7 +348,9 @@ function OwnerEntryPage({ lang, setLang }) {
                 // Nodig voor de verlengingscoulance in planIsActive().
                 subscription_status: profile.subscription_status || null,
                 mollie_subscription_id: profile.mollie_subscription_id || null,
-                account_type: profile.account_type || "joint"
+                account_type: profile.account_type || "joint",
+                // Gedeactiveerde salon (23-10-2026): toont AccountDeactivated.
+                deactivated_at: profile.deactivated_at || null
               });
             } else {
               // Sessie mét owner-rol maar zónder profielrij: het founder-
@@ -373,6 +426,11 @@ function OwnerEntryPage({ lang, setLang }) {
 
   // Staff member — redirect to /staff
   if (staffUser) return <Navigate to="/staff" replace />;
+
+  // Gedeactiveerde salon (23-10-2026): vóór de plan-muur, zie AccountDeactivated.
+  if (owner?.deactivated_at) {
+    return <><AccountDeactivated lang={lang} onLogout={handleLogout} /><ToastContainer toasts={notices} /></>;
+  }
 
   // Check if plan is active (incl. verlengingscoulance — zie planIsActive).
   const hasPlan = planIsActive(owner);
@@ -667,6 +725,37 @@ function NotFoundView({ lang, path }) {
   );
 }
 
+// ─── SALON GESLOTEN ──────────────────────────────────────────
+// Gedeactiveerde salon (23-10-2026): public_salons.deactivated = true. Geen
+// boekingspagina meer, wel een nette uitleg i.p.v. "niet gevonden" (de link
+// kan nog in een bio of oude mail staan). noindex, net als NotFoundView.
+function SalonClosedView({ lang, name }) {
+  const { colors: c } = useTheme();
+  const navigate = useNavigate();
+  useSEO({ title: name ? `${name} | Vellu` : "Vellu" });
+  useEffect(() => {
+    let el = document.querySelector('meta[name="robots"]');
+    const prev = el ? el.getAttribute("content") : null;
+    const created = !el;
+    if (created) { el = document.createElement("meta"); el.setAttribute("name", "robots"); document.head.appendChild(el); }
+    el.setAttribute("content", "noindex");
+    return () => { if (created) el.remove(); else el.setAttribute("content", prev || "index, follow"); };
+  }, []);
+  return (
+    <Layout accent={ACCENT}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.text, fontFamily: "'Jost',sans-serif", gap: 16, padding: 24, textAlign: "center" }}>
+        {name && <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>{name}</div>}
+        <div style={{ fontSize: 14, color: c.textSub, maxWidth: 360, lineHeight: 1.6 }}>
+          {lang === "nl" ? "Deze salon neemt geen online boekingen meer aan." : lang === "es" ? "Este salón ya no acepta reservas en línea." : "This salon is no longer taking online bookings."}
+        </div>
+        <button className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: 8 }} onClick={() => navigate("/")}>
+          <ArrowLeft /> {lang === "nl" ? "Terug naar home" : lang === "es" ? "Volver al inicio" : "Back to home"}
+        </button>
+      </div>
+    </Layout>
+  );
+}
+
 // Pijl naar links als inline SVG (currentColor), i.p.v. het teken "←".
 function ArrowLeft({ size = 12 }) {
   return (
@@ -684,6 +773,8 @@ function SalonRoute({ lang, setLang }) {
   const [salon, setSalon] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // Gedeactiveerde salon (23-10-2026): naam van de salon, of null.
+  const [closedName, setClosedName] = useState(null);
   // "owner" | "staff" | null — is de ingelogde bezoeker de eigenaar of een
   // medewerker van DIT salon? Bepaalt of de terug-naar-dashboard-pill toont.
   const [previewRole, setPreviewRole] = useState(null);
@@ -735,6 +826,14 @@ function SalonRoute({ lang, setLang }) {
       // book-appointment: die weigert een verborgen service_id.
       const { data, error } = await supabase.from("public_salons").select("*, services(*, service_variants(*), service_extras(*, staff_extra_exclusions(staff_id)), service_photos(*))").eq("slug", slug).eq("services.visible", true).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
+      // Gedeactiveerde salon (23-10-2026): de view houdt de rij (anders leek
+      // de slug vrij bij aanmelden), maar boeken kan niet meer. Gesloten-
+      // scherm tonen en de vervolgqueries hieronder overslaan.
+      if (data.deactivated === true) {
+        setClosedName(data.business_name || data.owner_name || "");
+        setLoading(false);
+        return;
+      }
       // Ondergrens voor de eenmalige blokkades: GISTEREN op de klok van de
       // salon. Met de datum van het apparaat viel bij een bezoeker die verder
       // in de tijd zit (NL 's nachts, salon op Bonaire nog 's avonds) de
@@ -916,6 +1015,7 @@ function SalonRoute({ lang, setLang }) {
   );
 
   if (notFound) return <NotFoundView lang={lang} path={slug} />;
+  if (closedName !== null) return <SalonClosedView lang={lang} name={closedName} />;
 
   // Security: never trust an ?email= URL param for reviews — anyone can craft a URL to
   // impersonate a victim. Die identiteit komt nu uit het token in ?review=…, dat
@@ -1284,10 +1384,13 @@ function AppInner({ lang, setLang }) {
       {screen === "client" && <ClientApp salon={salon} lang={lang} setLang={setLang} onBack={() => setScreen("landing")} />}
       {screen === "ownerAuth" && <OwnerAuth lang={lang} setLang={setLang} onBack={() => setScreen("landing")} onLogin={u => { setOwner(u); setScreen("owner"); }} />}
       {screen === "owner" && (() => {
+        const logout = async () => { await forgetPushOnThisDevice(); await supabase.auth.signOut(); setOwner(null); setScreen("landing"); };
+        // Gedeactiveerde salon (23-10-2026): vóór de plan-muur, net als in OwnerEntryPage.
+        if (owner?.deactivated_at) return <AccountDeactivated lang={lang} onLogout={logout} />;
         // Zelfde regel als in OwnerEntryPage, incl. verlengingscoulance.
         const hasPlan = planIsActive(owner);
-        if (!hasPlan) return <PlanSelectionGate user={owner} lang={lang} setLang={setLang} onLogout={async () => { await forgetPushOnThisDevice(); await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
-        return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={salons} onSalonUpdate={updateSalon} onLogout={async () => { await forgetPushOnThisDevice(); await supabase.auth.signOut(); setOwner(null); setScreen("landing"); }} />;
+        if (!hasPlan) return <PlanSelectionGate user={owner} lang={lang} setLang={setLang} onLogout={logout} />;
+        return <OwnerApp user={owner} lang={lang} setLang={setLang} salons={salons} onSalonUpdate={updateSalon} onLogout={logout} />;
       })()}
     </>
   );

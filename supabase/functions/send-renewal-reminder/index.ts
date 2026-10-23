@@ -195,6 +195,9 @@ serve(async (req) => {
       .eq("billing_interval", "yearly")
       .eq("subscription_status", "active")
       .is("mollie_subscription_id", null)   // alleen eenmalige jaarbetalers, geen machtiging
+      // Gedeactiveerde salon (23-10-2026): geen billing-mails of push, in alle
+      // vijf de queries hieronder.
+      .is("deactivated_at", null)
       .not("plan_expires_at", "is", null)
       .lte("plan_expires_at", grens.toISOString())
       .gt("plan_expires_at", nu.toISOString());
@@ -221,7 +224,8 @@ serve(async (req) => {
       .is("mollie_subscription_id", null)
       .not("trial_ends_at", "is", null)
       .gt("trial_ends_at", nu.toISOString())
-      .lte("trial_ends_at", proefGrens.toISOString());
+      .lte("trial_ends_at", proefGrens.toISOString())
+      .is("deactivated_at", null); // gedeactiveerde salon (23-10-2026)
     if (e2) throw e2;
     for (const s of bijna || []) {
       if (!s.email) continue;
@@ -247,7 +251,8 @@ serve(async (req) => {
       .not("mollie_subscription_id", "is", null)
       .not("trial_ends_at", "is", null)
       .gt("trial_ends_at", nu.toISOString())
-      .lte("trial_ends_at", proefGrens.toISOString());
+      .lte("trial_ends_at", proefGrens.toISOString())
+      .is("deactivated_at", null); // gedeactiveerde salon (23-10-2026)
     if (e2b) throw e2b;
     for (const s of apBijna || []) {
       if (!s.email) continue;
@@ -298,7 +303,8 @@ serve(async (req) => {
       .is("mollie_subscription_id", null)
       .not("trial_ends_at", "is", null)
       .lte("trial_ends_at", nu.toISOString())
-      .gte("trial_ends_at", proefTerug.toISOString());
+      .gte("trial_ends_at", proefTerug.toISOString())
+      .is("deactivated_at", null); // gedeactiveerde salon (23-10-2026)
     if (e3) throw e3;
     for (const s of voorbij || []) {
       if (!s.email) continue;
@@ -362,7 +368,8 @@ serve(async (req) => {
       .not("mollie_subscription_id", "is", null)
       .not("trial_ends_at", "is", null)
       .gte("trial_ends_at", new Date(nu.getTime() - 2 * DAY_MS).toISOString())
-      .lte("trial_ends_at", new Date(nu.getTime() + 2 * DAY_MS).toISOString());
+      .lte("trial_ends_at", new Date(nu.getTime() + 2 * DAY_MS).toISOString())
+      .is("deactivated_at", null); // gedeactiveerde salon (23-10-2026)
     if (e3b) throw e3b;
     const vandaagAms = ymdIn(AMS, nu);
     for (const s of apVandaag || []) {

@@ -184,10 +184,13 @@ serve(async (req) => {
 async function verwerk(slug: string, email: string, reqLang: unknown) {
   const { data: salon } = await supabase
     .from("profiles")
-    .select("id, business_name, slug, accent_color, country_code")
+    .select("id, business_name, slug, accent_color, country_code, deactivated_at")
     .eq("slug", slug)
     .maybeSingle();
   if (!salon) return;
+  // Gedeactiveerde salon (23-10-2026): stil niets mailen; het HTTP-antwoord
+  // blijft hetzelfde 200 (regel 1).
+  if (salon.deactivated_at) return;
 
   // Regel 3: verzendingen tellen. Hooguit MAX_PER_DAY verschillende links per
   // adres per salon in 24 uur, geteld op last_sent_at (niet op created_at: een

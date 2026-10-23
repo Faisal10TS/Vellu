@@ -144,6 +144,9 @@ async function reconcileAutopayTrials(): Promise<AutopayRonde> {
     .select("id, business_name, email, mollie_customer_id, mollie_subscription_id, trial_ends_at")
     .eq("subscription_status", "trialing")
     .not("mollie_subscription_id", "is", null)
+    // Gedeactiveerde salon (23-10-2026): overslaan; hier wordt dan niets
+    // aangetrapt, gestopt of op past_due gezet.
+    .is("deactivated_at", null)
     .lt("trial_ends_at", grens)
     .limit(MAX_PER_RUN);
   if (error) { res.fouten.push(`profielen: ${error.message || String(error)}`); return res; }

@@ -420,7 +420,7 @@ serve(async (req) => {
 
     const { data: appointments, error } = await supabase
       .from("appointments")
-      .select("*, profiles!owner_id(business_name, slug, accent_color, logo_url, email, salon_email, country_code, reminder_hours)")
+      .select("*, profiles!owner_id(business_name, slug, accent_color, logo_url, email, salon_email, country_code, reminder_hours, deactivated_at)")
       .gte("date", todayStr)
       .lte("date", horizonStr)
       .eq("status", "confirmed")
@@ -445,6 +445,11 @@ serve(async (req) => {
     const next = nextRun(now);
     for (const apt of appointments || []) {
       const p = apt.profiles || {};
+
+      // Gedeactiveerde salon (23-10-2026): niets versturen en NIET claimen —
+      // reminder_sent blijft staan, zodat herinneringen voor afspraken die nog
+      // komen na heractiveren gewoon weer meelopen.
+      if (p.deactivated_at) continue;
 
       // "Geen herinnering" (0) is een echte keuze van de eigenaar, geen lege
       // waarde: die salon hoort niets te versturen. Null behandelen we hetzelfde —
@@ -601,7 +606,7 @@ serve(async (req) => {
       const todayUtcStr = now.toISOString().split("T")[0];
       const { data: dayAppts } = await supabase
         .from("appointments")
-        .select("owner_id, time, client_name, service_name, staff_name, profiles!owner_id(business_name, email, salon_email, country_code, reminder_hours)")
+        .select("owner_id, time, client_name, service_name, staff_name, profiles!owner_id(business_name, email, salon_email, country_code, reminder_hours, deactivated_at)")
         .eq("date", tomorrowStr)
         .eq("status", "confirmed")
         .is("cancelled_at", null);
@@ -614,6 +619,9 @@ serve(async (req) => {
         byOwner.set(a.owner_id, list);
       }
       for (const [ownerId, appts] of byOwner) {
+        // Gedeactiveerde salon (23-10-2026): geen agenda-mail aan de eigenaar,
+        // en ook geen salon_digest_log-rij — overslaan vóór de claim.
+        if (appts[0].profiles?.deactivated_at) continue;
         // Claim eerst de rij; ignoreDuplicates + select() gedraagt zich als
         // "insert … on conflict do nothing returning": bestond de rij al
         // (eerdere run vandaag), dan komt er een lege lijst terug en zwijgen

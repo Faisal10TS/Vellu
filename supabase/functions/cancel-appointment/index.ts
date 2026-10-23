@@ -449,13 +449,18 @@ serve(async (req) => {
   const notify: { owner_email?: string; staff_emails?: string[]; salon_name?: string; salon_accent?: string; salon_logo?: string; owner_id?: string; lang?: string; staff_view_revenue?: boolean; staff_view_client_contact?: boolean } = {};
   let salonSlug = "";
   let waitlistEnabled = true;
+  // Gedeactiveerde salon (23-10-2026): de klant mag haar afspraak nog steeds
+  // annuleren, maar alleen haar eigen bevestigingsmail gaat nog de deur uit —
+  // geen mail/push naar eigenaar of team, geen sms en geen wachtlijstmail.
+  let salonDeactivated = false;
   if (appt.owner_id) {
     const { data: owner } = await supabase
       .from("profiles")
-      .select("email, salon_email, business_name, accent_color, logo_url, slug, waitlist_enabled, country_code, staff_view_revenue, staff_view_client_contact")
+      .select("email, salon_email, business_name, accent_color, logo_url, slug, waitlist_enabled, country_code, staff_view_revenue, staff_view_client_contact, deactivated_at")
       .eq("id", appt.owner_id)
       .maybeSingle();
     if (owner) {
+      salonDeactivated = !!owner.deactivated_at;
       notify.owner_email = owner.salon_email || owner.email || undefined;
       notify.salon_name = owner.business_name;
       notify.salon_accent = owner.accent_color || "";
@@ -495,8 +500,9 @@ serve(async (req) => {
   // swallows its own errors, so Promise.all never rejects and a slow/failed
   // email can't make the cancel itself appear to fail.
   await Promise.all([
-    // Owner + assigned staff: "your client cancelled".
-    notifyOwnerCancellation({
+    // Owner + assigned staff: "your client cancelled" (mail + push). Niet bij
+    // een gedeactiveerde salon.
+    salonDeactivated ? Promise.resolve() : notifyOwnerCancellation({
       owner_id: appt.owner_id,
       owner_email: notify.owner_email,
       staff_emails: notify.staff_emails,
@@ -519,7 +525,8 @@ serve(async (req) => {
     // the salon's market language for old rows without one.
     notifyClientCancellation({
       client_email: appt.client_email,
-      client_phone: appt.client_phone || null,
+      // Gedeactiveerde salon: geen sms, alleen de bevestigingsmail.
+      client_phone: salonDeactivated ? null : (appt.client_phone || null),
       owner_id: appt.owner_id,
       salon_name: notify.salon_name,
       salon_accent: notify.salon_accent,
@@ -530,8 +537,9 @@ serve(async (req) => {
       date: appt.date,
       time: appt.time,
     }),
-    // Waitlist notify — skipped when the salon disabled the feature.
-    (waitlistEnabled && appt.owner_id && appt.date)
+    // Waitlist notify — skipped when the salon disabled the feature or the
+    // salon is deactivated (dan ook geen claim op de wachtlijstrij).
+    (waitlistEnabled && !salonDeactivated && appt.owner_id && appt.date)
       ? notifyWaitlist(appt, {
           name: notify.salon_name,
           accent: notify.salon_accent,
