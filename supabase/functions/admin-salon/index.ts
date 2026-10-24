@@ -263,7 +263,7 @@ serve(async (req) => {
   // Bestanden: alleen via de Storage API (SQL-verwijderen is geblokkeerd).
   const files: Array<{ bucket: string; name: string }> = Array.isArray(plan.files) ? plan.files : [];
   let filesRemoved = 0;
-  for (const bucket of ["business-images", "service-photos"]) {
+  for (const bucket of ["business-images", "service-photos", "price-lists"]) {
     const names = files.filter((f) => f.bucket === bucket).map((f) => f.name);
     for (let i = 0; i < names.length; i += 100) {
       const part = names.slice(i, i + 100);

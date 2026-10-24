@@ -191,6 +191,13 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/admin-salon/index.ts"
 
+[functions.parse-price-list]
+enabled = true
+# Prijslijst inlezen met Claude (24-10-2026). Alleen voor ingelogde eigenaren:
+# de gateway eist een geldige JWT en de functie controleert zelf het profiel.
+verify_jwt = true
+entrypoint = "./functions/parse-price-list/index.ts"
+
 [functions.send-source-request]
 enabled = true
 # Welkomstmail van Team Vellu aan elke nieuwe salon (Faisal 24-09-2026; begon

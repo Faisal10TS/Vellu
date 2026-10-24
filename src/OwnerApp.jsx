@@ -3014,6 +3014,409 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
   );
 }
 
+// ─── PRIJSLIJST INLEZEN ─────────────────────────────────────
+// 24-10-2026 (Faisal: "yes do 2"): foto('s) of een PDF van de prijslijst →
+// edge function parse-price-list (Claude leest behandelingen, prijzen, tijden
+// en vertaalt de namen) → de salon controleert de lijst en voegt alles in één
+// keer toe. Staat in de instelwizard en bij Diensten. Lukt het lezen niet, dan
+// ziet de beheerder de upload onder admin → Onboarding en helpt de salon.
+// Meldingen staan in het venster zelf; de ouder toont na afloop de toast.
+const PRICE_LIST_MAX_FILES = 4;
+const PRICE_LIST_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || "").replace(/^data:[^,]*,/, ""));
+    r.onerror = () => reject(r.error || new Error("read_failed"));
+    r.readAsDataURL(file);
+  });
+}
+
+// c: kleurenset van de ouder (met hex warning/danger: daar komt een
+// alfa-achtervoegsel achter); panelBg: effen achtergrond van het paneel, voor
+// de knoppenbalk die onderaan blijft staan.
+function PriceListImport({ salonData, update, lang, c, accent, panelBg, onDone, onCancel }) {
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  // "pick" | "reading" | "review" | "saving" | "failed"
+  const [phase, setPhase] = useState("pick");
+  const [files, setFiles] = useState([]); // [{ id, file, url, pdf }]
+  const [err, setErr] = useState("");
+  const [result, setResult] = useState(null);
+  const [rows, setRows] = useState([]);
+  // Mislukt met een bekende poging = de server heeft het bestand (de beheerder
+  // ziet het); zonder poging was het een verbindingsfout.
+  const [failedImportId, setFailedImportId] = useState(null);
+  const [slow, setSlow] = useState(false);
+  const inputRef = useRef(null);
+  const runRef = useRef(false);     // tegen een dubbele tik op "Lees" / "Voeg toe"
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  const nameKey = lang === "nl" ? "name_nl" : lang === "es" ? "name_es" : "name_en";
+  const catLabel = (cat) => cat[nameKey] || cat.name;
+  const salonCur = currencyForCountry(salonData.country_code).code;
+  const sym = curSym(salonData.country_code).trim();
+
+  // Voorbeeldjes pas bij het sluiten vrijgeven (verwijderen doet removeFile).
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  useEffect(() => () => { filesRef.current.forEach(f => f.url && URL.revokeObjectURL(f.url)); }, []);
+
+  const addFiles = (list) => {
+    setErr("");
+    const picked = Array.from(list || []);
+    const next = [...files];
+    for (const file of picked) {
+      if (next.length >= PRICE_LIST_MAX_FILES) { setErr(L(`Maximaal ${PRICE_LIST_MAX_FILES} bestanden tegelijk.`, `At most ${PRICE_LIST_MAX_FILES} files at once.`, `Como máximo ${PRICE_LIST_MAX_FILES} archivos a la vez.`)); break; }
+      const pdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name || "");
+      if (!pdf && !String(file.type || "").startsWith("image/") && !/\.(heic|heif)$/i.test(file.name || "")) {
+        setErr(L("Kies een foto (JPG of PNG) of een PDF.", "Choose a photo (JPG or PNG) or a PDF.", "Elige una foto (JPG o PNG) o un PDF."));
+        continue;
+      }
+      next.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, file, pdf, url: pdf ? null : URL.createObjectURL(file) });
+    }
+    setFiles(next);
+  };
+  const removeFile = (id) => setFiles(fs => { const f = fs.find(x => x.id === id); if (f?.url) URL.revokeObjectURL(f.url); return fs.filter(x => x.id !== id); });
+
+  const errText = (code) => ({
+    rate_limited: L("Je hebt vandaag al tien keer een prijslijst laten lezen. Probeer het morgen opnieuw, of voeg je diensten zelf toe.", "You've had ten price lists read today. Try again tomorrow, or add your services yourself.", "Ya leíste diez listas de precios hoy. Inténtalo mañana o añade tus servicios tú misma."),
+    file_too_large: L("Dit bestand is te groot. Een foto mag maximaal 5 MB zijn, een PDF 10 MB.", "This file is too large. A photo can be up to 5 MB, a PDF up to 10 MB.", "Este archivo es demasiado grande. Una foto puede tener hasta 5 MB y un PDF hasta 10 MB."),
+    unsupported_type: L("Dit bestandstype kan niet. Kies een foto (JPG of PNG) of een PDF.", "This file type isn't supported. Choose a photo (JPG or PNG) or a PDF.", "Este tipo de archivo no es compatible. Elige una foto (JPG o PNG) o un PDF."),
+    heic: L("Deze foto staat in HEIC-formaat en kan hier niet worden geopend. Maak een schermafbeelding van de foto en kies die, of kies een JPG.", "This photo is in HEIC format and can't be opened here. Take a screenshot of it and choose that, or choose a JPG.", "Esta foto está en formato HEIC y no se puede abrir aquí. Haz una captura de pantalla y elígela, o elige un JPG."),
+    no_auth: L("Je sessie is verlopen. Log opnieuw in.", "Your session has expired. Please sign in again.", "Tu sesión ha caducado. Inicia sesión de nuevo."),
+    invalid_auth: L("Je sessie is verlopen. Log opnieuw in.", "Your session has expired. Please sign in again.", "Tu sesión ha caducado. Inicia sesión de nuevo."),
+  }[code]);
+
+  // Uitkomst van de server → regels ter controle (of het mislukt-scherm).
+  const showResult = (res, importId) => {
+    if (!res?.readable || !res?.count) { setResult(res || null); setFailedImportId(importId); setPhase("failed"); return; }
+    const existing = new Set((salonData.services || []).flatMap(s => [s.name, s.name_nl, s.name_en, s.name_es]).filter(Boolean).map(n => String(n).trim().toLowerCase()));
+    let k = 0;
+    const built = res.categories.flatMap((cat, ci) => cat.services.map(s => {
+      const exists = [s.name, s.name_nl, s.name_en, s.name_es].some(n => existing.has(String(n || "").trim().toLowerCase()));
+      return { key: k++, ci, ...s, price: s.price == null ? "" : String(s.price), duration: String(s.duration), on: !exists && s.price != null, exists };
+    }));
+    setResult({ ...res, import_id: importId }); setRows(built); setPhase("review");
+  };
+
+  const read = async () => {
+    // Ref i.p.v. state: een dubbele tik tijdens het verkleinen startte anders twee keer.
+    if (!files.length || runRef.current) return;
+    runRef.current = true;
+    setErr(""); setSlow(false); setFailedImportId(null);
+    setPhase("reading");
+    try {
+      let payload = [];
+      try {
+        let total = 0;
+        for (const f of files) {
+          if (f.pdf) {
+            if (f.file.size > 10 * 1024 * 1024) { setErr(errText("file_too_large")); setPhase("pick"); return; }
+            total += f.file.size;
+            payload.push({ name: f.file.name, type: "application/pdf", data: await fileToBase64(f.file) });
+            continue;
+          }
+          // Kleinere JPEG; kleine letters op een prijslijst blijven leesbaar bij 2000 px.
+          const small = await compressImage(f.file, 2000, { quality: 0.85 });
+          if (!PRICE_LIST_IMAGE_TYPES.includes(small.type)) { setErr(/hei[cf]/i.test(small.type || small.name || "") ? errText("heic") : errText("unsupported_type")); setPhase("pick"); return; }
+          if (small.size > 5 * 1024 * 1024) { setErr(errText("file_too_large")); setPhase("pick"); return; }
+          total += small.size;
+          payload.push({ name: small.name, type: small.type, data: await fileToBase64(small) });
+        }
+        if (total > 15 * 1024 * 1024) { setErr(errText("file_too_large")); setPhase("pick"); return; }
+      } catch (e) {
+        console.error("prijslijst voorbereiden:", e);
+        setErr(L("Het bestand kon niet worden geopend. Probeer een ander bestand.", "The file couldn't be opened. Try another file.", "No se pudo abrir el archivo. Prueba con otro."));
+        setPhase("pick");
+        return;
+      }
+      if (!mountedRef.current) return;
+      // De server bewaart het bestand en leest het op de achtergrond; daarna
+      // vragen we om de paar seconden hoe het ervoor staat.
+      const { data, error } = await supabase.functions.invoke("parse-price-list", { body: { files: payload, lang }, timeout: 60000 });
+      payload = null;
+      let res = data;
+      if (error) { try { res = await error.context?.json?.(); } catch { res = null; } }
+      if (!mountedRef.current) return;
+      const importId = res?.import_id || null;
+      if (error || res?.error || !importId) {
+        const msg = errText(res?.error);
+        if (msg) { setErr(msg); setPhase("pick"); return; }
+        console.error("parse-price-list:", res?.error || error?.message);
+        setResult(null); setFailedImportId(importId); setPhase("failed"); return;
+      }
+      const started = Date.now();
+      while (mountedRef.current) {
+        await new Promise(r => setTimeout(r, 3000));
+        if (!mountedRef.current) return;
+        if (Date.now() - started > 45000) setSlow(true);
+        const { data: st, error: stErr } = await supabase.rpc("price_list_import_status", { p_import: importId });
+        if (!mountedRef.current) return;
+        if (!stErr && st && st.status !== "processing") {
+          if (st.status === "ok" || st.status === "empty") { showResult(st.result, importId); return; }
+          setResult(null); setFailedImportId(importId); setPhase("failed"); return;
+        }
+        // Ruim na de 400 s die de server mag draaien: opgeven.
+        if (Date.now() - started > 7 * 60 * 1000) { setResult(null); setFailedImportId(importId); setPhase("failed"); return; }
+      }
+    } catch (e) {
+      console.error("parse-price-list:", e);
+      if (mountedRef.current) { setResult(null); setPhase("failed"); }
+    } finally {
+      runRef.current = false;
+    }
+  };
+
+  const setRow = (key, patch) => setRows(rs => rs.map(r => r.key === key ? { ...r, ...patch } : r));
+  const chosen = rows.filter(r => r.on);
+
+  // Vertalen via translate-text (DeepL), één aanroep per taalpaar; mislukt het,
+  // dan null en blijft de getypte tekst staan.
+  const DEEPL_SRC = { nl: "NL", en: "EN", es: "ES" };
+  const DEEPL_TGT = { nl: "NL", en: "EN-US", es: "ES" };
+  const translateAll = async (texts, from, to) => {
+    if (!texts.length) return [];
+    try {
+      const { data, error } = await supabase.functions.invoke("translate-text", { body: { texts, source_lang: DEEPL_SRC[from], target_lang: DEEPL_TGT[to] } });
+      return !error && Array.isArray(data?.translations) ? texts.map((_, i) => data.translations[i] || null) : texts.map(() => null);
+    } catch { return texts.map(() => null); }
+  };
+
+  const save = async () => {
+    if (!chosen.length || runRef.current) return;
+    const bad = chosen.filter(r => !String(r[nameKey] || "").trim() || !(parseFloat(r.price) >= 0));
+    if (bad.length) {
+      setErr(L(`${bad.length} aangevinkte ${bad.length === 1 ? "behandeling mist" : "behandelingen missen"} een naam of prijs. Vul die in of zet het vinkje uit.`, `${bad.length} ticked ${bad.length === 1 ? "treatment is" : "treatments are"} missing a name or price. Fill it in or untick it.`, `A ${bad.length} ${bad.length === 1 ? "tratamiento marcado le falta" : "tratamientos marcados les falta"} un nombre o precio. Complétalo o desmárcalo.`));
+      return;
+    }
+    runRef.current = true;
+    try { await saveChosen(); } finally { runRef.current = false; }
+  };
+
+  const saveChosen = async () => {
+    setErr(""); setPhase("saving");
+    const owner = salonData.owner_id;
+    const ownLang = nameKey.slice(5); // nl | en | es
+    const others = ["nl", "en", "es"].filter(x => x !== ownLang);
+    // Zelf aangepaste namen: de andere talen opnieuw vertalen vanuit wat de
+    // salon typte (anders bleef daar de oude, misschien verkeerd gelezen naam).
+    const edited = chosen.filter(r => r.nameEdited);
+    const nameFix = {}; // key → { name_xx: ... }
+    if (edited.length) {
+      const typed = edited.map(r => String(r[nameKey]).trim());
+      const outs = await Promise.all(others.map(to => translateAll(typed, ownLang, to)));
+      edited.forEach((r, i) => {
+        nameFix[r.key] = {};
+        others.forEach((to, j) => { nameFix[r.key][`name_${to}`] = outs[j][i] || typed[i]; });
+      });
+    }
+    // Beschrijvingen van de lijst in alle drie de talen. Staat de lijst in een
+    // andere taal (bv. Papiaments), dan geen beschrijving: DeepL kent die niet.
+    const srcLang = ["nl", "en", "es"].includes(result.language) ? result.language : null;
+    const withDesc = srcLang ? chosen.filter(r => r.description) : [];
+    const descFix = {}; // key → { description_xx: ... }
+    if (withDesc.length) {
+      const texts = withDesc.map(r => r.description);
+      const targets = ["nl", "en", "es"].filter(x => x !== srcLang);
+      const outs = await Promise.all(targets.map(to => translateAll(texts, srcLang, to)));
+      withDesc.forEach((r, i) => {
+        descFix[r.key] = { [`description_${srcLang}`]: texts[i] };
+        targets.forEach((to, j) => { descFix[r.key][`description_${to}`] = outs[j][i] || null; });
+      });
+    }
+    const norm = (v) => String(v || "").trim().toLowerCase();
+    // Categorieën: een bestaande met dezelfde naam (in welke taal ook) hergebruiken.
+    const existingCats = salonData.categories || [];
+    const catId = {};
+    const toCreate = [];
+    let catPos = existingCats.reduce((m, x) => Math.max(m, x.position ?? -1), -1) + 1;
+    for (const ci of [...new Set(chosen.map(r => r.ci))]) {
+      const cat = result.categories[ci];
+      const names = [cat.name, cat.name_nl, cat.name_en, cat.name_es].map(norm).filter(Boolean);
+      const ex = existingCats.find(x => [x.name_nl, x.name_en, x.name_es].map(norm).filter(Boolean).some(n => names.includes(n)));
+      if (ex) catId[ci] = ex.id;
+      else toCreate.push({ ci, row: { owner_id: owner, name_nl: cat.name_nl || cat.name, name_en: cat.name_en || null, name_es: cat.name_es || null, position: catPos++ } });
+    }
+    let createdCats = [];
+    if (toCreate.length) {
+      const { data, error } = await supabase.from("service_categories").insert(toCreate.map(x => x.row)).select();
+      if (error || !data) {
+        console.error("prijslijst categorieën:", error);
+        setErr(L("Opslaan is niet gelukt. Probeer het opnieuw.", "Saving didn't work. Please try again.", "No se pudo guardar. Inténtalo de nuevo."));
+        setPhase("review"); return;
+      }
+      createdCats = data;
+      toCreate.forEach((x, i) => { const m = data.find(d => d.name_nl === x.row.name_nl && d.position === x.row.position) || data[i]; catId[x.ci] = m ? m.id : null; });
+    }
+    let pos = (salonData.services || []).reduce((m, s) => Math.max(m, s.position ?? -1), -1) + 1;
+    const payload = chosen.map(r => {
+      const typed = String(r[nameKey]).trim();
+      const names = { name_nl: r.name_nl, name_en: r.name_en, name_es: r.name_es, ...(nameFix[r.key] || {}), [nameKey]: typed };
+      const nl = names.name_nl || typed;
+      const dur = Math.min(600, Math.max(5, Math.round((parseInt(r.duration) || 60) / 5) * 5));
+      return {
+        owner_id: owner, name: nl, name_nl: nl, name_en: names.name_en || null, name_es: names.name_es || null,
+        description_nl: null, description_en: null, description_es: null,
+        ...(descFix[r.key] || {}),
+        price: Math.round(parseFloat(r.price) * 100) / 100,
+        duration: dur, position: pos++, category_id: catId[r.ci] || null,
+      };
+    });
+    const { data: svcs, error: sErr } = await supabase.from("services").insert(payload).select();
+    if (sErr || !svcs) {
+      console.error("prijslijst diensten:", sErr);
+      if (createdCats.length) await supabase.from("service_categories").delete().in("id", createdCats.map(x => x.id)).then(() => {}, () => {});
+      setErr(L("Opslaan is niet gelukt. Probeer het opnieuw.", "Saving didn't work. Please try again.", "No se pudo guardar. Inténtalo de nuevo."));
+      setPhase("review"); return;
+    }
+    // Zelfde regel als addService: teamleden met een beperkte dienstenlijst
+    // krijgen de nieuwe diensten erbij, anders kan niemand ze boeken.
+    const restricted = (salonData.staff || []).filter(m => m.active !== false && (m.service_ids || []).length > 0);
+    let staffOk = true;
+    if (restricted.length) {
+      const { error } = await supabase.from("staff_services").insert(restricted.flatMap(m => svcs.map(s => ({ staff_id: m.id, service_id: s.id }))));
+      if (error) { console.error("prijslijst teamkoppeling:", error); staffOk = false; }
+    }
+    update(d => {
+      d.categories = [...(d.categories || []), ...createdCats];
+      d.services = [...(d.services || []), ...svcs.map(s => ({ ...s, name_nl: s.name_nl || s.name, name_en: s.name_en || s.name, photos: [], variants: [], extras: [] }))];
+      if (restricted.length && staffOk) {
+        const ids = new Set(restricted.map(m => m.id));
+        d.staff = (d.staff || []).map(m => ids.has(m.id) ? { ...m, service_ids: [...(m.service_ids || []), ...svcs.map(s => s.id)] } : m);
+      }
+      return d;
+    });
+    supabase.rpc("price_list_import_applied", { p_import: result.import_id, p_added: svcs.length }).then(() => {}, () => {});
+    onDone?.({ added: svcs.length, staffOk });
+  };
+
+  const label = { fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel };
+  const chip = (txt, tint) => <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 6, background: `${tint}1a`, color: tint, whiteSpace: "nowrap" }}>{txt}</span>;
+  const busy = phase === "reading" || phase === "saving";
+  const curMismatch = result?.currency && result.currency !== salonCur && !(salonCur === "XCG" && result.currency === "ANG");
+
+  return (
+    <div data-price-import={phase} style={{ color: c.text }}>
+      {phase === "pick" && (
+        <div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 400, lineHeight: 1.15, marginBottom: 6 }}>{L("Je prijslijst inlezen", "Read your price list", "Leer tu lista de precios")}</div>
+          <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 18 }}>{L("Maak een foto van je prijslijst of kies een foto of PDF. Wij zetten alle behandelingen met prijs en tijd voor je klaar; jij controleert ze en voegt ze in één keer toe.", "Take a photo of your price list or choose a photo or PDF. We set up every treatment with its price and time; you check them and add them all at once.", "Haz una foto de tu lista de precios o elige una foto o PDF. Preparamos todos los tratamientos con precio y duración; tú los revisas y los añades de una vez.")}</div>
+          <input ref={inputRef} data-price-import-input type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={e => { addFiles(e.target.files); e.target.value = ""; }} />
+          {files.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
+              {files.map(f => (
+                <div key={f.id} data-price-import-file style={{ position: "relative", width: 84, height: 84, borderRadius: 8, overflow: "hidden", border: `1px solid ${c.border}`, background: c.bgCard, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {f.url ? <img src={f.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ fontSize: 10, color: c.textSub, padding: 6, textAlign: "center", wordBreak: "break-all" }}><NavIcon name="upload" size={18} color={c.textMuted} /><div style={{ marginTop: 4 }}>{f.file.name.slice(0, 24)}</div></div>}
+                  <button type="button" aria-label={L("Verwijderen", "Remove", "Quitar")} onClick={() => removeFile(f.id)} style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.6)", color: "#fff", cursor: "pointer", fontSize: 14, lineHeight: "22px", padding: 0 }}>&times;</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {files.length < PRICE_LIST_MAX_FILES && (
+            <button type="button" className="btn-ghost" data-price-import-choose onClick={() => inputRef.current?.click()} style={{ width: "100%", padding: "14px 18px", borderStyle: "dashed", borderColor: `${accent}66`, color: accent, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 12 }}>
+              <NavIcon name="camera" size={15} color="currentColor" /> {files.length ? L("Nog een foto of pagina toevoegen", "Add another photo or page", "Añadir otra foto o página") : L("Foto maken of bestand kiezen", "Take a photo or choose a file", "Hacer una foto o elegir un archivo")}
+            </button>
+          )}
+          {err && <div role="alert" data-price-import-error style={{ fontSize: 12, color: c.danger, marginBottom: 12, lineHeight: 1.5 }}>{err}</div>}
+          <button type="button" className="btn-primary" data-price-import-read disabled={!files.length} onClick={read} style={{ width: "100%", padding: "14px 18px", marginBottom: 10, opacity: files.length ? 1 : 0.5 }}>
+            {L("Lees mijn prijslijst", "Read my price list", "Leer mi lista de precios")}
+          </button>
+          {onCancel && <button type="button" className="btn-ghost" onClick={onCancel} style={{ width: "100%", fontSize: 11, padding: "11px 18px" }}>{L("Liever zelf invoeren", "I'd rather enter them myself", "Prefiero introducirlos yo")}</button>}
+          <div style={{ fontSize: 10.5, color: c.textMuted, lineHeight: 1.5, marginTop: 12 }}>{L("Je bestand wordt met AI gelezen en bewaard, zodat Vellu je kan helpen als het niet lukt.", "Your file is read with AI and kept, so Vellu can help you if it doesn't work.", "Tu archivo se lee con IA y se guarda, para que Vellu pueda ayudarte si no funciona.")}</div>
+        </div>
+      )}
+
+      {phase === "reading" && (
+        <div style={{ textAlign: "center", padding: "28px 4px" }}>
+          <div style={{ width: 32, height: 32, margin: "0 auto 18px", border: `2px solid ${c.border}`, borderTopColor: accent, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 6 }}>{L("We lezen je prijslijst…", "Reading your price list…", "Leyendo tu lista de precios…")}</div>
+          <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6 }}>{slow
+            ? L("Een lange prijslijst kan een paar minuten duren. Laat dit scherm open, we zijn er nog mee bezig.", "A long price list can take a few minutes. Keep this screen open, we're still on it.", "Una lista larga puede tardar unos minutos. Deja esta pantalla abierta, seguimos con ello.")
+            : L("Dit duurt meestal een halve tot een hele minuut. Laat dit scherm open.", "This usually takes half a minute to a minute. Keep this screen open.", "Suele tardar entre medio minuto y un minuto. Deja esta pantalla abierta.")}</div>
+        </div>
+      )}
+
+      {phase === "failed" && (
+        <div data-price-import-failed style={{ textAlign: "center", padding: "16px 4px" }}>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 400, marginBottom: 8 }}>{L("Dit lukte niet helemaal", "That didn't quite work", "Esto no funcionó del todo")}</div>
+          <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 8 }}>
+            {failedImportId
+              ? <>
+                  {result && !result.count
+                    ? L("We konden geen behandelingen met een prijs herkennen.", "We couldn't find any treatments with a price.", "No encontramos tratamientos con precio.")
+                    : L("Het lezen is niet gelukt.", "Reading the file didn't work.", "No se pudo leer el archivo.")}
+                  {" "}{L("Probeer een scherpe foto van dichtbij, recht van voren en goed belicht. Vellu heeft je bestand ook ontvangen en helpt je graag verder.", "Try a sharp close-up photo, taken straight on in good light. Vellu has also received your file and is happy to help.", "Prueba una foto nítida, de cerca, de frente y con buena luz. Vellu también recibió tu archivo y te ayuda con gusto.")}
+                </>
+              // Geen poging bekend: het bestand is de server niet eens bereikt.
+              : L("Er ging iets mis met de verbinding. Controleer je internet en probeer het opnieuw.", "Something went wrong with the connection. Check your internet and try again.", "Algo falló con la conexión. Revisa tu internet e inténtalo de nuevo.")}
+          </div>
+          {result?.note && <div style={{ fontSize: 12, color: c.textSub, fontStyle: "italic", marginBottom: 14 }}>{result.note}</div>}
+          <button type="button" className="btn-primary" onClick={() => { setErr(""); setPhase("pick"); }} style={{ width: "100%", padding: "13px 18px", marginBottom: 10, marginTop: 6 }}>{L("Opnieuw proberen", "Try again", "Intentar de nuevo")}</button>
+          {onCancel && <button type="button" className="btn-ghost" onClick={onCancel} style={{ width: "100%", fontSize: 11, padding: "11px 18px" }}>{L("Zelf invoeren", "Enter them myself", "Introducirlos yo")}</button>}
+        </div>
+      )}
+
+      {(phase === "review" || phase === "saving") && result && (
+        <div>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 400, lineHeight: 1.15, marginBottom: 6 }}>
+            {L(`We vonden ${result.count} ${result.count === 1 ? "behandeling" : "behandelingen"}`, `We found ${result.count} ${result.count === 1 ? "treatment" : "treatments"}`, `Encontramos ${result.count} ${result.count === 1 ? "tratamiento" : "tratamientos"}`)}
+          </div>
+          <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.6, marginBottom: 12 }}>{L("Controleer de namen, prijzen en tijden; je kunt alles hier aanpassen. Een tijd met 'geschat' stond niet op je lijst.", "Check the names, prices and times; you can change everything here. A time marked 'estimated' wasn't on your list.", "Revisa los nombres, precios y duraciones; puedes cambiarlo todo aquí. Una duración marcada 'estimada' no estaba en tu lista.")}</div>
+          {curMismatch && <div data-price-import-currency style={{ fontSize: 12, lineHeight: 1.5, padding: "10px 12px", borderRadius: 8, background: `${c.warning}14`, border: `1px solid ${c.warning}44`, marginBottom: 10 }}>{L(`Je prijslijst lijkt in ${result.currency} te staan, maar je salon rekent in ${salonCur}. Controleer de bedragen.`, `Your price list seems to be in ${result.currency}, but your salon charges in ${salonCur}. Check the amounts.`, `Tu lista parece estar en ${result.currency}, pero tu salón cobra en ${salonCur}. Revisa los importes.`)}</div>}
+          {result.note && <div style={{ fontSize: 12, lineHeight: 1.5, padding: "10px 12px", borderRadius: 8, background: `${accent}10`, border: `1px solid ${accent}33`, marginBottom: 10 }}>{result.note}</div>}
+          {result.truncated && <div style={{ fontSize: 12, color: c.textSub, marginBottom: 10 }}>{L("Het waren er heel veel; hieronder staan de eerste 200.", "There were a lot; the first 200 are below.", "Eran muchísimos; abajo están los primeros 200.")}</div>}
+
+          {result.categories.map((cat, ci) => {
+            const catRows = rows.filter(r => r.ci === ci);
+            const allOn = catRows.every(r => r.on);
+            return (
+              <div key={ci} data-price-import-cat style={{ marginTop: 14 }}>
+                <label style={{ ...label, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 6 }}>
+                  <input type="checkbox" checked={allOn} disabled={busy} onChange={() => setRows(rs => rs.map(r => r.ci === ci ? { ...r, on: !allOn } : r))} style={{ accentColor: accent }} />
+                  {catLabel(cat)} <span style={{ color: c.textMuted }}>({catRows.length})</span>
+                </label>
+                {catRows.map(r => (
+                  <div key={r.key} data-price-import-row style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 6, borderRadius: 8, border: `1px solid ${r.on ? `${accent}44` : c.border}`, background: r.on ? `${accent}08` : "transparent", opacity: r.on ? 1 : 0.65 }}>
+                    <input type="checkbox" checked={r.on} disabled={busy} aria-label={L("Toevoegen", "Add", "Añadir")} onChange={() => setRow(r.key, { on: !r.on })} style={{ accentColor: accent, width: 16, height: 16, flexShrink: 0 }} />
+                    <input className="input-field" data-price-import-name value={r[nameKey] || ""} disabled={busy} onChange={e => setRow(r.key, { [nameKey]: e.target.value, nameEdited: true })} style={{ flex: "1 1 180px", minWidth: 0, fontSize: 13, padding: "8px 10px" }} />
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ fontSize: 11, color: c.textMuted }}>{sym}</span>
+                      <input className="input-field" data-price-import-price type="number" inputMode="decimal" min="0" step="0.01" value={r.price} disabled={busy} onChange={e => setRow(r.key, { price: e.target.value })} placeholder="0" style={{ width: 78, fontSize: 13, padding: "8px 8px" }} />
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <input className="input-field" data-price-import-duration type="number" inputMode="numeric" min="5" step="5" value={r.duration} disabled={busy} onChange={e => setRow(r.key, { duration: e.target.value, duration_estimated: false })} style={{ width: 64, fontSize: 13, padding: "8px 8px" }} />
+                      <span style={{ fontSize: 11, color: c.textMuted }}>min</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {r.duration_estimated && chip(L("geschat", "estimated", "estimada"), c.warning)}
+                      {r.price_from && chip(L("vanaf-prijs", "from price", "precio desde"), accent)}
+                      {r.price === "" && chip(L("geen prijs", "no price", "sin precio"), c.danger)}
+                      {r.exists && chip(L("heb je al", "already added", "ya existe"), "#8a8070")}
+                    </div>
+                    {r.description && <div data-price-import-desc style={{ flexBasis: "100%", fontSize: 11.5, color: c.textSub, lineHeight: 1.45, paddingLeft: 24 }}>{r.description}</div>}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+
+          {err && <div role="alert" data-price-import-error style={{ fontSize: 12, color: c.danger, margin: "12px 0 0", lineHeight: 1.5 }}>{err}</div>}
+          <div style={{ position: "sticky", bottom: 0, background: panelBg || c.bg, paddingTop: 12, paddingBottom: "calc(6px + env(safe-area-inset-bottom, 0px))", marginTop: 12, borderTop: `1px solid ${c.border}` }}>
+            <button type="button" className="btn-primary" data-price-import-save disabled={!chosen.length || busy} onClick={save} style={{ width: "100%", padding: "14px 18px", marginBottom: 8, opacity: chosen.length && !busy ? 1 : 0.5 }}>
+              {phase === "saving" ? L("Bezig met toevoegen…", "Adding…", "Añadiendo…") : L(`Voeg ${chosen.length} ${chosen.length === 1 ? "behandeling" : "behandelingen"} toe`, `Add ${chosen.length} ${chosen.length === 1 ? "treatment" : "treatments"}`, `Añadir ${chosen.length} ${chosen.length === 1 ? "tratamiento" : "tratamientos"}`)}
+            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" className="btn-ghost" disabled={busy} onClick={() => { setErr(""); setPhase("pick"); }} style={{ flex: 1, fontSize: 11, padding: "10px 12px" }}>{L("Andere foto", "Different photo", "Otra foto")}</button>
+              {onCancel && <button type="button" className="btn-ghost" disabled={busy} onClick={onCancel} style={{ flex: 1, fontSize: 11, padding: "10px 12px" }}>{L("Annuleren", "Cancel", "Cancelar")}</button>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── ONBOARDING WIZARD ──────────────────────────────────────
 // Atelier-huid (21-09-2026, Faisal: "its in the old theme"): de wizard is de
 // laatste stap van de merk-funnel (bone homepage → bone login → bone
@@ -3041,6 +3444,8 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish }) {
   const [svcPrice, setSvcPrice] = useState("");
   const [svcDuration, setSvcDuration] = useState("60");
   const [saving, setSaving] = useState(false);
+  // Prijslijst inlezen in plaats van één dienst met de hand (24-10-2026).
+  const [importing, setImporting] = useState(false);
 
   const steps = [
     { title: t.onboardingStep1, sub: t.onboardingStep1Sub },
@@ -3161,11 +3566,38 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish }) {
             </div>
           )}
 
+          {/* Step 1: prijslijst inlezen (alles in één keer) */}
+          {step === 1 && importing && (
+            <PriceListImport
+              salonData={salonData} update={update} lang={lang}
+              c={{ ...AT_COLORS, warning: "#B7791F", danger: "#B4483C" }} accent={accent} panelBg={c.bgCard}
+              onCancel={() => setImporting(false)}
+              onDone={({ added, staffOk }) => {
+                setImporting(false);
+                toast.show(staffOk
+                  ? (lang === "nl" ? `${added} behandelingen toegevoegd` : lang === "es" ? `${added} tratamientos añadidos` : `${added} treatments added`)
+                  : (lang === "nl" ? "Toegevoegd, maar niet aan je team gekoppeld; zet ze aan onder Team" : lang === "es" ? "Añadidos, pero no asignados a tu equipo; actívalos en Equipo" : "Added, but not assigned to your team; switch them on under Team"),
+                  staffOk ? "success" : "error");
+                setStep(2);
+              }}
+            />
+          )}
+
           {/* Step 1: First service */}
-          {step === 1 && (
+          {step === 1 && !importing && (
             <div>
               <H>{t.onboardingStep2}</H>
               <Sub>{t.onboardingStep2Sub}</Sub>
+
+              {/* Snelste weg: de hele prijslijst in één keer (24-10-2026). */}
+              <div data-onboarding-pricelist style={{ border: `1px solid ${accent}55`, background: `${accent}12`, borderRadius: R, padding: "14px 16px", marginBottom: 18 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 500, color: INK, marginBottom: 4 }}>{lang === "nl" ? "Heb je een prijslijst?" : lang === "es" ? "¿Tienes una lista de precios?" : "Have a price list?"}</div>
+                <div style={{ fontSize: 12.5, color: c.textSub, lineHeight: 1.55, marginBottom: 12 }}>{lang === "nl" ? "Maak er een foto van, dan zetten wij al je behandelingen met prijs en tijd voor je klaar." : lang === "es" ? "Hazle una foto y preparamos todos tus tratamientos con precio y duración." : "Take a photo of it and we'll set up all your treatments with price and time."}</div>
+                <button type="button" className="btn-primary" data-onboarding-pricelist-open onClick={() => setImporting(true)} style={{ width: "100%", padding: "13px 18px", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  <NavIcon name="camera" size={14} color={c.btnOnDark} /> {lang === "nl" ? "Prijslijst uploaden" : lang === "es" ? "Subir lista de precios" : "Upload price list"}
+                </button>
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Of voeg je eerste dienst toe" : lang === "es" ? "O añade tu primer servicio" : "Or add your first service"}</div>
 
               <input className="input-field" placeholder={t.onboardingServiceName} value={svcName} onChange={e => setSvcName(e.target.value)} style={{ ...inputStyle, marginBottom: 10 }} />
               <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
@@ -5548,6 +5980,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [variantPriceFold, setVariantPriceFold] = useState(null);
   useEffect(() => { setSvcSeg("prijzen"); setVariantPriceFold(null); }, [expandedServiceId]);
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
+  // Prijslijst inlezen (24-10-2026): venster bij Diensten.
+  const [showPriceImport, setShowPriceImport] = useState(false);
   // Retail products (Professional): add/edit form state + list search.
   const [showNewProductForm, setShowNewProductForm] = useState(false);
   const [newProduct, setNewProduct] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "", barcode: "" });
@@ -11161,7 +11595,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           Hidden while the guided tour is running so they don't overlap. */}
       {/* Chatknop weg zolang de rondleiding of "Wat is er nieuw" open is — hij
           zweefde anders over de feedbackregel van dat venster (Faisal, 07-09). */}
-      {!tourOpen && !whatsNew && <SupportChat lang={lang} c={c} accent={accent} isMobile={isMobile} />}
+      {/* Niet tijdens het prijslijstvenster: de chatknop lag dan over "Voeg … toe". */}
+      {!tourOpen && !whatsNew && !showPriceImport && <SupportChat lang={lang} c={c} accent={accent} isMobile={isMobile} />}
 
       {/* Mobile-only PWA install banner. Self-hides on desktop (UA check),
           when already installed, or once dismissed. Shown on every owner
@@ -17676,6 +18111,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "36px 20px", background: c.bgCard, border: `1px dashed ${c.border}`, borderRadius: 16 }}>
                     <div style={{ opacity: 0.4 }}><NavIcon name="diensten" size={32} color={c.textMuted} /></div>
                     <div style={{ fontSize: 13, color: c.textSub, textAlign: "center" }}>{lang === "nl" ? "Nog geen diensten toegevoegd" : lang === "es" ? "Aún no hay servicios" : "No services yet"}</div>
+                    {/* Snelste start: de hele prijslijst in één keer (24-10-2026). */}
+                    <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", maxWidth: 320, lineHeight: 1.5 }}>{lang === "nl" ? "Maak een foto van je prijslijst; wij zetten al je behandelingen met prijs en tijd voor je klaar." : lang === "es" ? "Haz una foto de tu lista de precios; preparamos todos tus tratamientos con precio y duración." : "Take a photo of your price list; we'll set up all your treatments with price and time."}</div>
+                    <button type="button" className="btn-primary" data-services-pricelist-empty onClick={() => setShowPriceImport(true)} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 20px", fontSize: 11 }}>
+                      <NavIcon name="camera" size={14} color={c.btnOnDark} /> {lang === "nl" ? "Prijslijst uploaden" : lang === "es" ? "Subir lista de precios" : "Upload price list"}
+                    </button>
                   </div>
                 )}
 
@@ -18849,9 +19289,38 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     </button>
                   </div>
                 ) : (
-                  <button className="btn-ghost" style={{ width: "100%", marginTop: 10, padding: "14px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => setShowNewServiceForm(true)}>
-                    <NavIcon name="plus" size={14} color="currentColor" /> {lang === "nl" ? "Nieuwe dienst toevoegen" : lang === "es" ? "Añadir nuevo servicio" : "Add new service"}
-                  </button>
+                  <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                    <button className="btn-ghost" style={{ flex: "2 1 220px", padding: "14px 18px", borderStyle: "dashed", borderColor: `${accent}44`, color: accent, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => setShowNewServiceForm(true)}>
+                      <NavIcon name="plus" size={14} color="currentColor" /> {lang === "nl" ? "Nieuwe dienst toevoegen" : lang === "es" ? "Añadir nuevo servicio" : "Add new service"}
+                    </button>
+                    {/* Meer in één keer: (een deel van) de prijslijst inlezen. */}
+                    <button className="btn-ghost" data-services-pricelist style={{ flex: "1 1 180px", padding: "14px 18px", borderStyle: "dashed", display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={() => setShowPriceImport(true)}>
+                      <NavIcon name="camera" size={14} color="currentColor" /> {lang === "nl" ? "Prijslijst inlezen" : lang === "es" ? "Leer lista de precios" : "Read price list"}
+                    </button>
+                  </div>
+                )}
+                {showPriceImport && createPortal(
+                  // Het venster scrolt als geheel (geen geneste scroller, zie de
+                  // mobiele regels); de knoppenbalk blijft onderaan staan.
+                  // Onderaan geen padding op de scroller: anders schuift er onder
+                  // de vaste knoppenbalk nog een strook van de lijst door.
+                  <div data-price-import-modal style={{ position: "fixed", inset: 0, zIndex: 320, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", overflowY: "auto", padding: "max(16px, env(safe-area-inset-top, 0px)) 16px 0" }}>
+                    <div style={{ maxWidth: 640, margin: "0 auto 16px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: "20px 18px 8px", position: "relative" }}>
+                      <PriceListImport
+                        salonData={salonData} update={update} lang={lang}
+                        c={c} accent={accent} panelBg={c.bg}
+                        onCancel={() => setShowPriceImport(false)}
+                        onDone={({ added, staffOk }) => {
+                          setShowPriceImport(false);
+                          toast.show(staffOk
+                            ? (lang === "nl" ? `${added} behandelingen toegevoegd` : lang === "es" ? `${added} tratamientos añadidos` : `${added} treatments added`)
+                            : (lang === "nl" ? "Toegevoegd, maar niet aan je team gekoppeld; zet ze aan onder Team" : lang === "es" ? "Añadidos, pero no asignados a tu equipo; actívalos en Equipo" : "Added, but not assigned to your team; switch them on under Team"),
+                            staffOk ? "success" : "error");
+                        }}
+                      />
+                    </div>
+                  </div>,
+                  document.body
                 )}
               </div>
 

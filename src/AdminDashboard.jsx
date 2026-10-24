@@ -179,7 +179,12 @@ export default function AdminDashboard({ onLogout }) {
   // Standaard uit — antwoorden zijn nooit publiek, alleen hier te lezen.
   const [siteOn, setSiteOn] = useState(false);
   const [siteBusy, setSiteBusy] = useState(false);
-  const [tab, setTab] = useState("overview"); // overview | billing | salons | signups | ratings | cron
+  const [tab, setTab] = useState("overview"); // overview | billing | salons | signups | onboarding | ratings | cron
+  // Onboarding (24-10-2026): salons die vastlopen (geen diensten / geen
+  // boekingen) en de geüploade prijslijsten (parse-price-list).
+  const [onboarding, setOnboarding] = useState([]);
+  const [priceImports, setPriceImports] = useState([]);
+  const [fileBusy, setFileBusy] = useState("");
   const [search, setSearch] = useState("");
   // Het peilmoment waar de trial-window tegen afgerekend wordt. Staat bewust in
   // state en niet los in de JSX: met Date.now() midden in de render schoof de
@@ -199,7 +204,7 @@ export default function AdminDashboard({ onLogout }) {
         return;
       }
       setIsAdmin(true);
-      const [ov, sl, rs, cr, tl, bo, sb, ar, ai, sv, sr, sc] = await Promise.all([
+      const [ov, sl, rs, cr, tl, bo, sb, ar, ai, sv, sr, sc, ob, pi] = await Promise.all([
         supabase.rpc("admin_overview"),
         supabase.rpc("admin_salons_list"),
         supabase.rpc("admin_recent_signups", { p_days: 30 }),
@@ -212,6 +217,8 @@ export default function AdminDashboard({ onLogout }) {
         supabase.rpc("admin_rating_site_visibility"),
         supabase.rpc("admin_subscription_invoices"),
         supabase.rpc("admin_subscription_cancellations"),
+        supabase.rpc("admin_onboarding"),
+        supabase.rpc("admin_price_list_imports"),
       ]);
       if (cancelled) return;
       setOverview(ov.data?.[0] || null);
@@ -226,6 +233,8 @@ export default function AdminDashboard({ onLogout }) {
       setRatings(ar.data || []);
       setInvites(ai.data || []);
       setSiteOn(!!sv.data);
+      setOnboarding(ob.data || []);
+      setPriceImports(pi.data || []);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -388,6 +397,25 @@ export default function AdminDashboard({ onLogout }) {
     ? salons.filter(s => (s.business_name || "").toLowerCase().includes(q) || (s.email || "").toLowerCase().includes(q) || (s.slug || "").toLowerCase().includes(q) || (s.city || "").toLowerCase().includes(q))
     : salons;
 
+  // Onboarding: wie loopt vast? Geen zichtbare diensten (boekingspagina leeg),
+  // of na drie dagen nog geen enkele afspraak. Nieuwste aanmelding bovenaan.
+  const stuck = onboarding
+    .map(o => ({ ...o, why: !o.visible_services ? "no_services" : (!o.appts && now - new Date(o.created_at).getTime() > 3 * 864e5) ? "no_bookings" : null }))
+    .filter(o => o.why);
+  // Getekende link (10 min) naar een geüploade prijslijst in de privébucket.
+  const openPriceFile = async (path) => {
+    if (fileBusy) return;
+    setFileBusy(path);
+    // Tabblad meteen bij de klik openen (anders houdt de pop-upblokker hem
+    // tegen na het wachten), daarna de link erin zetten.
+    const w = window.open("about:blank", "_blank");
+    try {
+      const { data, error } = await supabase.storage.from("price-lists").createSignedUrl(path, 600);
+      if (error || !data?.signedUrl) { w?.close(); window.alert(`Could not open the file: ${error?.message || "unknown"}`); return; }
+      if (w) { w.opener = null; w.location.href = data.signedUrl; } else window.open(data.signedUrl, "_blank");
+    } finally { setFileBusy(""); }
+  };
+
   // Simple SVG sparkline for revenue timeline
   const sparkline = (() => {
     if (!timeline.length) return null;
@@ -425,6 +453,7 @@ export default function AdminDashboard({ onLogout }) {
             ["billing", "Revenue"],
             ["salons", "Salons"],
             ["signups", "Signups (30d)"],
+            ["onboarding", `Onboarding${stuck.length ? ` (${stuck.length})` : ""}`],
             ["ratings", `Ratings${ratings.length ? ` (${ratings.length})` : ""}`],
             ["cron", "Cron health"],
           ].map(([k, label]) => (
@@ -1005,6 +1034,78 @@ export default function AdminDashboard({ onLogout }) {
               </div>
             ))}
           </div>
+        )}
+
+        {/* ── ONBOARDING TAB (24-10-2026): wie loopt vast + geüploade prijslijsten ── */}
+        {tab === "onboarding" && (
+          <>
+            <div data-onboarding-stuck style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "18px 20px", marginBottom: 16 }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>Needs a nudge — {stuck.length}</div>
+              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12 }}>Salons with an empty booking page, or no bookings at all three days after signing up. Deactivated salons and the demo are left out.</div>
+              {stuck.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: 16, textAlign: "center" }}>Everyone is up and running.</div>}
+              {stuck.length > 0 && (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${c.border}` }}>
+                        {["Salon", "Missing", "Signed up", "Last seen", "Plan", "Services", "Bookings", "Price list"].map(h => (
+                          <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, whiteSpace: "nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stuck.map(o => (
+                        <tr key={o.id} data-onboarding-row={o.slug} style={{ borderBottom: `1px solid ${c.border}` }}>
+                          <td style={{ padding: "10px" }}>
+                            <a href={`/${o.slug}`} target="_blank" rel="noreferrer" style={{ color: c.text, textDecoration: "none", fontWeight: 500 }}>{o.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</a>
+                            <div style={{ fontSize: 10, color: c.textMuted }}><a href={`mailto:${o.email}`} style={{ color: "inherit" }}>{o.email}</a> · {o.country_code || "—"}</div>
+                          </td>
+                          <td style={{ padding: "10px", color: c.warning, whiteSpace: "nowrap" }}>{o.why === "no_services" ? "No services" : "No bookings yet"}</td>
+                          <td style={{ padding: "10px", color: c.textMuted, whiteSpace: "nowrap" }}>{fmtDate(o.created_at)}</td>
+                          <td style={{ padding: "10px", color: c.textMuted, whiteSpace: "nowrap" }} title={o.last_seen ? fmtDateTime(o.last_seen) : undefined}>{relTime(o.last_seen)}</td>
+                          <td style={{ padding: "10px", whiteSpace: "nowrap", fontSize: 11 }}>
+                            {o.subscription_status || "no trial"}
+                            {o.subscription_status === "trialing" && o.trial_ends_at && <div style={{ fontSize: 10, color: c.textMuted }}>until {fmtDate(o.trial_ends_at)}</div>}
+                          </td>
+                          <td style={{ padding: "10px", color: c.textSub }}>{o.visible_services}{o.services !== o.visible_services ? ` (${o.services})` : ""}</td>
+                          <td style={{ padding: "10px", color: c.textSub }}>{o.appts}</td>
+                          <td style={{ padding: "10px", fontSize: 11, whiteSpace: "nowrap", color: o.last_import_status === "failed" || o.last_import_status === "empty" ? c.danger : c.textSub }}>
+                            {o.last_import_at ? `${o.last_import_status}${o.last_import_found != null ? ` · ${o.last_import_found} found` : ""}${o.last_import_added != null ? ` · ${o.last_import_added} added` : ""}` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div data-price-imports style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "18px 20px" }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>Uploaded price lists — {priceImports.length}</div>
+              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12 }}>Every "read my price list" attempt. When reading failed (or found nothing), open the photo and help the salon; the files stay private.</div>
+              {priceImports.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: 16, textAlign: "center" }}>No price lists uploaded yet.</div>}
+              {priceImports.map(p => {
+                const bad = p.status === "failed" || p.status === "empty";
+                return (
+                  <div key={p.id} data-price-import-admin={p.status} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "10px 0", borderBottom: `1px solid ${c.border}` }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 500, fontSize: 13 }}>{p.business_name || "(no name)"} <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 400 }}>· {fmtDateTime(p.created_at)}</span></div>
+                      <div style={{ fontSize: 11, color: bad ? c.danger : c.textSub, marginTop: 2 }}>
+                        {p.status === "ok" ? `${p.services_found} found${p.applied_at ? ` · ${p.services_added} added` : " · not added (yet)"}` : p.status === "empty" ? "Nothing recognised" : p.status === "processing" ? "Still reading (or stopped halfway)" : `Failed${p.error ? `: ${String(p.error).slice(0, 120)}` : ""}`}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {(Array.isArray(p.files) ? p.files : []).map((f, i) => (
+                        <button key={f.path} type="button" className="btn-ghost" disabled={!!fileBusy} onClick={() => openPriceFile(f.path)} style={{ fontSize: 10, padding: "6px 10px" }}>
+                          {fileBusy === f.path ? "…" : `${f.type === "application/pdf" ? "PDF" : "Photo"} ${i + 1}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
 
         {/* ── RATINGS TAB — "Beoordeel Vellu": what salon owners think ── */}

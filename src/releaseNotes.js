@@ -14,6 +14,22 @@
 
 export const RELEASES = [
   {
+    // 24-10: prijslijst inlezen met AI (edge function parse-price-list).
+    id: "2026-10-24",
+    date: "2026-10-24",
+    title: { nl: "Je prijslijst in één keer", en: "Your price list in one go", es: "Tu lista de precios de una vez" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Nieuw bij Diensten: Prijslijst inlezen. Maak een foto van je prijslijst of kies een PDF, en Vellu zet alle behandelingen met prijs en tijd voor je klaar. Jij controleert de lijst en voegt alles in één keer toe.",
+          en: "New under Services: Read price list. Take a photo of your price list or choose a PDF, and Vellu sets up every treatment with its price and time. You check the list and add everything at once.",
+          es: "Nuevo en Servicios: Leer lista de precios. Haz una foto de tu lista de precios o elige un PDF, y Vellu prepara todos los tratamientos con precio y duración. Tú revisas la lista y lo añades todo de una vez.",
+        },
+      },
+    ],
+  },
+  {
     // 19-10: een klant van Eydy boekte met "@gmail.vom" (Resend: Bounced) en
     // kreeg geen enkele mail; in Vellu stonden ~30 van zulke adressen. En bij
     // Get Niq'd Up ging de reviewmail uit vóór een verzette afspraak.
