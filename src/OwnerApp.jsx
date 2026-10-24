@@ -2420,6 +2420,14 @@ function LocationAdder({ ownerId, lang, t, accent, onAdd }) {
 // `start-trial` and `create-subscription` are both server-side: pricing,
 // trial_used flip, and Mollie customer creation are all enforced there. This
 // component is purely UI + thin error handling.
+// Eén automatische proefstart per eigenaar (24-10-2026). Live zagen we twee
+// start-trial-aanroepen 3 ms na elkaar: er stonden twee vellu-tabbladen open
+// en het tweede kreeg de nieuwe login via de gedeelde opslag mee. Nu wacht een
+// tweede tabblad op het eerste (Web Locks, één slot per eigenaar) en kijkt dan
+// eerst of de proef al loopt. Binnen één pagina delen exemplaren bovendien
+// dezelfde aanroep (autoTrialCalls); mislukt hij, dan mag een volgende poging.
+const autoTrialCalls = new Map(); // user id → Promise van functions.invoke("start-trial")
+
 function PlanSelection({ user, lang, setLang, onLogout }) {
   // Vaste Atelier-huid (27-08): de planKeuze zit in de merk-funnel vóór de
   // app (bone landing → bone login → bone planKeuze → app met eigen thema).
@@ -2716,11 +2724,34 @@ function PlanSelection({ user, lang, setLang, onLogout }) {
     };
     (async () => {
       try {
-        // Nooit eindeloos wachten (mobiel netwerk): na 20 s afbreken.
-        const { data, error } = await supabase.functions.invoke("start-trial", {
-          body: { plan: "professional", billing_interval: "monthly" },
-          timeout: 20000,
-        });
+        // Binnen het slot: heeft een ander tabblad de proef net gestart, dan
+        // geen tweede aanroep. Nooit eindeloos wachten (mobiel netwerk): na 20 s afbreken.
+        const startOnce = async () => {
+          if (await trialRunning()) return { running: true };
+          let call = autoTrialCalls.get(user.id);
+          if (!call) {
+            call = supabase.functions.invoke("start-trial", {
+              body: { plan: "professional", billing_interval: "monthly" },
+              timeout: 20000,
+            });
+            autoTrialCalls.set(user.id, call);
+          }
+          try { return await call; } catch (e) { autoTrialCalls.delete(user.id); throw e; }
+        };
+        let res;
+        try {
+          res = navigator.locks?.request ? await navigator.locks.request(`vellu-auto-trial-${user.id}`, startOnce) : await startOnce();
+        } catch (e) {
+          // Slot niet beschikbaar (oude browser): gewoon zonder.
+          if (e && e.name === "NotSupportedError") res = await startOnce(); else throw e;
+        }
+        if (res?.running) {
+          redirecting = true;
+          window.location.href = "/owner";
+          return;
+        }
+        const { data, error } = res;
+        if (error || !data?.success) autoTrialCalls.delete(user.id);
         if (!error && data?.success) {
           // Zelfde als handleStartTrial: harde herlaadbeurt, dan opent het dashboard.
           redirecting = true;
