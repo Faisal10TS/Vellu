@@ -14,6 +14,23 @@
 
 export const RELEASES = [
   {
+    // 26-10: TTNB wilde 2 kapotte nagels op een afspraak zetten via Bewerk;
+    // extra's waren daar alleen aan/uit.
+    id: "2026-10-26",
+    date: "2026-10-26",
+    title: { nl: "Aantal bij extra's", en: "Quantity for extras", es: "Cantidad en los extras" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Afspraak bewerken: bij een extra die per stuk telt, zoals een kapotte nagel, kies je nu het aantal met − en +. De prijs gaat vanzelf mee.",
+          en: "Edit appointment: for an extra charged per piece, such as a broken nail, you can now set the quantity with − and +. The price updates with it.",
+          es: "Editar cita: en un extra que se cobra por unidad, como una uña rota, ahora eliges la cantidad con − y +. El precio se ajusta solo.",
+        },
+      },
+    ],
+  },
+  {
     // 24-10: prijslijst inlezen met AI (edge function parse-price-list).
     id: "2026-10-24",
     date: "2026-10-24",

@@ -8706,16 +8706,21 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const dash = label.indexOf(" — ");
       const from = dash >= 0 ? dash + 3 : 0;
       const plusAt = label.indexOf(" + ", from);
-      if (!svc || plusAt < 0) return { baseLabel: label, ids: [], names: {} };
+      if (!svc || plusAt < 0) return { baseLabel: label, ids: [], names: {}, qtys: {} };
       const names = {};
       const ids = [];
+      // Aantal per extra ("Kapotte nagel ×2"): de naam zonder ×N bewaren en
+      // het aantal apart, zodat het teller-knopje erop kan doorrekenen.
+      const qtys = {};
       for (const raw of label.slice(plusAt + 3).split(", ")) {
-        const nm = normX(raw.replace(/\s*×\s*\d+\s*$/, ""));
+        const qm = raw.match(/\s*×\s*(\d+)\s*$/);
+        const bare = qm ? raw.slice(0, qm.index) : raw;
+        const nm = normX(bare);
         const ex = (svc.extras || []).find(e => [e.name_nl, e.name_en, e.name_es].some(n => n && normX(n) === nm));
-        if (!ex) return { baseLabel: label, ids: [], names: {} };
-        ids.push(ex.id); names[ex.id] = raw;
+        if (!ex) return { baseLabel: label, ids: [], names: {}, qtys: {} };
+        ids.push(ex.id); names[ex.id] = bare; qtys[ex.id] = qm ? Math.max(1, parseInt(qm[1]) || 1) : 1;
       }
-      return { baseLabel: label.slice(0, plusAt), ids, names };
+      return { baseLabel: label.slice(0, plusAt), ids, names, qtys };
     };
     setEditApptForm({
       svcRows: breakdown.map((bRow, i) => {
@@ -8730,9 +8735,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           baseLabel: px.baseLabel,
           baseExtraIds: px.ids,
           baseExtraNames: px.names,
+          baseExtraQtys: px.qtys,
           service_id: bRow.service_id || "",
           variant_id: "",
           extra_ids: px.ids,
+          extra_qtys: px.qtys,
           staff_id: bRow.staff_id || null,
           duration: parseInt(bRow.duration) || 60,
           estPrice: estRowPrice(bRow, i),
@@ -9046,9 +9053,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // silently drops the other parts anymore.
     const validRows = (editApptForm.svcRows || []).filter(r => r.service_id);
     const origBreakdownLen = (Array.isArray(orig.service_breakdown) && orig.service_breakdown.length > 0) ? orig.service_breakdown.length : 1;
-    // Bestaand deel met andere extra's dan bij het openen (zie baseExtraIds).
+    // Bestaand deel met andere extra's (of andere aantallen) dan bij het
+    // openen (zie baseExtraIds / baseExtraQtys).
+    const qtyOf = (qtys, id) => (qtys || {})[id] || 1;
     const extrasChanged = (r) => {
-      const a = [...(r.extra_ids || [])].sort().join(","), b = [...(r.baseExtraIds || [])].sort().join(",");
+      const a = [...(r.extra_ids || [])].sort().map(id => `${id}×${qtyOf(r.extra_qtys, id)}`).join(",");
+      const b = [...(r.baseExtraIds || [])].sort().map(id => `${id}×${qtyOf(r.baseExtraQtys, id)}`).join(",");
       return a !== b;
     };
     const serviceChanged = validRows.length > 0 && (
@@ -9065,6 +9075,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       // toonde elk deel weer het totaal.
       const origPrices = partPricesOf(orig, salonData.services || [], salonData.staff || []);
       const exName = (e) => clientLang === "nl" ? e.name_nl : clientLang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl);
+      // "Kapotte nagel ×2": zelfde schrijfwijze als book-appointment.
+      const withQty = (nm, q) => q > 1 ? `${nm} ×${q}` : nm;
       const parts = validRows.map(r => {
         const svc = (salonData.services || []).find(s => s.id === r.service_id);
         const exs = (r.extra_ids || []).map(id => (svc?.extras || []).find(e => e.id === id)).filter(Boolean);
@@ -9082,20 +9094,23 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             // schrijfwijze) én de deelprijs aanpassen met precies die extra's —
             // voorheen bleef de oude deelprijs staan terwijl het totaal wél
             // meeging (Junady, TTNB 09-10-2026: €45 i.p.v. €55).
+            // Verschil per extra = (nieuw aantal − oud aantal) × prijs; een
+            // extra die er niet (meer) op staat telt als aantal 0.
             const baseIds = r.baseExtraIds || [];
             const priceOf = (id) => parseFloat((svc?.extras || []).find(e => e.id === id)?.price || 0) || 0;
-            const added = (r.extra_ids || []).filter(id => !baseIds.includes(id));
-            const removed = baseIds.filter(id => !(r.extra_ids || []).includes(id));
+            const nowQ = (id) => (r.extra_ids || []).includes(id) ? qtyOf(r.extra_qtys, id) : 0;
+            const wasQ = (id) => baseIds.includes(id) ? qtyOf(r.baseExtraQtys, id) : 0;
+            const delta = Array.from(new Set([...baseIds, ...(r.extra_ids || [])])).reduce((s, id) => s + (nowQ(id) - wasQ(id)) * priceOf(id), 0);
             base = (r.baseLabel || r.origLabel || svcLabelOf(svc));
-            if (exs.length > 0) base += " + " + exs.map(e => (r.baseExtraNames || {})[e.id] || exName(e)).join(", ");
+            if (exs.length > 0) base += " + " + exs.map(e => withQty((r.baseExtraNames || {})[e.id] || exName(e), qtyOf(r.extra_qtys, e.id))).join(", ");
             partPrice = origPrice != null
-              ? Math.max(0, Math.round((origPrice + added.reduce((s, id) => s + priceOf(id), 0) - removed.reduce((s, id) => s + priceOf(id), 0)) * 100) / 100)
+              ? Math.max(0, Math.round((origPrice + delta) * 100) / 100)
               : null;
           }
         } else {
           const v = r.variant_id ? (svc?.variants || []).find(x => x.id === r.variant_id) : null;
           base = svcLabelOf(svc) + (v ? " — " + (clientLang === "nl" ? v.name_nl : clientLang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)) : "");
-          if (exs.length > 0) base += " + " + exs.map(exName).join(", ");
+          if (exs.length > 0) base += " + " + exs.map(e => withQty(exName(e), qtyOf(r.extra_qtys, e.id))).join(", ");
           partPrice = Number.isFinite(parseFloat(r.estPrice)) && parseFloat(r.estPrice) > 0 ? parseFloat(r.estPrice) : null;
         }
         const entry = { service_id: r.service_id, staff_id: r.staff_id || null, duration: parseInt(r.duration) || 60, offset_min: runningOffset, label: base };
@@ -12389,7 +12404,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     if (r.key !== key) return r;
                     dPrice = newPrice - (r.estPrice || 0);
                     dDur = newDur - (r.duration || 0);
-                    return { ...r, original: false, origLabel: "", service_id: sid, variant_id: vid || "", extra_ids: [], estPrice: newPrice, duration: newDur };
+                    return { ...r, original: false, origLabel: "", service_id: sid, variant_id: vid || "", extra_ids: [], extra_qtys: {}, estPrice: newPrice, duration: newDur };
                   });
                   return { ...f, svcRows, price: String(Math.max(0, (parseFloat(f.price) || 0) + dPrice)), duration: String(Math.max(5, (parseInt(f.duration) || 0) + dDur)) };
                 });
@@ -12405,15 +12420,32 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 });
                 const addRow = () => setEditApptForm((f) => ({
                   ...f,
-                  svcRows: [...(f.svcRows || []), { key: `n${Date.now()}_${(f.svcRows || []).length}`, original: false, origLabel: "", service_id: "", variant_id: "", extra_ids: [], staff_id: editingAppt.staff_id || null, duration: 0, estPrice: 0 }],
+                  svcRows: [...(f.svcRows || []), { key: `n${Date.now()}_${(f.svcRows || []).length}`, original: false, origLabel: "", service_id: "", variant_id: "", extra_ids: [], extra_qtys: {}, staff_id: editingAppt.staff_id || null, duration: 0, estPrice: 0 }],
                 }));
+                // Uitzetten haalt de extra er mét zijn aantal af (×2 = 2× de prijs).
                 const toggleRowExtra = (key, ex) => setEditApptForm((f) => {
                   let dPrice = 0;
                   const svcRows = (f.svcRows || []).map((r) => {
                     if (r.key !== key) return r;
                     const has = (r.extra_ids || []).includes(ex.id);
-                    dPrice = (has ? -1 : 1) * (parseFloat(ex.price) || 0);
-                    return { ...r, extra_ids: has ? r.extra_ids.filter((i) => i !== ex.id) : [...(r.extra_ids || []), ex.id], estPrice: (r.estPrice || 0) + dPrice };
+                    const q = has ? ((r.extra_qtys || {})[ex.id] || 1) : 1;
+                    dPrice = (has ? -1 : 1) * q * (parseFloat(ex.price) || 0);
+                    const extra_qtys = { ...(r.extra_qtys || {}) };
+                    if (has) delete extra_qtys[ex.id]; else extra_qtys[ex.id] = 1;
+                    return { ...r, extra_ids: has ? r.extra_ids.filter((i) => i !== ex.id) : [...(r.extra_ids || []), ex.id], extra_qtys, estPrice: (r.estPrice || 0) + dPrice };
+                  });
+                  return { ...f, svcRows, price: String(Math.max(0, (parseFloat(f.price) || 0) + dPrice)) };
+                });
+                // Per-stuk-extra's ("Kapotte nagel") een aantal geven, zoals in
+                // Nieuwe afspraak. Voorheen kon je zo'n extra hier alleen aan/uit
+                // zetten: 2 kapotte nagels lukte niet (TTNB 26-10-2026).
+                const setRowExtraQty = (key, ex, q) => setEditApptForm((f) => {
+                  let dPrice = 0;
+                  const svcRows = (f.svcRows || []).map((r) => {
+                    if (r.key !== key) return r;
+                    const prev = (r.extra_qtys || {})[ex.id] || 1;
+                    dPrice = (q - prev) * (parseFloat(ex.price) || 0);
+                    return { ...r, extra_qtys: { ...(r.extra_qtys || {}), [ex.id]: q }, estPrice: (r.estPrice || 0) + dPrice };
                   });
                   return { ...f, svcRows, price: String(Math.max(0, (parseFloat(f.price) || 0) + dPrice)) };
                 });
@@ -12463,6 +12495,25 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             })}
                           </div>
                         )}
+                        {(() => {
+                          // Aantal alleen voor aangezette per-stuk-extra's; een
+                          // extra die al ×N op de afspraak had maar sindsdien niet
+                          // meer per stuk is, krijgt de teller ook (anders kun je
+                          // dat aantal nergens terugzetten).
+                          const perU = svcExtras.filter((ex) => (r.extra_ids || []).includes(ex.id) && (ex.per_unit || ((r.extra_qtys || {})[ex.id] || 1) > 1));
+                          if (!perU.length) return null;
+                          return (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                              {perU.map((ex) => (
+                                <div key={ex.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                                  <span style={{ fontSize: 11, color: c.textSub }}>{lang === "nl" ? ex.name_nl : lang === "es" ? (ex.name_es || ex.name_en || ex.name_nl) : (ex.name_en || ex.name_nl)} · {lang === "nl" ? "aantal" : lang === "es" ? "cantidad" : "qty"}</span>
+                                  <QtyStepper value={(r.extra_qtys || {})[ex.id] || 1} max={Math.max(ex.max_quantity || 10, (r.extra_qtys || {})[ex.id] || 1)} accent={accent} c={c}
+                                    onChange={(q) => setRowExtraQty(r.key, ex, q)} />
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}

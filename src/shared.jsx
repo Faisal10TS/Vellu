@@ -2466,10 +2466,13 @@ const catalogPartPrice = (p, services, staff) => {
   let price = override ? parseFloat(override.price) : (variant ? parseFloat(variant.price) : parseFloat(svc.price));
   if (!Number.isFinite(price)) return null;
   if (extrasStr) {
-    for (const name of extrasStr.split(", ")) {
+    for (const raw of extrasStr.split(", ")) {
+      // Per-stuk-extra's staan er als "Kapotte nagel ×2".
+      const qm = raw.match(/\s*×\s*(\d+)\s*$/);
+      const name = qm ? raw.slice(0, qm.index) : raw;
       const ex = (svc.extras || []).find(e => same(e, normLabel(name)));
       if (!ex) return null;
-      price += parseFloat(ex.price) || 0;
+      price += (parseFloat(ex.price) || 0) * (qm ? Math.max(1, parseInt(qm[1]) || 1) : 1);
     }
   }
   return Math.round(price * 100) / 100;
