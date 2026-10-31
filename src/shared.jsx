@@ -2543,7 +2543,14 @@ export const partLabelOf = (a, i, staff = []) => {
 export const staffScopedRow = (a, staffId, staffName, services, staff) => {
   const row = { ...a, service_price: staffShareOf(a, staffId, services, staff) };
   const bd = Array.isArray(a?.service_breakdown) ? a.service_breakdown : [];
-  if (new Set(bd.map(p => p.staff_id).filter(Boolean)).size < 2) return row;
+  const staffCount = new Set(bd.map(p => p.staff_id).filter(Boolean)).size;
+  if (staffCount < 2) return row;
+  // Korting (omzetrapport toont hem per regel sinds 31-10-2026) naar rato van
+  // haar aandeel, net als de prijs; anders stond de hele korting van een
+  // gedeelde boeking bij elke stylist.
+  const disc = parseFloat(a?.discount_amount) || 0;
+  const total = parseFloat(a?.service_price) || 0;
+  if (disc > 0) row.discount_amount = Math.round((total > 0 ? disc * (row.service_price / total) : disc / staffCount) * 100) / 100;
   // Haar aandeel komt uit partPricesOf, en dat haalt de producten er juist af.
   // Bleven de producten van de hele boeking op de rij staan, dan boekte
   // linesFromSale ze als háár productverkoop en zette ze alleen "aandeel min

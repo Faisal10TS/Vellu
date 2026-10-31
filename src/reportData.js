@@ -31,6 +31,20 @@ export const payLabel = (pm, lang = "nl") => {
   return L[pm || "later"] || L["on-arrival"];
 };
 
+// Korting op een rij (TTNB 31-10-2026: "ook ora mi pone korting"): wat de
+// eigenaar gaf via Afspraak bewerken (discount_amount + discount_reason) en de
+// kortingsregel van een kassaverkoop (products, kind "discount"). Een code bij
+// het boeken staat alleen als " [CODE]" achter de naam; het bedrag ervan is
+// niet apart bewaard, dus die tonen we als code zonder bedrag.
+export const discountOf = (a) => {
+  const own = Math.max(0, parseFloat(a?.discount_amount) || 0);
+  const till = -(Array.isArray(a?.products) ? a.products : [])
+    .filter((it) => it && it.kind === "discount")
+    .reduce((n, it) => n + (parseFloat(it.price) || 0) * (parseInt(it.qty) || 1), 0);
+  const code = (/\s\[([A-Z0-9][A-Z0-9_-]*)\]\s*$/.exec(s(a?.service_name)) || [])[1] || "";
+  return { amount: round2(own + Math.max(0, till)), reason: s(a?.discount_reason).trim(), code };
+};
+
 // Tekst voor jsPDF. De standaardfont (helvetica) kent alleen WinAnsi
 // (CP1252); één teken daarbuiten — een echt minteken U+2212 uit de kassa, een
 // naam met Ş of Ł — en jsPDF schrijft de HELE string als 2-byte-tekst: wijd
@@ -158,10 +172,26 @@ export function revenueReportData({ appointments, cfg }) {
       ? t.lines.reduce((n, l) => n + (l.taxable && l.rate > 0 ? l.gross - l.gross / (1 + l.rate / 100) : 0), 0)
       : 0;
     const gross = Number(a.service_price) || 0;
-    return { appt: a, gross, tax, net: gross - tax };
+    return { appt: a, gross, tax, net: gross - tax, discount: discountOf(a) };
   });
 
-  return { computed, count: list.length, apptCount, saleCount, totalGross, totalBtw, totalNet, avg, untaxedGross, voucherPaid, showTaxRows, needsBreakdown, byRate: computed.byRate, sorted, rows };
+  // Per betaalwijze (pin, contant, overschrijving …): aantal en bedrag, zodat
+  // de salon de kas en de pinbonnen naast het rapport kan leggen. Geen
+  // betaalwijze = "later" (Later / factuur), net als payLabel.
+  const byPayMap = new Map();
+  for (const r of rows) {
+    const k = r.appt.payment_method || "later";
+    const v = byPayMap.get(k) || { count: 0, cents: 0 };
+    v.count++; v.cents += Math.round(r.gross * 100);
+    byPayMap.set(k, v);
+  }
+  const payments = [...byPayMap.entries()].sort((a, b) => b[1].cents - a[1].cents).map(([method, v]) => ({ method, count: v.count, revenue: v.cents / 100 }));
+  // Gegeven korting zit al in service_price (dat is het betaalde bedrag); dit
+  // totaal is alleen ter informatie.
+  const discountTotal = round2(rows.reduce((n, r) => n + r.discount.amount, 0));
+  const discountCount = rows.filter((r) => r.discount.amount > 0 || r.discount.code).length;
+
+  return { computed, count: list.length, apptCount, saleCount, totalGross, totalBtw, totalNet, avg, untaxedGross, voucherPaid, showTaxRows, needsBreakdown, byRate: computed.byRate, sorted, rows, payments, discountTotal, discountCount };
 }
 
 // ── Productverkoop ───────────────────────────────────────────────────────

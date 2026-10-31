@@ -20,7 +20,7 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { revenueReportData, revenueReportFilename, pdfSafe, pdfSafeCells, companyNumberLabel } from "./reportData.js";
+import { revenueReportData, revenueReportFilename, pdfSafe, pdfSafeCells, companyNumberLabel, payLabel } from "./reportData.js";
 
 const ACCENT = [201, 169, 110]; // #c9a96e as RGB
 
@@ -290,14 +290,63 @@ export function generateRevenueReportPDF({
     breakdownBottom += 12;
   }
 
+  // ── PER BETAALWIJZE + KORTING ────────────────────────────
+  // TTNB (31-10-2026): het overzicht moet laten zien wie pinde en wie contant
+  // betaalde, en waar korting op zat. Hier de totalen per betaalwijze (om naast
+  // de kas en de pinbonnen te leggen); per afspraak staat het in de tabel.
+  let payBottom = breakdownBottom || summaryY + 18;
+  if (R.payments.length) {
+    autoTable(doc, {
+      startY: payBottom + 22,
+      head: [[T("Betaalwijze", "Payment", "Pago"), T("Aantal", "Count", "Cantidad"), T("Bedrag", "Amount", "Importe")]],
+      body: R.payments.map((p) => [payLabel(p.method, lang), String(p.count), eur(p.revenue)]),
+      theme: "plain",
+      headStyles: { fillColor: [245, 243, 239], textColor: [80, 80, 80], fontStyle: "bold", fontSize: 9 },
+      bodyStyles: { fontSize: 9, textColor: [60, 60, 60] },
+      columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } },
+      margin: { left: margin, right: margin },
+      tableWidth: Math.min(320, pageW - margin * 2),
+      didParseCell: (data) => { pdfSafeCells(data); if (data.column.index >= 1) data.cell.styles.halign = "right"; },
+    });
+    payBottom = doc.lastAutoTable.finalY;
+  }
+  if (R.discountTotal >= 0.01) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(120, 120, 120);
+    const n = R.discountCount;
+    doc.text(T(
+      `Korting gegeven: -${eur(R.discountTotal)} (${n}×), al verrekend in de bedragen hieronder`,
+      `Discount given: -${eur(R.discountTotal)} (${n}×), already deducted from the amounts below`,
+      `Descuento aplicado: -${eur(R.discountTotal)} (${n}×), ya descontado de los importes de abajo`
+    ), margin, payBottom + 14);
+    payBottom += 14;
+  }
+
   // ── TABLE ────────────────────────────────────────────────
   // Volgt uit wat er werkelijk boven staat: één tegelrij, een tabel met n
-  // tarieven, of helemaal niets. Nooit een vaste offset — die klopte alleen bij
-  // precies één belastingregel.
-  const tableStartY = breakdownBottom ? breakdownBottom + 26 : summaryY + 40;
+  // tarieven, de betaalwijzen, of helemaal niets. Nooit een vaste offset — die
+  // klopte alleen bij precies één belastingregel.
+  const tableStartY = payBottom + 26;
 
   // Chronologisch grootboek (datum op, dan tijd) — gesorteerd in reportData.js.
-  const sorted = R.sorted;
+  // De kortingskolom alleen als er in deze periode korting is gegeven.
+  const showDiscount = R.discountCount > 0;
+  // Behandeling zonder "(Esther)" — daar is de kolom Medewerker voor — en
+  // zonder de code achteraan (die staat bij Korting). Te lang: afkappen op een
+  // heel woord met "…" in plaats van midden in een woord ("(Esthe").
+  const svcLabel = (a) => {
+    let t = String(a.service_name || "").replace(/\s\[[A-Z0-9][A-Z0-9_-]*\]\s*$/, "");
+    for (const nm of String(a.staff_name || "").split(",").map((x) => x.trim()).filter(Boolean)) t = t.split(` (${nm})`).join("");
+    t = t.replace(/\s+/g, " ").trim();
+    return s(t.length > 80 ? `${t.slice(0, 78).replace(/\s+\S*$/, "")}…` : t);
+  };
+  const discCell = (d) => {
+    if (d.amount < 0.01) return d.code ? `code ${s(d.code)}` : "";
+    const why = d.reason || (d.code ? `code ${d.code}` : "");
+    return `-${eur(d.amount)}${why ? `\n${s(why.slice(0, 30))}` : ""}`;
+  };
+  const amountCol = showDiscount ? 7 : 6;
 
   // Voetnoot op elke pagina: Vellu rekent met de instellingen van déze salon en
   // is geen belastingadviseur. Eerst opmeten, want de onderrand van de tabel
@@ -320,20 +369,25 @@ export function generateRevenueReportPDF({
       T("Klant", "Client", "Cliente"),
       T("Behandeling", "Service", "Servicio"),
       T("Medewerker", "Staff", "Personal"),
+      T("Betaalwijze", "Payment", "Pago"),
+      ...(showDiscount ? [T("Korting", "Discount", "Descuento")] : []),
       T("Bedrag", "Amount", "Importe"),
     ]],
-    body: sorted.map(a => [
+    body: R.rows.map(({ appt: a, discount }) => [
       a.date,
       s(a.time),
       s(a.client_name),
-      s(a.service_name).slice(0, 60),
+      svcLabel(a),
       s(a.staff_name),
+      payLabel(a.payment_method, lang),
+      ...(showDiscount ? [discCell(discount)] : []),
       eur(a.service_price),
     ]),
     foot: [[
       "", "", "",
       T("Totaal", "Total", "Total"),
-      "",
+      "", "",
+      ...(showDiscount ? [R.discountTotal >= 0.01 ? `-${eur(R.discountTotal)}` : ""] : []),
       eur(totalGross),
     ]],
     theme: "plain",
@@ -341,7 +395,7 @@ export function generateRevenueReportPDF({
       fillColor: [245, 243, 239],
       textColor: [80, 80, 80],
       fontStyle: "bold",
-      fontSize: 9,
+      fontSize: 8.5,
     },
     footStyles: {
       fillColor: [245, 243, 239],
@@ -350,14 +404,29 @@ export function generateRevenueReportPDF({
       fontSize: 10,
     },
     bodyStyles: {
-      fontSize: 9,
+      fontSize: 8.5,
       textColor: [60, 60, 60],
     },
+    // Vaste breedtes voor alles behalve de behandeling, die de rest krijgt:
+    // met twee kolommen erbij drukte autoTable anders de namen en datums samen.
+    // Gemeten op 8,5 pt met 4 pt opvulling links en rechts: "2026-10-27",
+    // "Medewerker" (vet), "Overschrijving" en "€12.345,67" passen op één regel.
+    styles: { cellPadding: { top: 5, right: 4, bottom: 5, left: 4 } },
     columnStyles: {
-      5: { halign: "right", fontStyle: "bold" },
+      0: { cellWidth: 56 },
+      1: { cellWidth: 32 },
+      2: { cellWidth: 66 },
+      4: { cellWidth: 58 },
+      5: { cellWidth: 62 },
+      ...(showDiscount ? { 6: { cellWidth: 50, halign: "right" } } : {}),
+      [amountCol]: { cellWidth: 58, halign: "right", fontStyle: "bold" },
     },
+    // Een afspraak niet over twee pagina's splitsen (anders stond er een los
+    // "één…" bovenaan de volgende pagina).
+    rowPageBreak: "avoid",
     margin: { left: margin, right: margin, bottom: 46 + 12 * disclaimerLines.length },
-    didParseCell: pdfSafeCells,
+    // Kop en totaal van de geldkolommen rechts, boven de bedragen.
+    didParseCell: (data) => { pdfSafeCells(data); if (data.section !== "body" && data.column.index >= (showDiscount ? 6 : amountCol)) data.cell.styles.halign = "right"; },
   });
 
   // Footer op ELKE pagina, pas nadat alle pagina's bestaan: in didDrawPage is

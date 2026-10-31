@@ -101,6 +101,8 @@ export function buildRevenueReportXlsx({
   const kBtw = money(R.totalBtw);
   const kNet = money(R.totalNet);
   const kAvg = money(R.avg);
+  // Gegeven korting (negatief, zoals in de kolom Korting); zit al in de omzet.
+  const kDisc = money(-R.discountTotal || 0);
   // Kassaverkopen zijn geen afspraken: zitten ze erin, dan heet het totaal
   // "Transacties" met de splitsing eronder (zelfde regel als de PDF).
   const withSales = R.saleCount > 0;
@@ -120,6 +122,7 @@ export function buildRevenueReportXlsx({
     showTaxRows ? [label, null, kBtw] : null,
     showTaxRows ? [T(`Netto (excl. ${label})`, `Net (excl. ${label})`, `Neto (excl. ${label})`), null, kNet] : null,
     [withSales ? T("Gemiddeld per transactie", "Average per transaction", "Promedio por transacción") : T("Gemiddeld per afspraak", "Average per appointment", "Promedio por cita"), null, kAvg],
+    R.discountCount > 0 ? [T("Korting gegeven (al in de omzet)", "Discount given (already in revenue)", "Descuento aplicado (ya en los ingresos)"), null, kDisc] : null,
     [],
   ].filter(Boolean);
   // Belastingtabel: bij één tarief zonder onbelaste omzet of kadobonnen zijn
@@ -140,29 +143,53 @@ export function buildRevenueReportXlsx({
     sum1.push([{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, null, sumOr("C", taxFirst, taxLast, R.totalGross), sumOr("D", taxFirst, taxLast, R.totalNet), sumOr("E", taxFirst, taxLast, R.totalBtw)]);
     sum1.push([]);
   }
+  // Per betaalwijze (TTNB 31-10-2026: pin of contant). Aantal en bedrag worden
+  // hieronder AANTAL.ALS/SOM.ALS-formules op de afsprakentabel, met het label in
+  // kolom A als criterium: past Esther een betaalwijze of bedrag aan, dan
+  // rekent dit mee.
+  const payCells = [];
+  if (R.payments.length) {
+    sum1.push([{ v: T("Betaalwijze", "Payment", "Pago"), s: "header" }, { v: " ", s: "header" }, { v: T("Aantal", "Count", "Cantidad"), s: "header" }, { v: T("Bedrag", "Amount", "Importe"), s: "header" }]);
+    const payFirst = sum1.length + 1;
+    for (const p of R.payments) {
+      const cell = { row: sum1.length + 1, count: int(p.count), amount: money(p.revenue) };
+      payCells.push(cell);
+      sum1.push([payLabel(p.method, lang), null, cell.count, cell.amount]);
+    }
+    const payLast = sum1.length;
+    sum1.push([{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, null, sumOr("C", payFirst, payLast, R.count, "int"), sumOr("D", payFirst, payLast, R.totalGross)]);
+    sum1.push([]);
+  }
   // ── afsprakentabel: op blad 1 onder de kerncijfers, zoals in de PDF
   //    (Esther/TTNB, 23-09-2026: "in jouw excel staat alleen het totaal"), én
   //    als eigen blad om te sorteren en filteren. Met belasting erbij per regel
   //    netto en belasting in volle precisie (zie reportData.rows). ──
-  const head = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Klant", "Client", "Cliente"), T("Behandeling", "Service", "Servicio"), T("Medewerker", "Staff", "Personal"), T("Betaalwijze", "Payment", "Pago"), T("Factuurnr.", "Invoice no.", "N.º factura"), T("Bedrag", "Amount", "Importe"),
+  // Kolommen: A datum, B tijd, C klant, D behandeling, E medewerker,
+  // F betaalwijze, G factuurnr., H korting, I bedrag, J netto, K belasting.
+  // Korting (31-10-2026) staat vóór het bedrag: dat is wat er ná de korting
+  // betaald is.
+  const head = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Klant", "Client", "Cliente"), T("Behandeling", "Service", "Servicio"), T("Medewerker", "Staff", "Personal"), T("Betaalwijze", "Payment", "Pago"), T("Factuurnr.", "Invoice no.", "N.º factura"), T("Korting", "Discount", "Descuento"), T("Bedrag", "Amount", "Importe"),
     ...(showTaxRows ? [T(`Netto (excl. ${label})`, `Net (excl. ${label})`, `Neto (excl. ${label})`), label] : []));
   // Netto en belasting per regel als formule op het bedrag zodra de regel
   // volledig tegen het gewone tarief valt (anders — producten met een ander
   // tarief, onbelast — de uitgerekende waarde).
   const mainRate = Number(cfg.serviceRate) || 0;
+  // Korting als negatief bedrag; een code zonder bekend bedrag als tekst (SOM
+  // slaat tekst over).
+  const discountCell = (d) => (d.amount >= 0.01 ? money(-d.amount) : d.code ? `code ${d.code}` : null);
   const rowOf = (r, rowNum) => {
     const a = r.appt;
     const plain = mainRate > 0 && Math.abs((r.gross - r.gross / (1 + mainRate / 100)) - r.tax) < 0.000001;
-    const taxCell = plain ? { f: `H${rowNum}-H${rowNum}/(1+${mainRate / 100})`, v: r.tax, s: "money" } : { v: r.tax, s: "money" };
-    const netCell = plain ? { f: `H${rowNum}-J${rowNum}`, v: r.net, s: "money" } : { v: r.net, s: "money" };
+    const taxCell = plain ? { f: `I${rowNum}-I${rowNum}/(1+${mainRate / 100})`, v: r.tax, s: "money" } : { v: r.tax, s: "money" };
+    const netCell = plain ? { f: `I${rowNum}-K${rowNum}`, v: r.net, s: "money" } : { v: r.net, s: "money" };
     // Geen betaalwijze = "Later / factuur" (payLabel), niet leeg en niet "in de salon".
-    return [date(a.date), s(a.time), s(a.client_name), { v: s(a.service_name), s: "wrap" }, s(a.staff_name), payLabel(a.payment_method, lang), s(a.invoice_number), money(r.gross),
+    return [date(a.date), s(a.time), s(a.client_name), { v: s(a.service_name), s: "wrap" }, s(a.staff_name), payLabel(a.payment_method, lang), s(a.invoice_number), discountCell(r.discount), money(r.gross),
       ...(showTaxRows ? [netCell, taxCell] : [])];
   };
-  // Zonder regels geen SOM-formule (SUM(H3:H2) zou de totaalregel zelf raken).
+  // Zonder regels geen SOM-formule (SUM(I3:I2) zou de totaalregel zelf raken).
   const sumOrValue = (col, first, last, v) => (last >= first ? sum(col, first, last)(v) : money(v, true));
-  const totalRow = (first, last) => [null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, null, null, null, sumOrValue("H", first, last, R.totalGross),
-    ...(showTaxRows ? [sumOrValue("I", first, last, R.totalNet), sumOrValue("J", first, last, R.totalBtw)] : [])];
+  const totalRow = (first, last) => [null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, null, null, null, sumOrValue("H", first, last, -R.discountTotal || 0), sumOrValue("I", first, last, R.totalGross),
+    ...(showTaxRows ? [sumOrValue("J", first, last, R.totalNet), sumOrValue("K", first, last, R.totalBtw)] : [])];
   // Met kassaverkopen erbij is het geen lijst van alleen afspraken meer.
   const rowsTitle = withSales ? T("Transacties", "Transactions", "Transacciones") : T("Afspraken", "Appointments", "Citas");
   sum1.push([{ v: rowsTitle, s: "bold" }], head);
@@ -173,16 +200,21 @@ export function buildRevenueReportXlsx({
   sum1.push(totalRow(firstS, lastS), []);
   // Kerncijfers en (bij één tarief) de belastingtabel rekenen op de tabel.
   if (lastS >= firstS) {
-    kCount.f = `COUNT(H${firstS}:H${lastS})`;
-    kGross.f = `SUM(H${firstS}:H${lastS})`;
+    kCount.f = `COUNT(I${firstS}:I${lastS})`;
+    kGross.f = `SUM(I${firstS}:I${lastS})`;
     kAvg.f = `IF(C${sum1.findIndex((row) => row[2] === kCount) + 1}=0,0,C${sum1.findIndex((row) => row[2] === kGross) + 1}/C${sum1.findIndex((row) => row[2] === kCount) + 1})`;
+    kDisc.f = `SUM(H${firstS}:H${lastS})`;
+    for (const p of payCells) {
+      p.count.f = `COUNTIF(F${firstS}:F${lastS},A${p.row})`;
+      p.amount.f = `SUMIF(F${firstS}:F${lastS},A${p.row},I${firstS}:I${lastS})`;
+    }
     if (showTaxRows) {
-      kBtw.f = `SUM(J${firstS}:J${lastS})`;
-      kNet.f = `SUM(I${firstS}:I${lastS})`;
+      kBtw.f = `SUM(K${firstS}:K${lastS})`;
+      kNet.f = `SUM(J${firstS}:J${lastS})`;
       if (taxCells.length === 1 && Math.abs(R.untaxedGross) < 0.01 && R.voucherPaid < 0.01) {
-        taxCells[0][0].f = `SUM(H${firstS}:H${lastS})`;
-        taxCells[0][1].f = `SUM(I${firstS}:I${lastS})`;
-        taxCells[0][2].f = `SUM(J${firstS}:J${lastS})`;
+        taxCells[0][0].f = `SUM(I${firstS}:I${lastS})`;
+        taxCells[0][1].f = `SUM(J${firstS}:J${lastS})`;
+        taxCells[0][2].f = `SUM(K${firstS}:K${lastS})`;
       }
     }
   }
@@ -211,9 +243,9 @@ export function buildRevenueReportXlsx({
   // ── blad 2: afspraken (zelfde regels, bevroren kop + filter) ──
   const body = R.rows.map((r, i) => rowOf(r, i + 2));
   const lastRow = body.length + 1;
-  // Eén kolomindeling voor beide bladen: samen ~154 tekens, liggend op A4
-  // net passend zonder verkleinen.
-  const cols = [14, 7, 22, 40, 14, 13, 12, 11, 16, 10];
+  // Eén kolomindeling voor beide bladen (A t/m K, zie de kop hierboven);
+  // afdrukken is één pagina breed, liggend.
+  const cols = [14, 7, 22, 38, 14, 13, 12, 11, 11, 16, 10];
   const printHeader = `${T("Omzetrapport", "Revenue report", "Informe de ingresos")} · ${s(salon.business_name || salon.name)} · ${range.label || `${range.from} — ${range.to}`}${staffName ? ` · ${s(staffName)}` : ""}`;
   const printFooter = `${T("Pagina", "Page", "Página")} &P / &N`;
   const sheets = [

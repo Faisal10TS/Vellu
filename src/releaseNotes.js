@@ -14,6 +14,23 @@
 
 export const RELEASES = [
   {
+    // 31-10: TTNB wilde in het maandoverzicht zien wie pinde of contant
+    // betaalde, en waar korting op zat.
+    id: "2026-10-31",
+    date: "2026-10-31",
+    title: { nl: "Betaalwijze en korting in je omzetrapport", en: "Payment method and discount in your revenue report", es: "Forma de pago y descuento en tu informe de ingresos" },
+    items: [
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Het omzetrapport (PDF en Excel) laat nu per afspraak zien hoe er betaald is (pin, contant, overschrijving) en hoeveel korting je gaf, met de reden erbij. Bovenaan staan de totalen per betaalwijze, handig om naast je kas en pinbonnen te leggen.",
+          en: "The revenue report (PDF and Excel) now shows for each appointment how it was paid (card, cash, bank transfer) and how much discount you gave, with the reason. At the top you see the totals per payment method, handy to check against your cash and card slips.",
+          es: "El informe de ingresos (PDF y Excel) ahora muestra en cada cita cómo se pagó (tarjeta, efectivo, transferencia) y cuánto descuento diste, con el motivo. Arriba ves los totales por forma de pago, útil para cuadrar la caja y los recibos de tarjeta.",
+        },
+      },
+    ],
+  },
+  {
     // 26-10: TTNB wilde 2 kapotte nagels op een afspraak zetten via Bewerk;
     // extra's waren daar alleen aan/uit.
     id: "2026-10-26",
