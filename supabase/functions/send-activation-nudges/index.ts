@@ -106,12 +106,12 @@ function render(kind: Kind, lang: "nl" | "en", o: Salon) {
       ],
       tipsTitle: "Drie tips om te beginnen",
       tips: [
-        "Zet de link in je Instagram-bio en je WhatsApp-status. Wie hem ziet, kan meteen boeken, ook 's avonds, zonder je eerst een bericht te sturen.",
-        "Vraagt iemand via WhatsApp om een afspraak? Stuur de link, dan hoef je niet heen en weer over tijden.",
+        "Zet de link overal waar klanten je vinden: in je bio op Instagram of TikTok, op je Facebook-pagina, in je WhatsApp-status, je Google-bedrijfsprofiel of je eigen website. Wie hem ziet, kan meteen boeken, ook 's avonds, zonder je eerst een bericht te sturen.",
+        "Vraagt iemand om een afspraak, via WhatsApp, Instagram, Facebook, sms of telefoon? Stuur de link, dan hoef je niet heen en weer over tijden.",
         "Zet de afspraken die je al hebt in je Vellu-agenda. Vul je het e-mailadres van de klant in, dan krijgt de klant vooraf automatisch een herinnering, en heb je je hele agenda op één plek.",
       ],
       btnUrl: pageUrl, btnLabel: "Bekijk mijn boekingspagina",
-      plain: `Hoi ${o.salon},\n\nJe behandelingen staan op Vellu, goed bezig! Nu moeten je klanten je boekingspagina nog vinden: ${pageUrl}\n\nDrie tips om te beginnen:\n- Zet de link in je Instagram-bio en je WhatsApp-status. Wie hem ziet, kan meteen boeken, ook 's avonds, zonder je eerst een bericht te sturen.\n- Vraagt iemand via WhatsApp om een afspraak? Stuur de link, dan hoef je niet heen en weer over tijden.\n- Zet de afspraken die je al hebt in je Vellu-agenda. Vul je het e-mailadres van de klant in, dan krijgt de klant vooraf automatisch een herinnering, en heb je je hele agenda op één plek.\n\nBekijk mijn boekingspagina: ${pageUrl}\n\nVragen? Reageer gewoon op deze mail.\n\nTeam Vellu\nvellu.cc`,
+      plain: `Hoi ${o.salon},\n\nJe behandelingen staan op Vellu, goed bezig! Nu moeten je klanten je boekingspagina nog vinden: ${pageUrl}\n\nDrie tips om te beginnen:\n- Zet de link overal waar klanten je vinden: in je bio op Instagram of TikTok, op je Facebook-pagina, in je WhatsApp-status, je Google-bedrijfsprofiel of je eigen website. Wie hem ziet, kan meteen boeken, ook 's avonds, zonder je eerst een bericht te sturen.\n- Vraagt iemand om een afspraak, via WhatsApp, Instagram, Facebook, sms of telefoon? Stuur de link, dan hoef je niet heen en weer over tijden.\n- Zet de afspraken die je al hebt in je Vellu-agenda. Vul je het e-mailadres van de klant in, dan krijgt de klant vooraf automatisch een herinnering, en heb je je hele agenda op één plek.\n\nBekijk mijn boekingspagina: ${pageUrl}\n\nVragen? Reageer gewoon op deze mail.\n\nTeam Vellu\nvellu.cc`,
     } : {
       subject: "Getting your first bookings through Vellu",
       paras: [
@@ -119,12 +119,12 @@ function render(kind: Kind, lang: "nl" | "en", o: Salon) {
       ],
       tipsTitle: "Three tips to get started",
       tips: [
-        "Put the link in your Instagram bio and your WhatsApp status. Anyone who sees it can book straight away, even in the evening, without messaging you first.",
-        "Someone asks for an appointment on WhatsApp? Send them the link, so you don't have to go back and forth about times.",
+        "Put the link wherever clients find you: your Instagram or TikTok bio, your Facebook page, your WhatsApp status, your Google Business profile or your own website. Anyone who sees it can book straight away, even in the evening, without messaging you first.",
+        "Someone asks for an appointment by WhatsApp, Instagram, Facebook, text or phone? Send them the link, so you don't have to go back and forth about times.",
         "Add the appointments you already have to your Vellu calendar. If you fill in the client's email address, they automatically get a reminder beforehand, and your whole calendar is in one place.",
       ],
       btnUrl: pageUrl, btnLabel: "View my booking page",
-      plain: `Hi ${o.salon},\n\nYour treatments are on Vellu, nice work! Now your clients need to find your booking page: ${pageUrl}\n\nThree tips to get started:\n- Put the link in your Instagram bio and your WhatsApp status. Anyone who sees it can book straight away, even in the evening, without messaging you first.\n- Someone asks for an appointment on WhatsApp? Send them the link, so you don't have to go back and forth about times.\n- Add the appointments you already have to your Vellu calendar. If you fill in the client's email address, they automatically get a reminder beforehand, and your whole calendar is in one place.\n\nView my booking page: ${pageUrl}\n\nQuestions? Just reply to this email.\n\nTeam Vellu\nvellu.cc`,
+      plain: `Hi ${o.salon},\n\nYour treatments are on Vellu, nice work! Now your clients need to find your booking page: ${pageUrl}\n\nThree tips to get started:\n- Put the link wherever clients find you: your Instagram or TikTok bio, your Facebook page, your WhatsApp status, your Google Business profile or your own website. Anyone who sees it can book straight away, even in the evening, without messaging you first.\n- Someone asks for an appointment by WhatsApp, Instagram, Facebook, text or phone? Send them the link, so you don't have to go back and forth about times.\n- Add the appointments you already have to your Vellu calendar. If you fill in the client's email address, they automatically get a reminder beforehand, and your whole calendar is in one place.\n\nView my booking page: ${pageUrl}\n\nQuestions? Just reply to this email.\n\nTeam Vellu\nvellu.cc`,
     };
   }
   const hi = nl ? `Hoi ${eSalon},` : `Hi ${eSalon},`;
