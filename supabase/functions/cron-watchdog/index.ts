@@ -65,6 +65,12 @@ const MONITORED = [
   // Schreef tot 05-10-2026 geen hartslag en stond hier niet: een stilstand
   // was onzichtbaar (E2-09). Vercel plant op het uur, dus ±09:10-09:59.
   { name: "send-birthday-emails", schedule: "daily 09:10 UTC (Vercel)", maxAgeHours: 25 },
+  // Activatiemails (sinds 01-11-2026, pg_cron send-activation-nudges-daily
+  // 14:00 UTC): schrijft bij elke run een hartslag, ook met 0 verstuurd, en
+  // 'degraded' als een deel van de mails mislukte. Faisal: "add that it
+  // alerts me". De waakhond draait om 12:00, dus de vorige run is dan 22 uur
+  // oud — binnen de 25.
+  { name: "send-activation-nudges", schedule: "daily 14:00 UTC", maxAgeHours: 25 },
 ];
 
 // Alleen de planner (pg_cron met x-cron-secret uit de vault, of Vercel's
