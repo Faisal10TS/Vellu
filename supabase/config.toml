@@ -216,6 +216,15 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/send-renewal-reminder/index.ts"
 
+[functions.send-activation-nudges]
+enabled = true
+# Activatiemails (01-11-2026): salon zonder diensten na 2 dagen, of zonder
+# boekingen na 4 dagen. Aangeroepen door pg_cron (x-cron-secret) of met een
+# opdracht-id + geheim uit activation_nudge_jobs; geen gebruikers-JWT, dus
+# verify_jwt=false — de functie controleert zelf.
+verify_jwt = false
+entrypoint = "./functions/send-activation-nudges/index.ts"
+
 [functions.request-review-link]
 enabled = true
 # "Stuur mijn reviewlink" op de publieke boekingspagina: bezoeker zonder sessie,

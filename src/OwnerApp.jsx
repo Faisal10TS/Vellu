@@ -6428,9 +6428,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     try {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get("tab");
-      if (tab !== "billing" && tab !== "settings") return;
+      if (tab !== "billing" && tab !== "settings" && tab !== "services") return;
       setView("instellingen");
-      setSettingsTab("billing");
+      // ?tab=services&pricelist=1: de knop in de activatiemail "geen
+      // diensten" (send-activation-nudges, 01-11-2026) opent meteen
+      // Prijslijst inlezen.
+      if (tab === "services") {
+        setSettingsTab("diensten");
+        if (params.get("pricelist") === "1") setShowPriceImport(true);
+        params.delete("pricelist");
+      } else {
+        setSettingsTab("billing");
+      }
       params.delete("tab");
       const rest = params.toString();
       window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
