@@ -27,7 +27,9 @@
 // Modi:
 //   test    → beide mails (demo-salon als voorbeeld) naar test_to
 //   dry_run → wie nu welke mail zou krijgen, en waarom de rest niet
-//   send    → echt versturen (met only_owners alleen die salons)
+//   send    → echt versturen; met only_owners precies die salons, zonder de
+//             dagelijkse regels (proef, leeftijd, dag 2/4) maar nog steeds
+//             hooguit één keer per soort
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -69,7 +71,11 @@ async function cronAuthorized(req: Request): Promise<boolean> {
 
 type Salon = { salon: string; slug: string };
 
-function render(kind: Kind, lang: "nl" | "en", o: Salon) {
+// trialEnded: de proef is voorbij en er is geen abonnement, dus de knop komt
+// eerst op het abonnementsscherm uit. Dan één eerlijke zin erbij (Faisal
+// 01-11: "do the added text if their trial has ended"); de boekingspagina zelf
+// blijft na de proef werken (book-appointment kijkt niet naar het abonnement).
+export function render(kind: Kind, lang: "nl" | "en", o: Salon, trialEnded = false) {
   const eSalon = esc(o.salon);
   const pageUrl = `${SITE}/${o.slug}`;
   const pageLabel = pageUrl.replace("https://", "");
@@ -135,17 +141,23 @@ function render(kind: Kind, lang: "nl" | "en", o: Salon) {
   </div>` : "";
   // paras mogen een link bevatten (al ge-escaped via link()); de rest is vaste tekst.
   const paras = t.paras.map((p) => `<p style="font-size:15px;line-height:1.7;margin:0 0 18px;color:#333;">${p}</p>`).join("");
+  const ended = !trialEnded ? "" : nl
+    ? "Je gratis proefperiode is afgelopen, dus Vellu vraagt je eerst een abonnement te kiezen. Je boekingspagina blijft intussen gewoon online."
+    : "Your free trial has ended, so Vellu will first ask you to choose a plan. Your booking page stays online in the meantime.";
   const html = `<div style="font-family:Georgia,serif;max-width:500px;margin:0 auto;padding:40px 20px;color:#1a1a1a;">
   <div style="text-align:center;margin-bottom:32px;"><h1 style="font-size:32px;font-weight:300;letter-spacing:0.1em;margin:0;">vellu</h1><div style="width:40px;height:1px;background:#8A7356;margin:12px auto;"></div></div>
   <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">${hi}</p>
   ${paras}
   ${tips}
+  ${ended ? `<p style="font-size:14px;line-height:1.7;margin:0 0 18px;color:#555;">${esc(ended)}</p>` : ""}
   ${button(t.btnUrl, t.btnLabel)}
   ${t.after ? `<p style="font-size:14px;line-height:1.7;margin:0 0 18px;color:#555;">${esc(t.after)}</p>` : ""}
   <p style="font-size:15px;line-height:1.7;margin:0;">${questions}<br><br><strong>Team Vellu</strong><br><span style="color:#888;font-size:13px;">vellu.cc</span></p>
   <div style="border-top:1px solid #e8e0d5;margin-top:28px;padding-top:14px;font-size:12px;color:#888;line-height:1.6;">${REPLY_TO}</div>
 </div>`;
-  return { subject: t.subject, html, text: t.plain };
+  // Platte tekst: dezelfde zin vlak boven de knopregel ("<knop>: <link>").
+  const text = ended ? t.plain.replace(`\n\n${t.btnLabel}: ${t.btnUrl}`, `\n\n${ended}\n\n${t.btnLabel}: ${t.btnUrl}`) : t.plain;
+  return { subject: t.subject, html, text };
 }
 
 async function sendResend(to: string[], subject: string, html: string, text: string) {
@@ -173,13 +185,19 @@ async function recordHealth(status: string, ms: number, processed: number, err: 
 // (en waarom) niet, zodat een dry_run precies laat zien wat send zou doen.
 async function plan(only: string[]) {
   const now = Date.now();
+  // Met only_owners (een opdracht voor met naam gekozen salons, zoals de
+  // eenmalige ronde van 01-11 naar bestaande accounts) gelden de dagelijkse
+  // regels niet — lopende proef, leeftijd van het account, dag 2/4 — wel
+  // een geldig adres, de soort en "nog niet verstuurd".
+  const manual = only.length > 0;
   const since = new Date(now - MAX_ACCOUNT_AGE_DAYS * DAY_MS).toISOString();
-  const { data: salons, error } = await supabase
+  let q = supabase
     .from("profiles")
-    .select("id, business_name, slug, email, salon_email, created_at, subscription_status, trial_ends_at, is_demo, deactivated_at")
+    .select("id, business_name, slug, email, salon_email, created_at, subscription_status, trial_ends_at, trial_used, is_demo, deactivated_at")
     .eq("is_demo", false)
-    .is("deactivated_at", null)
-    .gte("created_at", since);
+    .is("deactivated_at", null);
+  q = manual ? q.in("id", only) : q.gte("created_at", since);
+  const { data: salons, error } = await q;
   if (error) throw new Error(error.message);
   const list = (salons || []).filter((s: any) => only.length === 0 || only.includes(s.id));
   const ids = list.map((s: any) => s.id);
@@ -196,15 +214,19 @@ async function plan(only: string[]) {
     const to = [s.salon_email, s.email].map((x) => String(x || "").trim().toLowerCase()).find((x) => EMAIL_RE.test(x)) || "";
     if (!to) { skip("geen geldig e-mailadres"); continue; }
     if (!s.slug) { skip("geen slug (boekingspagina)"); continue; }
-    const trialRunning = s.subscription_status === "trialing" && s.trial_ends_at && new Date(s.trial_ends_at).getTime() > now;
-    if (!(s.subscription_status === "active" || trialRunning)) { skip(`geen lopende proef of abonnement (${s.subscription_status || "geen"})`); continue; }
+    const trialRunning = !!(s.subscription_status === "trialing" && s.trial_ends_at && new Date(s.trial_ends_at).getTime() > now);
+    const usable = s.subscription_status === "active" || trialRunning;
+    // Proef gehad en voorbij, geen abonnement: de mail krijgt de extra zin.
+    // Nooit een proef gestart (Hair by Lina): die start bij de volgende login.
+    const trialEnded = !usable && s.trial_used === true;
+    if (!manual && !usable) { skip(`geen lopende proef of abonnement (${s.subscription_status || "geen"})`); continue; }
     const ageDays = (now - new Date(s.created_at).getTime()) / DAY_MS;
-    if (ageDays < NO_SERVICES_AFTER_DAYS) { skip(`te nieuw (${ageDays.toFixed(1)} dagen)`); continue; }
+    if (!manual && ageDays < NO_SERVICES_AFTER_DAYS) { skip(`te nieuw (${ageDays.toFixed(1)} dagen)`); continue; }
     const { count: svcCount } = await supabase.from("services").select("id", { count: "exact", head: true }).eq("owner_id", s.id).eq("visible", true);
     let kind: Kind | null = null;
     if ((svcCount || 0) === 0) {
       kind = "no_services";
-    } else if (ageDays >= NO_BOOKINGS_AFTER_DAYS) {
+    } else if (manual || ageDays >= NO_BOOKINGS_AFTER_DAYS) {
       // Kassaverkopen tellen niet; een eigen testboeking op dag één wel als
       // afspraak, vandaar "hooguit één".
       const { count: apptCount } = await supabase.from("appointments").select("id", { count: "exact", head: true }).eq("owner_id", s.id).or("is_sale.is.null,is_sale.eq.false");
@@ -212,7 +234,7 @@ async function plan(only: string[]) {
       else { skip(`in gebruik (${apptCount} afspraken)`); continue; }
     } else { skip(`diensten staan erop, boekingsmail pas na ${NO_BOOKINGS_AFTER_DAYS} dagen`); continue; }
     if (sent.has(`${s.id}:${kind}`)) { skip(`${kind} al verstuurd`); continue; }
-    due.push({ id: s.id, salon: name, slug: String(s.slug), to, kind, age_days: Math.round(ageDays * 10) / 10 });
+    due.push({ id: s.id, salon: name, slug: String(s.slug), to, kind, trial_ended: trialEnded, age_days: Math.round(ageDays * 10) / 10 });
   }
   return { due, skipped };
 }
@@ -247,7 +269,7 @@ async function runJob(job: any): Promise<{ result: any; status: number }> {
     // run hem al; mislukt de mail, dan de claim weer weg zodat morgen opnieuw kan.
     const { error: claimErr } = await supabase.from("activation_nudges").insert({ owner_id: d.id, kind: d.kind });
     if (claimErr) { results.push({ ...d, ok: false, reason: "al geclaimd" }); continue; }
-    const m = render(d.kind, MAIL_LANG, { salon: d.salon, slug: d.slug });
+    const m = render(d.kind, MAIL_LANG, { salon: d.salon, slug: d.slug }, d.trial_ended);
     const r = await sendResend([d.to], m.subject, m.html, m.text);
     if (!r.ok) await supabase.from("activation_nudges").delete().eq("owner_id", d.id).eq("kind", d.kind);
     results.push({ ...d, ok: r.ok, status: r.status, body: r.ok ? undefined : r.body });
