@@ -14,6 +14,23 @@
 
 export const RELEASES = [
   {
+    // 05-11: TTNB zag "58 dagen" op de factuur en "over 89 dagen" in de app
+    // en wist niet welke klopte (allebei: 1 betaalde maand + 58 gratis dagen).
+    id: "2026-11-05",
+    date: "2026-11-05",
+    title: { nl: "Duidelijker abonnement", en: "Clearer subscription", es: "Suscripción más clara" },
+    items: [
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Heb je gratis dagen van je referral-tegoed? Onder Abonnement zie je nu tot wanneer je betaald hebt en hoeveel dagen daarna gratis zijn. Je Vellu-factuur toont de betaalde maand en de gratis dagen apart.",
+          en: "Got free days from your referral credit? Under Subscription you now see until when you have paid and how many days after that are free. Your Vellu invoice shows the paid month and the free days separately.",
+          es: "¿Tienes días gratis por tu crédito de referidos? En Suscripción ahora ves hasta cuándo has pagado y cuántos días después son gratis. Tu factura de Vellu muestra el mes pagado y los días gratis por separado.",
+        },
+      },
+    ],
+  },
+  {
     // 31-10: TTNB wilde in het maandoverzicht zien wie pinde of contant
     // betaalde, en waar korting op zat.
     id: "2026-10-31",

@@ -5839,7 +5839,7 @@ const loadedWindowFrom = () => new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).t
 // Eén lijst voor elke plek die hem ophaalt: referral_credit_days kwam er op
 // 10-10-2026 bij (tegoedzin bij automatisch betalen) en ontbrak anders na een
 // verversing.
-const BILLING_COLS = "plan, billing_interval, subscription_status, trial_ends_at, plan_expires_at, current_period_start, cancel_at_period_end, mollie_subscription_id, referral_credit_days";
+const BILLING_COLS = "plan, billing_interval, subscription_status, trial_ends_at, plan_expires_at, current_period_start, cancel_at_period_end, mollie_subscription_id, referral_credit_days, referral_credit_days_redeemed";
 
 // Opzegreden (14-10-2026): optionele vraag in het opzegvenster. De sleutels
 // staan ook in cancel-subscription (CANCEL_REASONS) en in de check op
@@ -21742,7 +21742,26 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 const planLabel = bp.plan === "professional" ? t.planProfessional : (bp.plan === "starter" ? t.planStarter : (lang === "nl" ? "Geen abonnement" : lang === "es" ? "Sin suscripción" : "No subscription"));
                 const intervalLabel = bp.billing_interval === "yearly" ? (lang === "nl" ? "jaarlijks" : lang === "es" ? "anual" : "yearly") : (lang === "nl" ? "maandelijks" : lang === "es" ? "mensual" : "monthly");
                 const expires = bp.plan_expires_at ? new Date(bp.plan_expires_at) : null;
-                const daysLeft = expires ? Math.max(0, Math.ceil((expires.getTime() - Date.now()) / 86400000)) : null;
+                // Kalenderdagen tot de datum die erboven staat, niet afgerond
+                // omhoog: 5 nov → 1 feb is 88 dagen, en Math.ceil op het
+                // tijdstip (11:45 UTC) maakte er 89 van (TTNB 05-11-2026).
+                const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+                const daysLeft = expires ? Math.max(0, Math.round((dayStart(expires) - dayStart(new Date())) / 86400000)) : null;
+                // Gratis dagen in de lopende periode (referral-tegoed): de
+                // betaalde periode is current_period_start + één interval
+                // (zelfde som als addInterval in mollie-webhook, in UTC), alles
+                // daarna tot plan_expires_at is gratis. Alleen bij een actief
+                // abonnement mét ingewisseld tegoed: een langere proef (actie
+                // van 30 dagen) is geen referral-tegoed.
+                const paidEnd = (() => {
+                  const d = bp.current_period_start ? new Date(bp.current_period_start) : null;
+                  if (!d || isNaN(d.getTime()) || !expires) return null;
+                  if (bp.billing_interval === "yearly") d.setUTCFullYear(d.getUTCFullYear() + 1); else d.setUTCMonth(d.getUTCMonth() + 1);
+                  return d;
+                })();
+                const freeDays = isActive && paidEnd && (bp.referral_credit_days_redeemed || 0) > 0
+                  ? Math.min(bp.referral_credit_days_redeemed, Math.max(0, Math.round((expires.getTime() - paidEnd.getTime()) / 86400000)))
+                  : 0;
                 const trialEnds = bp.trial_ends_at ? new Date(bp.trial_ends_at) : null;
                 const trialDaysLeft = trialEnds ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86400000)) : null;
                 const fmtEUR = (n) => fmtAmt("€", n);
@@ -21939,6 +21958,14 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             {daysLeft !== null && (
                               <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
                                 {lang === "nl" ? `over ${daysLeft} dagen` : lang === "es" ? `en ${daysLeft} días` : `in ${daysLeft} days`}
+                              </div>
+                            )}
+                            {/* Zelfde woorden als de factuurmail ("referral-tegoed"). */}
+                            {freeDays > 0 && (
+                              <div data-billing-free-days style={{ fontSize: 11, color: c.textSub, marginTop: 6, lineHeight: 1.5, maxWidth: 260 }}>
+                                {L(`Betaald tot ${fmtDate(paidEnd)}, daarna ${freeDays} ${freeDays === 1 ? "dag" : "dagen"} gratis met je referral-tegoed`,
+                                  `Paid until ${fmtDate(paidEnd)}, then ${freeDays} free ${freeDays === 1 ? "day" : "days"} from your referral credit`,
+                                  `Pagado hasta el ${fmtDate(paidEnd)}, luego ${freeDays} ${freeDays === 1 ? "día" : "días"} gratis con tu crédito de referidos`)}
                               </div>
                             )}
                           </div>
