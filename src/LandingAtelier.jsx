@@ -694,8 +694,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                   <div key={i} className={`at-faq-card vl-glow${open ? " open" : ""}`} data-faq-card onMouseMove={glowMove}>
                     <div role="button" tabIndex={0} aria-expanded={open} onClick={toggle} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }} style={{ padding: "16px 16px 16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, cursor: "pointer" }}>
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(17px, 2.4vw, 21px)", fontWeight: 400, color: INK }}>{q}</div>
-                      {/* Alleen het plusje draait naar een kruisje; de tegel blijft recht. */}
-                      <span aria-hidden="true" className="at-faq-plus"><span style={{ display: "inline-block", transition: "transform 0.25s ease", transform: open ? "rotate(45deg)" : "none" }}>+</span></span>
+                      {/* Alleen het plusje draait naar een kruisje; de tegel blijft recht.
+                          SVG i.p.v. een "+"-teken: het midden van een letterteken ligt
+                          niet op het midden van de tegel, dus draaide het kruisje scheef. */}
+                      <span aria-hidden="true" className="at-faq-plus"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" style={{ display: "block", transition: "transform 0.25s ease", transform: open ? "rotate(45deg)" : "none" }}><path d="M7 1.5v11M1.5 7h11" /></svg></span>
                     </div>
                     <div style={{ display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1)" }}>
                       <div style={{ overflow: "hidden" }}>
