@@ -1191,7 +1191,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             .at-th-lead { display: block; font-size: 13px; color: #6b5d4a; margin-top: 4px; line-height: 1.5; }
           }
           .at-th-stage { grid-area: stage; min-width: 0; }
-          @media (min-width: 900px) { .at-th-stage { align-self: center; } }
+          /* Beeld bovenaan, naast de knoppen (Faisal 11-11: "niet zo in het
+             midden"): bovenkant beeld = bovenkant eerste knop. */
+          @media (min-width: 900px) { .at-th-stage { align-self: start; } }
           .at-th-visual { position: absolute; inset: 0; opacity: 0; transform: translateY(10px); visibility: hidden; transition: opacity 0.45s ease, transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0.45s; }
           .at-th-visual.on { opacity: 1; transform: none; visibility: visible; transition: opacity 0.45s ease, transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s; }
           .at-th-detail { grid-area: detail; }
