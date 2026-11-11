@@ -480,6 +480,72 @@ function AtFeatureThemes({ lang }) {
   );
 }
 
+// Footer (11-11-2026, homepage-review: "de footer had alleen juridische
+// regels"). Vier blokken op het espresso-vlak: wie er achter Vellu zit, voor
+// salons, voor klanten, hulp & info; onderaan de bedrijfsgegevens. Geen aantal
+// salons, geen keurmerken zonder bron, geen regio's als grens (Faisal 11-11).
+// Interne links zijn echte <a href> (vindbaar), met een klik die soepel
+// scrollt of binnen de app navigeert.
+function AtFooter({ lang, t, maxW, pad, onScrollTo, onFinder, onNavigate, onOpenFaq }) {
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  const go = (fn) => (e) => { e.preventDefault(); fn(); };
+  return (
+    <footer className="at-footer" style={{ borderTop: `1px solid ${BONE}22`, position: "relative" }}>
+      {/* Onderrand via .at-footer-inner: op de telefoon extra ruimte zodat de
+          voetregels boven de onderbalk uit kunnen scrollen. */}
+      <div className="at-footer-inner" style={{ maxWidth: maxW, margin: "0 auto", paddingTop: "clamp(30px, 5vw, 48px)", paddingLeft: pad, paddingRight: pad }}>
+        <div className="at-foot-grid">
+          <div className="at-foot-brand">
+            <div className="at-foot-h">{L("Over Vellu", "About Vellu", "Sobre Vellu")}</div>
+            <p className="at-foot-text">{L(
+              "Je eigen boekingspagina, voor elke beautyprofessional: nail techs, lash artists, kappers en meer. Zonder commissie.",
+              "Your own booking page, for every beauty professional: nail techs, lash artists, hairdressers and more. No commission.",
+              "Tu propia página de reservas, para cada profesional de la belleza: manicuristas, lash artists, peluqueros y más. Sin comisiones.")}</p>
+            <p className="at-foot-text">
+              {L("Gemaakt door", "Made by", "Creado por")} <a href="https://mirahventures.com" target="_blank" rel="noopener noreferrer" className="at-foot-inline">Mirah Ventures</a>.
+            </p>
+            <a href="mailto:mirahventures@vellu.cc" className="at-foot-mail"><NavIcon name="mail" size={14} color="currentColor" />mirahventures@vellu.cc</a>
+          </div>
+          <nav aria-label={L("Voor salons", "For salons", "Para salones")}>
+            <div className="at-foot-h">{L("Voor salons", "For salons", "Para salones")}</div>
+            <ul className="at-foot-links">
+              <li><a href="#pricing" onClick={go(() => onScrollTo("pricing"))}>{L("Prijzen", "Pricing", "Precios")}</a></li>
+              <li><a href="#how-it-works" onClick={go(() => onScrollTo("how-it-works"))}>{L("Hoe werkt het", "How it works", "Cómo funciona")}</a></li>
+              <li><a href="/bloomstudio" onClick={go(() => onNavigate("/bloomstudio"))}>{L("Bekijk een voorbeeldpagina", "See an example page", "Ver una página de ejemplo")}</a></li>
+              <li><a href="#faq" onClick={go(onOpenFaq)}>{L("Overstappen? Neem je klanten mee", "Switching? Bring your clients", "¿Te cambias? Trae a tus clientes")}</a></li>
+              <li><a href="/owner" onClick={go(() => onNavigate("/owner"))}>{L("Inloggen", "Sign in", "Iniciar sesión")}</a></li>
+            </ul>
+          </nav>
+          <nav aria-label={L("Voor klanten", "For clients", "Para clientes")}>
+            <div className="at-foot-h">{L("Voor klanten", "For clients", "Para clientes")}</div>
+            <ul className="at-foot-links">
+              <li><a href="#find-salon-section" onClick={go(onFinder)}>{L("Zoek een salon", "Find a salon", "Buscar un salón")}</a></li>
+            </ul>
+            <p className="at-foot-note">{L(
+              "Afspraak annuleren? Gebruik de link in je bevestigingsmail.",
+              "Need to cancel? Use the link in your confirmation email.",
+              "¿Necesitas cancelar? Usa el enlace de tu correo de confirmación.")}</p>
+          </nav>
+          <nav aria-label={L("Hulp en info", "Help and info", "Ayuda e información")}>
+            <div className="at-foot-h">{L("Hulp & info", "Help & info", "Ayuda e info")}</div>
+            <ul className="at-foot-links">
+              <li><a href="/contact">Contact</a></li>
+              <li><a href="#faq" onClick={go(() => onScrollTo("faq"))}>{L("Veelgestelde vragen", "FAQ", "Preguntas frecuentes")}</a></li>
+              <li><a href="/privacy">Privacy</a></li>
+              <li><a href="/terms">{t.terms}</a></li>
+              <li><a href="/dpa">{t.dpa}</a></li>
+            </ul>
+          </nav>
+        </div>
+        <div className="at-foot-bottom">
+          <span>© {new Date().getFullYear()} Vellu</span>
+          <span>Mirah Ventures · KVK 42045867 · BTW NL005453873B29</span>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
 function AtHeroPhone({ lang, ready }) {
   const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
   const services = [
@@ -1208,6 +1274,22 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             .at-nav-signin-icon { display: inline-flex; align-items: center; }
           }
           .at-footer-inner { padding-bottom: calc(30px + env(safe-area-inset-bottom, 0px)); }
+          /* Footer-blokken (AtFooter): telefoon = merkblok over de hele breedte,
+             daaronder de linkkolommen twee aan twee; desktop = vier kolommen. */
+          .at-foot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px 20px; text-align: left; }
+          .at-foot-brand { grid-column: 1 / -1; }
+          @media (min-width: 860px) { .at-foot-grid { grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 44px; } .at-foot-brand { grid-column: auto; max-width: 380px; } }
+          .at-foot-h { font-family: 'Jost', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: ${MUSHROOM}; margin-bottom: 14px; }
+          .at-foot-text { font-size: 13px; line-height: 1.7; color: ${BONE}b8; margin: 0 0 10px; }
+          .at-foot-inline { color: ${PUTTY}; text-decoration: none; border-bottom: 1px solid ${BONE}40; }
+          .at-foot-inline:hover { color: ${BONE}; }
+          .at-foot-mail { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 13px; color: ${PUTTY}; text-decoration: none; }
+          .at-foot-mail:hover { color: ${BONE}; }
+          .at-foot-links { list-style: none; margin: 0; padding: 0; display: grid; gap: 11px; }
+          .at-foot-links a { font-size: 13px; color: ${PUTTY}; text-decoration: none; border-bottom: 1px solid transparent; transition: color 0.2s ease, border-color 0.2s ease; }
+          .at-foot-links a:hover { color: ${BONE}; border-bottom-color: ${BONE}55; }
+          .at-foot-note { font-size: 12px; line-height: 1.6; color: ${BONE}8c; margin: 14px 0 0; max-width: 220px; }
+          .at-foot-bottom { margin-top: clamp(30px, 4.5vw, 44px); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; font-size: 10.5px; letter-spacing: 0.04em; color: ${MUSHROOM}; }
           @media (max-width: 768px) {
             .at-finale { min-height: calc(100dvh - 64px); display: flex; flex-direction: column; }
             .at-footer { margin-top: auto; }
@@ -1472,7 +1554,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         {/* ── 05 · PRIJZEN — mushroom-band direct onder putty (de tweede ladder
               loopt door naar earth en espresso). Starter-kaart bone,
               Professional espresso. ── */}
-        <div style={{ background: MUSHROOM, position: "relative", zIndex: 10 }}>
+        <div id="pricing" style={{ background: MUSHROOM, position: "relative", zIndex: 10 }}>
         <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}`, position: "relative" }}>
           {/* Kop volgt de schakelaar eronder: maandprijzen of jaarprijzen (Faisal 11-11). */}
           <AtHead
@@ -1568,7 +1650,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* ── 06 · FAQ — earth-band tussen mushroom en de espresso-finale; tekst
               in bone. ── */}
-        <div style={{ background: EARTH, position: "relative", zIndex: 10 }}>
+        <div id="faq" style={{ background: EARTH, position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}` }}>
           <AtHead title={t.faqTitle} accent={lang === "nl" ? "vragen" : lang === "es" ? "frecuentes" : "FAQ"} tone="earth" />
           {/* Elke vraag een zwevende bone-kaart op de earth-band (Faisal 15-09):
@@ -1672,27 +1754,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               vellu
             </div>
           </div>
-          {/* Footer op het espresso-vlak — zelfde juridische regels als altijd. */}
-          <footer className="at-footer" style={{ borderTop: `1px solid ${BONE}22`, position: "relative" }}>
-            {/* Onderrand via .at-footer-inner: op de telefoon extra ruimte zodat
-                de voetregels boven de chat-bubbel uit kunnen scrollen. */}
-            <div className="at-footer-inner" style={{ maxWidth: maxW, margin: "0 auto", paddingTop: 22, paddingLeft: pad, paddingRight: pad, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", textAlign: "center" }}>
-              <div style={{ fontSize: 10, color: MUSHROOM, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 14px", letterSpacing: "0.04em" }}>
-                <a href="https://mirahventures.com" target="_blank" rel="noopener noreferrer" style={{ color: MUSHROOM, textDecoration: "none" }}>Mirah Ventures</a>
-                <span>·</span>
-                <span>KVK 42045867</span>
-                <span>·</span>
-                <span>BTW NL005453873B29</span>
-              </div>
-              <div style={{ fontSize: 11, color: MUSHROOM, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 12px" }}>
-                <span>© {new Date().getFullYear()} vellu</span>
-                <a href="/privacy" style={{ color: PUTTY, textDecoration: "none", borderBottom: `1px solid ${BONE}33` }}>Privacy</a>
-                <a href="/terms" style={{ color: PUTTY, textDecoration: "none", borderBottom: `1px solid ${BONE}33` }}>{t.terms}</a>
-                <a href="/dpa" style={{ color: PUTTY, textDecoration: "none", borderBottom: `1px solid ${BONE}33` }}>{t.dpa}</a>
-                <a href="/contact" style={{ color: PUTTY, textDecoration: "none", borderBottom: `1px solid ${BONE}33` }}>Contact</a>
-              </div>
-            </div>
-          </footer>
+          {/* Footer: wie er achter Vellu zit + links (AtFooter, 11-11-2026). */}
+          <AtFooter lang={lang} t={t} maxW={maxW} pad={pad}
+            onScrollTo={scrollToSection} onFinder={openFinder} onNavigate={navigate}
+            onOpenFaq={() => { setFaqOpen(5); setTimeout(() => scrollToSection("faq"), 60); }} />
         </div>
 
         {/* Verdwijnt zodra de finale-CTA in beeld is: die heeft dezelfde knop,
