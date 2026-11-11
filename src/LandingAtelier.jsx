@@ -114,6 +114,7 @@ function AtMobileBar({ lang, onStart }) {
 // hieronder bestaat echt in de app; Google Agenda-koppeling staat uit, dus
 // "agenda in je telefoon" (de agenda-feed) en niet "Google Agenda".
 const TH_W = 520, TH_H = 390;
+const TH_SPIN = 7000; // ms per thema als de vier knoppen vanzelf doordraaien
 
 function useFitScale(designW, max = 1.1) {
   const ref = useRef(null);
@@ -430,29 +431,52 @@ function AtFeatureThemes({ lang }) {
       ] },
   ];
   const [active, setActive] = useState(0);
+  // Draait vanzelf door de vier thema's (Faisal 11-11). Het balkje onder de
+  // gekozen knop is de klok: een CSS-animatie van TH_SPIN; als die afloopt
+  // gaat het volgende thema aan. Kiest iemand zelf (klik/toets), dan stopt
+  // het draaien. Het loopt alleen als het blok in beeld is en het tabblad
+  // zichtbaar; met de muis op de knoppen staat het stil.
+  const [auto, setAuto] = useState(true);
+  const [run, setRun] = useState(false);
+  const rootRef = useRef(null);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    let seen = false;
+    const sync = () => setRun(seen && !document.hidden);
+    const io = new IntersectionObserver(([e]) => { seen = e.isIntersecting; sync(); }, { threshold: 0.35 });
+    io.observe(el);
+    document.addEventListener("visibilitychange", sync);
+    return () => { io.disconnect(); document.removeEventListener("visibilitychange", sync); };
+  }, []);
   const [stageRef, scale] = useFitScale(TH_W);
   const tabRefs = useRef([]);
+  const pick = (i) => { setActive(i); setAuto(false); };
   const onKey = (e, i) => {
     const d = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
     if (!d) return;
     e.preventDefault();
     const n = (i + d + themes.length) % themes.length;
-    setActive(n);
+    pick(n);
     tabRefs.current[n]?.focus();
   };
   return (
-    <div className="at-th" data-feature-themes>
+    <div className={`at-th${run ? " run" : ""}`} ref={rootRef} data-feature-themes>
       <div className="at-th-tabs" role="tablist" aria-label={L("Wat Vellu doet", "What Vellu does", "Qué hace Vellu")}>
         {themes.map((th, i) => (
           <button key={th.id} type="button" role="tab" id={`at-th-tab-${th.id}`} aria-selected={i === active} aria-controls={`at-th-panel-${th.id}`}
             tabIndex={i === active ? 0 : -1} ref={(el) => { tabRefs.current[i] = el; }}
-            className={`at-th-tab${i === active ? " on" : ""}`} onClick={() => setActive(i)} onKeyDown={(e) => onKey(e, i)}>
+            className={`at-th-tab${i === active ? " on" : ""}`} onClick={() => pick(i)} onKeyDown={(e) => onKey(e, i)}>
             <span className="at-th-num">{String(i + 1).padStart(2, "0")}</span>
             <span className="at-th-tabtext">
               <span className="at-th-title">{th.title}</span>
               <span className="at-th-lead">{th.lead}</span>
             </span>
             <span className="at-th-go" aria-hidden="true"><ArrowIcon size={13} /></span>
+            {auto && i === active && (
+              <span className="at-th-bar" aria-hidden="true" style={{ animationDuration: `${TH_SPIN}ms` }}
+                onAnimationEnd={() => setActive((a) => (a + 1) % themes.length)} />
+            )}
           </button>
         ))}
       </div>
@@ -1146,7 +1170,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           /* Elk thema is zichtbaar een knop (Faisal 11-11: "niet echt knoppen,
              gewoon tekst"): lichte bone-vlak + rand + pijltje; de gekozen is
              massief bone met een aarde-streep links. */
-          .at-th-tab { display: flex; align-items: baseline; gap: 10px; text-align: left; padding: 12px 12px; border-radius: 8px; border: 1px solid ${EARTH}38; background: ${BONE}73; cursor: pointer; font-family: 'Jost', sans-serif; color: ${INK}; box-shadow: 0 6px 14px -12px rgba(69,58,43,0.45); transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease; }
+          .at-th-tab { position: relative; overflow: hidden; display: flex; align-items: baseline; gap: 10px; text-align: left; padding: 12px 12px; border-radius: 8px; border: 1px solid ${EARTH}38; background: ${BONE}73; cursor: pointer; font-family: 'Jost', sans-serif; color: ${INK}; box-shadow: 0 6px 14px -12px rgba(69,58,43,0.45); transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease; }
           .at-th-tab:hover { background: ${BONE}c7; border-color: ${EARTH}66; transform: translateY(-1px); }
           .at-th-tab.on { background: ${BONE}; border-color: ${EARTH}80; box-shadow: inset 3px 0 0 ${EARTH}, 0 18px 32px -24px rgba(69,58,43,0.55); transform: none; }
           .at-th-go { display: none; margin-left: auto; align-self: center; color: ${MUSHROOM}; flex-shrink: 0; transition: color 0.25s ease, transform 0.25s ease; }
@@ -1176,7 +1200,16 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-th-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
           .at-th-points li { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.55; color: #4f4333; }
           .at-th-check { width: 20px; height: 20px; border-radius: 50%; background: ${EARTH}1f; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
-          @media (prefers-reduced-motion: reduce) { .at-th-visual, .at-th-visual.on, .at-th-tab, .at-th-tab:hover, .at-th-tab:hover .at-th-go { transition: none; transform: none; } }
+          /* Klok van het doordraaien: een lijntje dat onderin de gekozen knop
+             volloopt; als het vol is komt het volgende thema. Stil zolang het
+             blok niet in beeld is (.run ontbreekt) of de muis op de knoppen
+             staat. Bij "minder beweging" geen lijntje, dus ook geen draaien. */
+          .at-th-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: ${EARTH}; opacity: 0.75; transform: scaleX(0); transform-origin: 0 50%; animation-name: atThFill; animation-timing-function: linear; animation-fill-mode: forwards; pointer-events: none; }
+          @keyframes atThFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+          .at-th:not(.run) .at-th-bar { animation-play-state: paused; }
+          @media (hover: hover) { .at-th-tabs:hover .at-th-bar { animation-play-state: paused; } }
+          .at-th-tabs:has(:focus-visible) .at-th-bar { animation-play-state: paused; }
+          @media (prefers-reduced-motion: reduce) { .at-th-visual, .at-th-visual.on, .at-th-tab, .at-th-tab:hover, .at-th-tab:hover .at-th-go { transition: none; transform: none; } .at-th-bar { display: none; } }
           /* Citaten van salons (Beoordeel Vellu, 16-09): dezelfde zwevende
              bone-kaarten, gecentreerd, één tot drie naast elkaar. */
           .at-quote-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; max-width: 900px; margin: 0 auto; }
