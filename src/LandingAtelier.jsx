@@ -20,7 +20,8 @@
 // als props (`c` + `accent`), dus dit bestand geeft zijn eigen palet mee. De
 // globale .btn-*/.input-field-stijlen volgen het app-thema en worden hier
 // binnen .atelier overschreven, anders lekt een donker thema de bone-pagina in.
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import SupportChat from "./SupportChat.jsx";
 import { supabase } from "./supabase.js";
@@ -158,9 +159,27 @@ function AtHeroPhone({ lang, ready }) {
 // zodat landingspagina en app nooit iets anders beloven. De kopregel blijft
 // onder de navigatiebalk hangen tijdens het scrollen (geen overflow:hidden op
 // de kaart, anders werkt sticky niet).
-function AtPlanCompare({ lang, yearly }) {
-  const [open, setOpen] = useState(false);
+// Sinds 11-11-2026 (Faisal: "instead of opening at the bottom can it open as a
+// pop up that u can close with a x at the top") een venster boven de pagina:
+// kruisje rechtsboven, Esc of klik ernaast sluit; de tabel scrolt binnen het
+// venster, de kolomkop blijft bovenaan staan. Zacht in- en uitfaden.
+function AtPlanCompare({ lang, yearly, onStart, startLabel }) {
+  const [open, setOpen] = useState(false);      // in de DOM
+  const [shown, setShown] = useState(false);    // zichtbaar (voor de animatie)
+  const triggerRef = useRef(null);
+  const closeRef = useRef(null);
   const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  const openModal = () => { setOpen(true); requestAnimationFrame(() => requestAnimationFrame(() => setShown(true))); };
+  const closeModal = () => { setShown(false); setTimeout(() => { setOpen(false); triggerRef.current?.focus(); }, 280); };
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    const onKey = (e) => { if (e.key === "Escape") closeModal(); };
+    window.addEventListener("keydown", onKey);
+    const t = setTimeout(() => closeRef.current?.focus(), 60);
+    return () => { document.documentElement.style.overflow = prev; window.removeEventListener("keydown", onKey); clearTimeout(t); };
+  }, [open]);
   const groups = planMatrix(lang);
   // Bedrag groot, "/maand" klein eronder-ernaast: op de telefoon paste
   // "€19/maand" in serif niet in een kolom van 70 px.
@@ -177,16 +196,32 @@ function AtPlanCompare({ lang, yearly }) {
   return (
     <div style={{ maxWidth: 820, margin: "30px auto 0" }}>
       <div style={{ display: "flex", justifyContent: "center" }}>
-        <button type="button" data-plan-compare-toggle aria-expanded={open} onClick={() => setOpen((o) => !o)}
-          style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "14px 26px", borderRadius: AT_RADIUS, border: `1px solid ${INK}`, background: open ? INK : "transparent", color: open ? BONE : INK, fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer", transition: "background 0.2s, color 0.2s" }}>
-          {open ? L("Vergelijking sluiten", "Close comparison", "Cerrar comparación") : L("Vergelijk Starter en Professional", "Compare Starter and Professional", "Compara Starter y Professional")}
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transition: "transform 0.25s", transform: open ? "rotate(180deg)" : "none" }}><polyline points="6 9 12 15 18 9" /></svg>
+        <button type="button" ref={triggerRef} data-plan-compare-toggle aria-haspopup="dialog" aria-expanded={open} onClick={openModal}
+          style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "14px 26px", borderRadius: AT_RADIUS, border: `1px solid ${INK}`, background: "transparent", color: INK, fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer", transition: "background 0.2s, color 0.2s" }}>
+          {L("Vergelijk Starter en Professional", "Compare Starter and Professional", "Compara Starter y Professional")}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
         </button>
       </div>
-      {open && (
-        <div data-plan-compare role="table" aria-label={L("Starter en Professional vergeleken", "Starter and Professional compared", "Starter y Professional comparados")}
-          style={{ marginTop: 18, background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 20, boxShadow: "0 26px 46px -28px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05)" }}>
-          <div role="row" className="at-cmp-row at-cmp-head" style={{ position: "sticky", top: 63, zIndex: 2, background: P.bgCard, borderRadius: "20px 20px 0 0", borderBottom: `1px solid ${PUTTY}`, padding: "16px clamp(14px, 3vw, 26px)" }}>
+      {open && createPortal(
+        <div data-plan-compare-overlay onClick={closeModal}
+          style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(40,32,24,0.5)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "clamp(10px, 3vw, 28px)", opacity: shown ? 1 : 0, transition: "opacity 0.28s ease" }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="at-cmp-title" data-plan-compare-dialog onClick={(e) => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 820, maxHeight: "100%", display: "flex", flexDirection: "column", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 20, overflow: "hidden", boxShadow: "0 40px 80px -30px rgba(40,30,20,0.6)", transform: shown ? "none" : "translateY(18px) scale(0.98)", transition: "transform 0.34s cubic-bezier(0.22, 1, 0.36, 1)", fontFamily: "'Jost',sans-serif" }}>
+            {/* Kop met kruisje */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "18px clamp(14px, 3vw, 26px) 14px", borderBottom: `1px solid ${PUTTY}` }}>
+              <div>
+                <div id="at-cmp-title" style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(22px, 3vw, 28px)", color: INK, lineHeight: 1.1 }}>Starter <span style={{ color: EARTH, fontStyle: "italic" }}>vs</span> Professional</div>
+                <div style={{ fontSize: 12, color: P.textLabel, marginTop: 4 }}>{L("Alles wat elk plan bevat, naast elkaar.", "Everything each plan includes, side by side.", "Todo lo que incluye cada plan, lado a lado.")}</div>
+              </div>
+              <button type="button" ref={closeRef} data-plan-compare-close onClick={closeModal} aria-label={L("Sluiten", "Close", "Cerrar")}
+                style={{ width: 40, height: 40, borderRadius: "50%", border: `1px solid ${PUTTY}`, background: "transparent", color: INK, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M2.5 2.5l9 9M11.5 2.5l-9 9" /></svg>
+              </button>
+            </div>
+            {/* Tabel: scrolt binnen het venster */}
+            <div data-plan-compare role="table" aria-label={L("Starter en Professional vergeleken", "Starter and Professional compared", "Starter y Professional comparados")}
+              style={{ overflowY: "auto", overscrollBehavior: "contain", flex: 1, minHeight: 0 }}>
+          <div role="row" className="at-cmp-row at-cmp-head" style={{ position: "sticky", top: 0, zIndex: 2, background: P.bgCard, borderBottom: `1px solid ${PUTTY}`, padding: "14px clamp(14px, 3vw, 26px)" }}>
             <div role="columnheader" style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: P.textLabel }}>{L("Functie", "Feature", "Función")}</div>
             <div role="columnheader" style={{ textAlign: "center" }}>
               <div className="at-cmp-plan" style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: INK }}>Starter</div>
@@ -212,7 +247,17 @@ function AtPlanCompare({ lang, yearly }) {
               })}
             </div>
           ))}
-        </div>
+              {onStart && (
+                <div style={{ padding: "20px clamp(14px, 3vw, 26px) 24px", borderTop: `1px solid ${PUTTY}`, display: "flex", justifyContent: "center" }}>
+                  <button type="button" className="btn-primary" data-plan-compare-start onClick={() => { closeModal(); onStart(); }} style={{ width: "auto", padding: "15px 34px", fontSize: 11 }}>
+                    {startLabel}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -992,7 +1037,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               ? "Todos los precios en euros, IVA incluido. ¿Pagas desde fuera de la zona euro? Tu tarjeta hace la conversión automáticamente."
               : "All prices in euros, incl. VAT. Paying from outside the eurozone? Your card converts automatically."}
           </div>
-          <AtPlanCompare lang={lang} yearly={billingCycle === "yearly"} />
+          <AtPlanCompare lang={lang} yearly={billingCycle === "yearly"} onStart={() => ownerStart()} startLabel={t.startFree} />
         </div>
         </div>
 
