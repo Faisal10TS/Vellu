@@ -1883,7 +1883,7 @@ const _T_RAW = {
     whatUsersSay:"What our users say",
     simplePricing:"Simple monthly pricing", simplePricingYearly:"Simple yearly pricing", perMonth:"/month", perYear:"/year", getStarted:"Get started",
     billingMonthly:"Monthly", billingYearly:"Yearly", twoMonthsFree:"2 months free", billedYearly:"billed yearly",
-    popular:"Popular", faqTitle:"FAQ",
+    popular:"Popular", faqTitle:"Frequently asked questions",
     ctaTitle:"Start your own booking page today",
     ctaSub:"Live within 10 minutes. No commission. No hassle.",
     closed:"closed",

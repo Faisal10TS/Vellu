@@ -1032,27 +1032,38 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   // wat+voor wie, kosten+commissie+verschil met platformen, proberen, team,
   // herinneringen+annuleren, klanten meenemen. In drie talen (Spaans viel
   // eerst terug op Engels, L3-09).
+  // Volgorde (11-11-2026): de overstap-vraag blijft de LAATSTE, de footerlink
+  // "Overstappen?" opent faqs.length - 1. Opzeggen = knop "Abonnement
+  // opzeggen" in het dashboard, toegang tot het einde van de betaalde periode
+  // (voorwaarden + OwnerApp); klanten boeken zonder account (book-appointment
+  // krijgt alleen naam/e-mail/telefoon, ClientApp kent geen login).
   const faqs = lang === "es" ? [
     ["¿Qué es Vellu y para quién es?", "Vellu te da tu propia página de reservas en vellu.cc/tu-nombre. Los clientes reservan directamente contigo, sin intermediarios, y tú gestionas todo desde tu panel. Hecho para profesionales independientes de la belleza: manicuristas, artistas de pestañas, especialistas en cejas, peluquerías y salones, solos o con equipo."],
     ["¿Cuánto cuesta y por qué sin comisión?", "Starter cuesta €19 al mes y Professional €35 al mes. Precio fijo, 0% de comisión, sin costes ocultos: nunca pagas por reserva ni por cliente nuevo, y con Professional todo tu equipo está incluido. Además tienes tu propia página con tu marca en lugar de un perfil en un buscador: tus clientes siguen siendo tus clientes."],
     ["¿Puedo probarlo primero?", "Sí. Cada salón nuevo empieza con 14 días de prueba gratis. Configura tu página, recibe reservas y después decide si sigues con Starter o Professional."],
+    ["¿Puedo cancelar cuando quiera?", "Sí, directamente desde tu panel. No se te vuelve a cobrar y tu plan sigue activo hasta el final del periodo que ya has pagado."],
     ["¿Puede mi equipo gestionar su propia agenda?", "Sí. Con el plan Professional cada miembro del equipo tiene su propio acceso. Solo ve sus propias citas y gestiona sus propios servicios y horarios."],
     ["¿Reciben recordatorios los clientes y cómo cancelan?", "Sí, automáticamente: una confirmación al reservar, un recordatorio 24 horas antes y, después de la visita, un seguimiento que pide una reseña. Cancelan con el enlace de su correo de confirmación; tú decides hasta cuándo se puede."],
-    ["¿Puedo traer mis clientes y citas de otro sistema?", "Sí. Exporta tu lista de clientes y tus próximas citas desde tu plataforma actual. Los clientes se importan en Clientes > Importar y las citas con Importar citas en tu panel, ambos como Excel o CSV. Vellu reconoce las columnas habituales y te lo muestra todo antes de guardar; tus clientes no reciben una confirmación doble. ¿No lo consigues? Envíalo por Contacto y te ayudamos gratis."],
+    ["¿Mis clientes necesitan una app o una cuenta?", "No. Tus clientes reservan en tu página desde su propio navegador, en el móvil o el ordenador. Rellenan su nombre y sus datos de contacto y reciben la confirmación por correo. Nada que descargar, ninguna cuenta que crear."],
+    ["¿Puedo traer mis clientes y citas de otro sistema?", "Sí. Exporta tus clientes y próximas citas de tu sistema actual como Excel o CSV e impórtalos en tu panel. Lo ves todo antes de guardar y tus clientes no reciben una segunda confirmación. ¿No lo consigues? Contáctanos y te ayudamos gratis."],
   ] : lang === "nl" ? [
-    ["Wat is Vellu, en voor wie is het?", "Vellu geeft jou je eigen boekingspagina op vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij, en jij beheert alles vanuit je dashboard. Gemaakt voor onafhankelijke beauty professionals: nail techs, lash artists, brow specialists, kappers en salons — solo of met een team."],
+    ["Wat is Vellu, en voor wie is het?", "Vellu geeft jou je eigen boekingspagina op vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij, en jij beheert alles vanuit je dashboard. Gemaakt voor onafhankelijke beauty professionals: nail techs, lash artists, brow specialists, kappers en salons, solo of met een team."],
     ["Wat kost het, en waarom geen commissie?", "Starter is €19 per maand, Professional €35 per maand. Vast tarief, 0% commissie, geen verborgen kosten: je betaalt nooit per boeking of per nieuwe klant, en bij Professional is je hele team inbegrepen. Bovendien krijg je je eigen merkpagina in plaats van een profiel in een zoekplatform: jouw klanten blijven jouw klanten."],
     ["Kan ik het eerst uitproberen?", "Ja. Elke nieuwe salon start met 14 dagen gratis proberen. Zet je pagina op, ontvang boekingen en kies daarna of je doorgaat met Starter of Professional."],
+    ["Kan ik op elk moment opzeggen?", "Ja, gewoon vanuit je dashboard. Je wordt daarna niet meer afgeschreven en je abonnement blijft actief tot het einde van de periode die je al hebt betaald."],
     ["Kunnen mijn medewerkers hun eigen agenda beheren?", "Ja. Met het Professional-plan krijgt elke medewerker een eigen login. Ze zien alleen hun eigen afspraken en beheren hun eigen diensten en werktijden."],
     ["Krijgen klanten herinneringen, en hoe annuleren ze?", "Ja, automatisch: een bevestiging bij het boeken, een herinnering 24 uur van tevoren en na het bezoek een follow-up voor een review. Annuleren gaat via de link in hun bevestigingsmail; jij bepaalt tot wanneer dat kan."],
-    ["Kan ik mijn klanten en afspraken meenemen van een ander systeem?", "Ja. Exporteer je klantenlijst en je komende afspraken uit je huidige platform. Klanten importeer je onder Klanten > Importeer, afspraken via Afspraken importeren op je dashboard, allebei als Excel of CSV. Vellu herkent de gangbare kolommen en laat alles eerst zien voordat er iets wordt opgeslagen; je klanten krijgen geen dubbele bevestiging. Lukt het niet? Stuur 'm naar Contact en wij helpen je gratis."],
+    ["Hebben mijn klanten een app of account nodig?", "Nee. Klanten boeken op jouw pagina in hun eigen browser, op hun telefoon of computer. Ze vullen hun naam en contactgegevens in en krijgen de bevestiging per mail. Niets downloaden, geen account aanmaken."],
+    ["Kan ik mijn klanten en afspraken meenemen van een ander systeem?", "Ja. Exporteer je klanten en komende afspraken uit je huidige systeem als Excel of CSV en importeer ze in je dashboard. Je ziet alles voordat het wordt opgeslagen, en je klanten krijgen geen tweede bevestiging. Lukt het niet? Neem contact op en we helpen je gratis."],
   ] : [
-    ["What is Vellu, and who is it for?", "Vellu gives you your own booking page at vellu.cc/your-name. Clients book directly with you, no middleman, and you manage everything from your dashboard. Built for independent beauty professionals: nail techs, lash artists, brow specialists, hairdressers and salons — solo or with a team."],
+    ["What is Vellu, and who is it for?", "Vellu gives you your own booking page at vellu.cc/your-name. Clients book directly with you, no middleman, and you manage everything from your dashboard. Built for independent beauty professionals: nail techs, lash artists, brow specialists, hairdressers and salons, solo or with a team."],
     ["What does it cost, and why no commission?", "Starter is €19 a month, Professional €35 a month. Fixed price, 0% commission, no hidden fees: you never pay per booking or per new client, and on Professional your whole team is included. And you get your own branded page instead of a profile in a marketplace: your clients stay your clients."],
     ["Can I try it first?", "Yes. Every new salon starts with a 14-day free trial. Set up your page, take bookings and then decide whether to continue with Starter or Professional."],
+    ["Can I cancel anytime?", "Yes, straight from your dashboard. You won't be charged again, and your plan stays active until the end of the period you've already paid for."],
     ["Can my staff manage their own agenda?", "Yes. With the Professional plan, each staff member gets their own login. They only see their own appointments and manage their own services and hours."],
     ["Do clients get reminders, and how do they cancel?", "Yes, automatically: a confirmation when they book, a reminder 24 hours before, and a follow-up after the visit asking for a review. Cancelling goes through the link in their confirmation email; you set the cancellation deadline."],
-    ["Can I bring my clients and appointments from another system?", "Yes. Export your client list and your upcoming appointments from your current platform. Clients go in under Customers > Import, appointments via Import appointments on your dashboard, both as Excel or CSV. Vellu recognises the usual columns and shows you everything before saving; your clients don't get a double confirmation. Stuck? Send it to Contact and we'll help you for free."],
+    ["Do my clients need an app or an account?", "No. Clients book on your page in their own browser, on their phone or computer. They fill in their name and contact details and get the confirmation by email. Nothing to download, no account to create."],
+    ["Can I bring my clients and appointments from another system?", "Yes. Export your clients and upcoming appointments from your current system as Excel or CSV and import them in your dashboard. You see everything before it's saved, and your clients don't get a second confirmation. Stuck? Contact us and we'll help for free."],
   ];
 
   const plans = [
@@ -1690,7 +1701,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               in bone. ── */}
         <div id="faq" style={{ background: EARTH, position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}` }}>
-          <AtHead title={t.faqTitle} accent={lang === "nl" ? "vragen" : lang === "es" ? "frecuentes" : "FAQ"} tone="earth" />
+          <AtHead title={t.faqTitle} accent={lang === "nl" ? "vragen" : lang === "es" ? "frecuentes" : "questions"} tone="earth" />
           {/* Elke vraag een zwevende bone-kaart op de earth-band (Faisal 15-09):
               past bij stappen/functies/prijzen én lost het contrast op — bone
               op earth haalde voor kleine tekst geen AA, espresso op bone wel. */}
@@ -1795,7 +1806,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           {/* Footer: wie er achter Vellu zit + links (AtFooter, 11-11-2026). */}
           <AtFooter lang={lang} t={t} maxW={maxW} pad={pad}
             onScrollTo={scrollToSection} onFinder={openFinder} onNavigate={navigate}
-            onOpenFaq={() => { setFaqOpen(5); setTimeout(() => scrollToSection("faq"), 60); }} />
+            onOpenFaq={() => { setFaqOpen(faqs.length - 1); setTimeout(() => scrollToSection("faq"), 60); }} />
         </div>
 
         {/* Verdwijnt zodra de finale-CTA in beeld is: die heeft dezelfde knop,
