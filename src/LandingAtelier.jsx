@@ -314,6 +314,82 @@ function AtThemeVisual({ id, lang }) {
   );
 }
 
+// Klein beeld per stap van "In 3 stappen live" (11-11-2026, optie 3): de
+// prijslijst die Vellu inleest, het overzetten uit je oude systeem, en je
+// link in een bio. Vloeibaar (max. 300 px), dus ook op een smalle telefoon.
+function AtStepVisual({ n, lang }) {
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  const sub = "#7A6A55";
+  const box = { width: "100%", boxSizing: "border-box", background: `${PUTTY}47`, border: `1px solid ${PUTTY}`, borderRadius: 12, padding: 12, fontFamily: "'Jost',sans-serif", color: INK, textAlign: "left" };
+  const chip = { display: "flex", alignItems: "center", gap: 7, background: "#FBF8F3", border: `1px solid ${PUTTY}`, borderRadius: 8, padding: "6px 9px" };
+  if (n === "1") {
+    const items = [[L("Gel manicure", "Gel manicure", "Manicura en gel"), "38"], ["BIAB", "52"], ["Lash lift", "49"]];
+    return (
+      <div style={{ ...box, display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 98, flexShrink: 0, background: "#FFFDF8", border: `1px solid ${PUTTY}`, borderRadius: 6, padding: "8px 8px 9px", transform: "rotate(-4deg)", boxShadow: "0 8px 14px -10px rgba(69,58,43,0.5)" }}>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontSize: 13, marginBottom: 4 }}>{L("Prijslijst", "Price list", "Precios")}</div>
+          {items.map(([nm, p]) => (
+            <div key={nm} style={{ display: "flex", alignItems: "baseline", gap: 3, fontSize: 8.5, color: sub, lineHeight: 1.7 }}>
+              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nm}</span>
+              <span style={{ flex: 1, borderBottom: `1px dotted ${MUSHROOM}`, minWidth: 6 }} />
+              <span>{p}</span>
+            </div>
+          ))}
+        </div>
+        <span style={{ color: EARTH, flexShrink: 0 }}><ArrowIcon size={14} /></span>
+        <div style={{ flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 5 }}>
+          {items.map(([nm, p]) => (
+            <div key={nm} style={{ ...chip, padding: "5px 8px" }}>
+              <NavIcon name="check" size={11} color={EARTH} />
+              <span style={{ fontSize: 10.5, fontWeight: 600, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nm}</span>
+              <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 13 }}>€{p},00</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (n === "2") {
+    const rows = [[L("Klanten", "Clients", "Clientes"), L("met telefoon en e-mail", "with phone and email", "con teléfono y correo")], [L("Komende afspraken", "Upcoming appointments", "Próximas citas"), L("in je agenda", "in your calendar", "en tu agenda")]];
+    return (
+      <div style={box}>
+        <div style={chip}>
+          <NavIcon name="facturen" size={13} color={EARTH} />
+          <span style={{ fontSize: 11, fontWeight: 600, flex: 1 }}>export.xlsx</span>
+          <span style={{ fontSize: 10, color: EARTH, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>{L("Klaar", "Done", "Listo")}</span>
+        </div>
+        <div style={{ height: 4, borderRadius: 4, background: PUTTY, margin: "9px 2px 10px", overflow: "hidden" }}><div style={{ width: "100%", height: "100%", background: EARTH }} /></div>
+        {rows.map(([a, b]) => (
+          <div key={a} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 2px" }}>
+            <span style={{ width: 18, height: 18, borderRadius: "50%", background: EARTH, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="check" size={10} color={BONE} /></span>
+            <span style={{ fontSize: 11.5, fontWeight: 600 }}>{a}</span>
+            <span style={{ fontSize: 10.5, color: sub }}>{b}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div style={box}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, padding: 2, background: `linear-gradient(140deg, ${MUSHROOM}, ${EARTH})` }}>
+          <span style={{ width: "100%", height: "100%", borderRadius: "50%", background: "#FBF8F3", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: EARTH }}>B</span>
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600 }}>bloomstudio</div>
+          <div style={{ fontSize: 10.5, color: sub }}>Nails · Brows · Lashes · Amsterdam</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 9, fontSize: 11, color: EARTH, fontWeight: 600 }}>
+        <NavIcon name="link" size={12} color={EARTH} /><span style={{ borderBottom: `1px solid ${EARTH}66` }}>vellu.cc/bloomstudio</span>
+      </div>
+      <div style={{ marginTop: 9, height: 30, borderRadius: 8, background: EARTH, color: BONE, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+        {L("Boek een afspraak", "Book an appointment", "Reserva una cita")}
+      </div>
+    </div>
+  );
+}
+
 function AtFeatureThemes({ lang }) {
   const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
   const themes = [
@@ -1071,6 +1147,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
              als eerst: groot cijfer links, titel + tekst rechts. */
           .at-step { display: grid; grid-template-columns: clamp(64px, 11vw, 128px) 1fr; gap: clamp(14px, 3vw, 30px); align-items: center; padding: clamp(20px, 3vw, 30px) clamp(18px, 3vw, 30px); background: ${P.bgCard}; border: 1px solid ${PUTTY}; border-radius: 16px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.5), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
           .at-step:hover { transform: translateY(-5px); box-shadow: 0 34px 54px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); }
+          /* Beeld per stap: telefoon onder de tekst over de hele breedte,
+             desktop als derde kolom rechts. */
+          .at-step-vis { grid-column: 1 / -1; justify-self: center; width: 100%; max-width: 300px; }
+          @media (min-width: 900px) { .at-step { grid-template-columns: clamp(64px, 11vw, 128px) 1fr 300px; } .at-step-vis { grid-column: auto; } }
           @media (prefers-reduced-motion: reduce) { .at-step, .at-step:hover { transform: none; } }
           /* Prijskaarten: zelfde zwevende effect als stappen en functies (Faisal 15-09). */
           .at-price-card { box-shadow: 0 26px 46px -28px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
@@ -1319,11 +1399,14 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 <div className="at-step vl-glow" data-step-card onMouseMove={glowMove}>
                   {/* Cijfer in het midden van zijn kolom, tekst in het midden van
                       de hare (Faisal 15-09: "niet naar links gedrukt"). */}
-                  <div data-step-num style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(40px, 6.4vw, 72px)", fontWeight: 300, color: MUSHROOM, lineHeight: 0.9, textAlign: "center" }}>{s.n}</div>
+                  {/* lining-nums: Cormorant tekent standaard "oude" cijfers, en
+                      dan leek de 1 op een Romeinse I (Faisal 11-11). */}
+                  <div data-step-num style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(40px, 6.4vw, 72px)", fontWeight: 300, color: MUSHROOM, lineHeight: 0.9, textAlign: "center", fontVariantNumeric: "lining-nums", fontFeatureSettings: '"lnum" 1' }}>{s.n}</div>
                   <div data-step-text style={{ textAlign: "center" }}>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(21px, 3vw, 28px)", fontWeight: 400, color: INK, marginBottom: 8 }}>{s.title}</div>
                     <div style={{ fontSize: 13.5, color: P.textLabel, lineHeight: 1.75, maxWidth: 560, margin: "0 auto" }}>{s.desc}</div>
                   </div>
+                  <div className="at-step-vis" aria-hidden="true"><AtStepVisual n={s.n} lang={lang} /></div>
                 </div>
               </Reveal>
             ))}
