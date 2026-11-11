@@ -14,6 +14,24 @@
 
 export const RELEASES = [
   {
+    // 11-11 (vijfde): venster "Prijslijst inlezen" bij Diensten had geen
+    // kruisje (alleen "Liever zelf invoeren") en de tekst viel op de iPhone
+    // terug op Times.
+    id: "2026-11-11e",
+    date: "2026-11-11",
+    title: { nl: "Prijslijst inlezen", en: "Read price list", es: "Leer lista de precios" },
+    items: [
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Het venster Prijslijst inlezen (bij Diensten) sluit je nu ook met het kruisje rechtsboven, en de tekst staat in het juiste lettertype.",
+          en: "You can now close the Read price list window (under Services) with the X at the top right, and its text uses the right font.",
+          es: "Ahora puedes cerrar la ventana Leer lista de precios (en Servicios) con la X arriba a la derecha, y el texto usa la fuente correcta.",
+        },
+      },
+    ],
+  },
+  {
     // 11-11 (vierde): kaart pas na een klik (9c5fbd3) en daarom ook op de
     // salonpagina geen cookiebanner meer. Homepage-wijzigingen van dezelfde
     // dag staan hier niet in: die zien salons niet in hun eigen pagina.

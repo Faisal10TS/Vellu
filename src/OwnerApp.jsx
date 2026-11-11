@@ -3099,10 +3099,18 @@ function fileToBase64(file) {
 // c: kleurenset van de ouder (met hex warning/danger: daar komt een
 // alfa-achtervoegsel achter); panelBg: effen achtergrond van het paneel, voor
 // de knoppenbalk die onderaan blijft staan.
-function PriceListImport({ salonData, update, lang, c, accent, panelBg, onDone, onCancel }) {
+function PriceListImport({ salonData, update, lang, c, accent, panelBg, onDone, onCancel, showClose = false }) {
   const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
   // "pick" | "reading" | "review" | "saving" | "failed"
   const [phase, setPhase] = useState("pick");
+  // Als pop-up (Diensten): kruisje rechtsboven en Esc sluiten het venster
+  // (Faisal 11-11). Niet tijdens het opslaan, anders half opgeslagen.
+  useEffect(() => {
+    if (!showClose || !onCancel) return;
+    const onKey = (e) => { if (e.key === "Escape" && phase !== "saving") onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showClose, onCancel, phase]);
   const [files, setFiles] = useState([]); // [{ id, file, url, pdf }]
   const [err, setErr] = useState("");
   const [result, setResult] = useState(null);
@@ -3360,7 +3368,15 @@ function PriceListImport({ salonData, update, lang, c, accent, panelBg, onDone, 
   const curMismatch = result?.currency && result.currency !== salonCur && !(salonCur === "XCG" && result.currency === "ANG");
 
   return (
-    <div data-price-import={phase} style={{ color: c.text }}>
+    // Eigen lettertype: als pop-up hangt dit venster buiten de app-opmaak, en
+    // dan viel de lopende tekst op de telefoon terug op Times (Faisal 11-11).
+    <div data-price-import={phase} style={{ color: c.text, fontFamily: "'Jost',sans-serif", position: "relative" }}>
+      {showClose && onCancel && phase !== "saving" && (
+        <button type="button" data-price-import-close onClick={onCancel} aria-label={L("Sluiten", "Close", "Cerrar")}
+          style={{ position: "absolute", top: -6, right: -4, zIndex: 2, width: 32, height: 32, borderRadius: "50%", border: `1px solid ${c.border}`, background: panelBg || c.bg, color: c.textSub, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
+          <NavIcon name="xmark" size={15} color="currentColor" />
+        </button>
+      )}
       {phase === "pick" && (
         <div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 400, lineHeight: 1.15, marginBottom: 6 }}>{L("Je prijslijst inlezen", "Read your price list", "Leer tu lista de precios")}</div>
@@ -19476,7 +19492,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ maxWidth: 640, margin: "0 auto 16px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 16, padding: "20px 18px 8px", position: "relative" }}>
                       <PriceListImport
                         salonData={salonData} update={update} lang={lang}
-                        c={c} accent={accent} panelBg={c.bg}
+                        c={c} accent={accent} panelBg={c.bg} showClose
                         onCancel={() => setShowPriceImport(false)}
                         onDone={({ added, staffOk }) => {
                           setShowPriceImport(false);
