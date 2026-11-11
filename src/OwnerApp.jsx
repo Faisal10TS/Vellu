@@ -26,6 +26,7 @@ import {
   EmailTypoHint,
 } from "./shared.jsx";
 import Kasboek from "./Kasboek.jsx";
+import AfsprakenImport from "./AfsprakenImport.jsx";
 import { AUTOPAY_MONTHLY, autopayChargeYmd, autopayChargeDayReached, autopayOffDeadline, autopayPhase } from "./autopay.js";
 import { paymentsAsCashRows } from "./reportData.js";
 import WhatsNewModal from "./WhatsNewModal.jsx";
@@ -6013,6 +6014,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
   // Prijslijst inlezen (24-10-2026): venster bij Diensten.
   const [showPriceImport, setShowPriceImport] = useState(false);
+  // Afspraken importeren (11-11-2026): komende afspraken uit een export van
+  // het oude boekingssysteem (zie AfsprakenImport.jsx).
+  const [showApptImport, setShowApptImport] = useState(false);
   // Retail products (Professional): add/edit form state + list search.
   const [showNewProductForm, setShowNewProductForm] = useState(false);
   const [newProduct, setNewProduct] = useState({ name_nl: "", name_en: "", description_nl: "", description_en: "", price: "", purchase_price: "", stock: "", min_stock: "", supplier: "", barcode: "" });
@@ -6428,7 +6432,17 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     try {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get("tab");
-      if (tab !== "billing" && tab !== "settings" && tab !== "services") return;
+      if (tab !== "billing" && tab !== "settings" && tab !== "services" && tab !== "import") return;
+      // ?tab=import: agenda met het venster Afspraken importeren open (om
+      // naar een salon te sturen die overstapt).
+      if (tab === "import") {
+        setView("agenda");
+        setShowApptImport(true);
+        params.delete("tab");
+        const rest0 = params.toString();
+        window.history.replaceState({}, "", window.location.pathname + (rest0 ? `?${rest0}` : "") + window.location.hash);
+        return;
+      }
       setView("instellingen");
       // ?tab=services&pricelist=1: de knop in de activatiemail "geen
       // diensten" (send-activation-nudges, 01-11-2026) opent meteen
@@ -11651,7 +11665,24 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       {/* Chatknop weg zolang de rondleiding of "Wat is er nieuw" open is — hij
           zweefde anders over de feedbackregel van dat venster (Faisal, 07-09). */}
       {/* Niet tijdens het prijslijstvenster: de chatknop lag dan over "Voeg … toe". */}
-      {!tourOpen && !whatsNew && !showPriceImport && <SupportChat lang={lang} c={c} accent={accent} isMobile={isMobile} />}
+      {!tourOpen && !whatsNew && !showPriceImport && !showApptImport && <SupportChat lang={lang} c={c} accent={accent} isMobile={isMobile} />}
+
+      {showApptImport && (
+        <AfsprakenImport
+          supabase={supabase} ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} cur={cur}
+          countryCode={salonData.country_code} services={salonData.services || []} staff={salonData.staff || []}
+          existing={salonData.appointments || []} apptLang={defaultApptLang} toast={toast}
+          onClose={() => setShowApptImport(false)}
+          // Op id toevoegen-of-vervangen: het realtime-kanaal kan dezelfde rij
+          // al hebben binnengebracht.
+          onImported={(rows) => update(d => {
+            const byId = new Map(rows.map(r => [r.id, r]));
+            d.appointments = [...rows, ...d.appointments.filter(a => !byId.has(a.id))];
+            return d;
+          })}
+          onUndone={(ids) => update(d => { const gone = new Set(ids); d.appointments = d.appointments.filter(a => !gone.has(a.id)); return d; })}
+        />
+      )}
 
       {/* Mobile-only PWA install banner. Self-hides on desktop (UA check),
           when already installed, or once dismissed. Shown on every owner
@@ -12784,6 +12815,13 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {/* Bekijk/Kopieer zitten sinds de restyle in de salon-kaart in de
                     zijbalk; de kop houdt één primaire actie waar die zin heeft. */}
                 <div style={{ display: "flex", gap: 10 }}>
+                  {view === "agenda" && (
+                    <button className="btn-ghost" data-header-import style={{ width: "auto", fontSize: 11, padding: "11px 16px", display: "inline-flex", alignItems: "center", gap: 8, color: accent, borderColor: `${accent}55` }}
+                      title={lang === "nl" ? "Komende afspraken uit je oude boekingssysteem importeren" : lang === "es" ? "Importar las próximas citas de tu sistema de reservas anterior" : "Import upcoming appointments from your old booking system"}
+                      onClick={() => setShowApptImport(true)}>
+                      <NavIcon name="upload" size={14} color="currentColor" /> {lang === "nl" ? "Importeren" : lang === "es" ? "Importar" : "Import"}
+                    </button>
+                  )}
                   {(view === "dashboard" || view === "agenda") && (
                     <button className="btn-primary" data-header-add style={{ width: "auto", fontSize: 11, padding: "11px 18px", display: "inline-flex", alignItems: "center", gap: 8 }} onClick={openAddAppt}>
                       <NavIcon name="plus" size={14} color="currentColor" /> {t.addAppointment}
@@ -13133,6 +13171,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         { key: "phone", icon: "calendar", label: isMobile ? L("Telefoon-agenda", "Phone calendar", "Calendario móvil") : L("Koppel telefoon-agenda", "Link phone calendar", "Vincular calendario del móvil"),
                           title: L("Abonneer je telefoon-agenda — nieuwe afspraken verschijnen er vanzelf", "Subscribe your phone's calendar — new appointments appear automatically", "Suscribe el calendario de tu teléfono — las citas nuevas aparecen solas"),
                           onClick: () => { setView("instellingen"); setSettingsTab("planning"); setTimeout(() => { try { document.getElementById("cal-feed-card")?.scrollIntoView({ behavior: "smooth", block: "start" }); } catch { /* older browsers */ } }, 400); } },
+                        // Overstappen: komende afspraken uit het oude systeem.
+                        { key: "import", icon: "upload", label: isMobile ? L("Importeer", "Import", "Importar") : L("Afspraken importeren", "Import appointments", "Importar citas"),
+                          title: L("Komende afspraken uit je oude boekingssysteem importeren", "Import upcoming appointments from your old booking system", "Importar las próximas citas de tu sistema de reservas anterior"),
+                          onClick: () => setShowApptImport(true) },
                       ];
                       return (
                         <div className="vl-card" data-quick-actions data-tour="quick-actions" style={{ padding: isMobile ? 14 : 18 }}>

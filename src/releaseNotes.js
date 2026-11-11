@@ -14,6 +14,23 @@
 
 export const RELEASES = [
   {
+    // 11-11: salons stapten niet over omdat hun agenda weken vooruit in een
+    // ander systeem stond. Nu: export erin, afspraken in één keer in Vellu.
+    id: "2026-11-11",
+    date: "2026-11-11",
+    title: { nl: "Afspraken importeren", en: "Import appointments", es: "Importar citas" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Overstappen van een ander boekingssysteem? Zet je komende afspraken in één keer in je agenda met een Excel- of CSV-export: Agenda → Importeren, of Afspraken importeren op je dashboard. Je controleert alles eerst, en je klanten krijgen geen dubbele bevestiging.",
+          en: "Switching from another booking system? Put your upcoming appointments into your calendar in one go with an Excel or CSV export: Calendar → Import, or Import appointments on your dashboard. You check everything first, and your clients don't get a double confirmation.",
+          es: "¿Te cambias desde otro sistema de reservas? Pon tus próximas citas en tu agenda de una vez con una exportación de Excel o CSV: Agenda → Importar, o Importar citas en tu panel. Primero lo revisas todo y tus clientes no reciben una confirmación doble.",
+        },
+      },
+    ],
+  },
+  {
     // 05-11: TTNB zag "58 dagen" op de factuur en "over 89 dagen" in de app
     // en wist niet welke klopte (allebei: 1 betaalde maand + 58 gratis dagen).
     id: "2026-11-05",
