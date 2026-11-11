@@ -373,6 +373,7 @@ function AtFeatureThemes({ lang }) {
               <span className="at-th-title">{th.title}</span>
               <span className="at-th-lead">{th.lead}</span>
             </span>
+            <span className="at-th-go" aria-hidden="true"><ArrowIcon size={13} /></span>
           </button>
         ))}
       </div>
@@ -975,9 +976,15 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           @media (min-width: 900px) { .at-th { grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); grid-template-areas: "tabs stage" "detail stage"; column-gap: clamp(36px, 5vw, 72px); row-gap: 18px; align-items: start; } }
           .at-th-tabs { grid-area: tabs; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
           @media (min-width: 900px) { .at-th-tabs { grid-template-columns: 1fr; gap: 6px; } }
-          .at-th-tab { display: flex; align-items: baseline; gap: 10px; text-align: left; padding: 12px 12px; border-radius: 8px; border: 1px solid ${EARTH}26; background: transparent; cursor: pointer; font-family: 'Jost', sans-serif; color: ${INK}; transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease; }
-          .at-th-tab:hover { background: ${BONE}80; }
-          .at-th-tab.on { background: ${BONE}; border-color: ${EARTH}66; box-shadow: 0 18px 32px -24px rgba(69,58,43,0.55); }
+          /* Elk thema is zichtbaar een knop (Faisal 11-11: "niet echt knoppen,
+             gewoon tekst"): lichte bone-vlak + rand + pijltje; de gekozen is
+             massief bone met een aarde-streep links. */
+          .at-th-tab { display: flex; align-items: baseline; gap: 10px; text-align: left; padding: 12px 12px; border-radius: 8px; border: 1px solid ${EARTH}38; background: ${BONE}73; cursor: pointer; font-family: 'Jost', sans-serif; color: ${INK}; box-shadow: 0 6px 14px -12px rgba(69,58,43,0.45); transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease; }
+          .at-th-tab:hover { background: ${BONE}c7; border-color: ${EARTH}66; transform: translateY(-1px); }
+          .at-th-tab.on { background: ${BONE}; border-color: ${EARTH}80; box-shadow: inset 3px 0 0 ${EARTH}, 0 18px 32px -24px rgba(69,58,43,0.55); transform: none; }
+          .at-th-go { display: none; margin-left: auto; align-self: center; color: ${MUSHROOM}; flex-shrink: 0; transition: color 0.25s ease, transform 0.25s ease; }
+          .at-th-tab:hover .at-th-go { color: ${EARTH}; transform: translateX(3px); }
+          .at-th-tab.on .at-th-go { color: ${EARTH}; }
           .at-th-tab:focus-visible { outline: 2px solid ${EARTH}; outline-offset: 2px; }
           .at-th-num { font-family: 'Cormorant Garamond', serif; font-size: 17px; color: ${MUSHROOM}; flex-shrink: 0; transition: color 0.25s ease; }
           .at-th-tab.on .at-th-num { color: ${EARTH}; }
@@ -985,7 +992,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-th-title { font-family: 'Cormorant Garamond', serif; font-size: 18px; line-height: 1.15; color: ${INK}; }
           .at-th-lead { display: none; }
           @media (min-width: 900px) {
-            .at-th-tab { padding: 16px 18px; gap: 16px; border-color: transparent; }
+            .at-th-tabs { gap: 10px; }
+            .at-th-tab { padding: 16px 18px; gap: 16px; }
+            .at-th-go { display: inline-flex; }
             .at-th-num { font-size: 22px; }
             .at-th-title { font-size: 25px; }
             .at-th-lead { display: block; font-size: 13px; color: #6b5d4a; margin-top: 4px; line-height: 1.5; }
@@ -1000,7 +1009,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-th-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
           .at-th-points li { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.55; color: #4f4333; }
           .at-th-check { width: 20px; height: 20px; border-radius: 50%; background: ${EARTH}1f; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
-          @media (prefers-reduced-motion: reduce) { .at-th-visual, .at-th-visual.on { transition: none; transform: none; } }
+          @media (prefers-reduced-motion: reduce) { .at-th-visual, .at-th-visual.on, .at-th-tab, .at-th-tab:hover, .at-th-tab:hover .at-th-go { transition: none; transform: none; } }
           /* Citaten van salons (Beoordeel Vellu, 16-09): dezelfde zwevende
              bone-kaarten, gecentreerd, één tot drie naast elkaar. */
           .at-quote-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; max-width: 900px; margin: 0 auto; }
