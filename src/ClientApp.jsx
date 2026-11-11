@@ -106,6 +106,45 @@ function ClickToMap({ query, title, height, lang, c, theme }) {
   );
 }
 
+// Kleine versie van een salonfoto voor een klein vak (Faisal 11-11: "1–3").
+// Dienstfoto's van ~1050x1400 (90-200 KB) stonden op 42-62 px: Beauty By Eydy
+// laadde op de telefoon 2,3 MB aan beelden vóór je scrolde. Supabase maakt de
+// kleine versie (image transformations, WebP; Pro: 100 originelen per maand
+// gratis, daarna $5 per 1.000, docs 11-11-2026). Altijd een vak met
+// resize=contain: de hele foto past erin, de verhouding blijft gelijk en
+// object-position met het focuspunt werkt nog. NIET alleen width= — dan gaf
+// Supabase (getest 11-11) 160x1400 terug, een smalle strook uit het midden, en
+// zag elke dienstfoto en elk logo er ingezoomd uit.
+// Alleen onze eigen publieke opslag; demo-foto's en andere adressen blijven.
+const SB_OBJECT = "/storage/v1/object/public/";
+function thumbOf(url, width, height = width) {
+  if (typeof url !== "string" || !/^https:\/\/[a-z0-9]+\.supabase\.co\//.test(url) || !url.includes(SB_OBJECT)) return url;
+  if (/\.(gif|svg)(\?|$)/i.test(url)) return url;
+  const [base, query] = url.split("?");
+  return `${base.replace(SB_OBJECT, "/storage/v1/render/image/public/")}?width=${width}&height=${height}&resize=contain&quality=75${query ? `&${query}` : ""}`;
+}
+// Laadt de kleine versie niet (transformaties uit, storing), dan één keer het
+// origineel; pas als dat ook faalt de eigen foutafhandeling van het beeld.
+const thumbFallback = (orig, then) => (e) => {
+  const img = e.currentTarget;
+  if (orig && img.dataset.origTried !== "1" && (img.getAttribute("src") !== orig || img.hasAttribute("srcset"))) {
+    img.dataset.origTried = "1";
+    img.removeAttribute("srcset");
+    img.src = orig;
+    return;
+  }
+  if (then) then(e);
+};
+// Omslagfoto: op de telefoon een kleinere versie (390 px breed, ook bij 3x
+// scherm genoeg aan 1242), op de computer het origineel. Een hoog vak, zodat
+// ook een staande foto de volle breedte krijgt (de w-waarde moet kloppen).
+// src blijft het origineel, dus de verhouding- en randkleurmeting kijken naar
+// hetzelfde.
+const coverSrcSet = (url) => {
+  const small = thumbOf(url, 828, 2484);
+  return small === url ? undefined : `${small} 828w, ${thumbOf(url, 1242, 2500)} 1242w, ${url} 1600w`;
+};
+
 // Teamfoto met vangnet (Faisal 15-09, Beauty By Eydy): een avatar_url die
 // naar een verdwenen bestand wijst liet de browser een kapot plaatje met de
 // alt-tekst ernaast tekenen. Laadt de foto niet, dan komt hier hetzelfde
@@ -114,7 +153,7 @@ function TeamPhoto({ src, name, accent }) {
   const [broken, setBroken] = useState(false);
   useEffect(() => { setBroken(false); }, [src]);
   if (src && !broken) {
-    return <img src={src} className="profile-team-photo" alt={name || ""} loading="lazy" onError={() => setBroken(true)} />;
+    return <img src={thumbOf(src, 320)} className="profile-team-photo" alt={name || ""} loading="lazy" onError={thumbFallback(src, () => setBroken(true))} />;
   }
   return (
     <div className="profile-team-photo profile-team-photo-placeholder" aria-hidden="true">
@@ -1202,6 +1241,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   };
   
   const [date, setDate] = useState(getFirstAvailableDate);
+  // De dag die de pagina zelf koos (niet de klant). Zie het effect onder
+  // firstOpenDate: alleen deze dag schuift door als hij dicht blijkt.
+  const autoDateRef = useRef(date);
   const [time, setTime] = useState(null);
   // `website` is a honeypot field — invisible to real users (positioned
   // off-screen, aria-hidden, autocomplete off) but filled by dumb bots that
@@ -1978,10 +2020,15 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
 
   const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setPreferredStaff(null); setProductSel({}); setTime(null); setDone(false); setPrepayInfo(null); setBookedAppointmentId(null); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", website: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
 
+  // Alleen een dag die nog boekbare tijden heeft (vol, niet dicht) kan op de
+  // wachtlijst: een dag zonder tijd — gesloten, of vandaag na de laatste slot —
+  // komt nooit vrij. waitlist-notify weigert zo'n dag ook.
+  const waitlistDayOk = (ds) => !!ds && getAvailableTimes(ds).length > 0;
+
   // Seed the day multi-select when the waitlist modal opens (with the day the
   // customer was looking at), and clear it when it closes.
   useEffect(() => {
-    if (waitlistOpen) setWaitlistDates(date ? [date] : []);
+    if (waitlistOpen) setWaitlistDates(waitlistDayOk(date) ? [date] : []);
     else setWaitlistDates([]);
     // `date` ontbreekt bewust, ook al leest de regel hierboven hem. Toevoegen
     // zou hier juist een bug máken: dan wist elke dagkeuze binnen de modal de
@@ -2008,7 +2055,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   const waitlistPhoneMsg = lang === "nl" ? "Vul je telefoonnummer in" : lang === "es" ? "Introduce tu número de teléfono" : "Please enter your phone number";
   const submitWaitlist = async () => {
     if (waitlistSubmitting) return;
-    const dates = (waitlistDates.length ? waitlistDates : (date ? [date] : []));
+    const dates = (waitlistDates.length ? waitlistDates : (waitlistDayOk(date) ? [date] : []));
     if (!dates.length) { setWaitlistError(T[lang].waitlistNoDate); return; }
     const first = form.firstName.trim();
     const last = form.lastName.trim();
@@ -2638,6 +2685,26 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayAvailability]);
 
+  // getFirstAvailableDate toetst alleen hele dagen (openingstijden en het
+  // boekingsvenster), niet of er nog een tijd over is. Bloom 05-10 om 18:05,
+  // sluiting 18:30 en twee uur voorlooptijd: vandaag bleef geselecteerd, de
+  // tegel stond grijs en het tijdenpaneel bood toch de wachtlijst aan. Is de
+  // dag die de pagina zelf koos dicht ('closed': geen enkele boekbare tijd met
+  // deze diensten), dan schuiven we door naar de eerste dag met een vrije tijd,
+  // of anders de eerste dag die niet dicht is. Een dag die de klant zelf koos
+  // blijft staan; daarvoor is er de knop "Eerste beschikbare dag".
+  useEffect(() => {
+    if (date !== autoDateRef.current || dayAvailability[date] !== "closed") return;
+    const next = firstOpenDate || days.map(fmt).find(ds => dayAvailability[ds] && dayAvailability[ds] !== "closed");
+    if (!next || next === date) return;
+    autoDateRef.current = next;
+    setDate(next);
+    setTime(null);
+    // `days` ontbreekt bewust (elke render een nieuwe reeks, zie firstOpenDate);
+    // dayAvailability is op precies die reeks gebouwd.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayAvailability, firstOpenDate, date]);
+
   // Eerstvolgende vrije slot (dag + tijd) in het hele venster. Staat als kaart
   // bovenaan stap 2 (fase 3, 15-09): wie "zo snel mogelijk" wil, hoeft niet
   // eerst door de dagen te vegen. Zelfde toets als de dagbeschikbaarheid.
@@ -3239,7 +3306,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
         {/* ═══ STICKY HEADER — logo | tabs | contact ═══ */}
         <div className="profile-header">
           {initialSalon.logo_url ? (
-            <img src={initialSalon.logo_url} className="profile-header-logo" alt={`${initialSalon.name} logo`} />
+            <img src={thumbOf(initialSalon.logo_url, 240)} onError={thumbFallback(initialSalon.logo_url)} className="profile-header-logo" alt={`${initialSalon.name} logo`} />
           ) : (
             <div className="profile-header-logo-placeholder">{initialSalon.name?.[0] || "S"}</div>
           )}
@@ -3302,7 +3369,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             <img src={initialSalon.cover_image_url} className="profile-hero-backdrop" alt="" aria-hidden="true" />
           )}
           {initialSalon.cover_image_url && (
-            <img src={initialSalon.cover_image_url} className={`profile-hero-cover${coverFit === "contain" ? " fit-contain" : ""}`} alt={`${initialSalon.name} cover`}
+            <img src={initialSalon.cover_image_url} srcSet={coverSrcSet(initialSalon.cover_image_url)} sizes="100vw" onError={thumbFallback(initialSalon.cover_image_url)}
+              className={`profile-hero-cover${coverFit === "contain" ? " fit-contain" : ""}`} alt={`${initialSalon.name} cover`}
               onLoad={e => {
                 const im = e.currentTarget;
                 if (im.naturalWidth && im.naturalHeight) {
@@ -3319,55 +3387,59 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           <div className="profile-hero-content">
             <h1 className="profile-hero-name" style={{ fontSize: isMobile ? 28 : 42 }}>{initialSalon.name}</h1>
             {initialSalon.city && (
-              <div style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", marginTop: 4, textTransform: "uppercase", letterSpacing: "0.12em" }}>{initialSalon.city}</div>
+              <div className="profile-hero-city">{initialSalon.city}</div>
             )}
-            {(initialSalon.reviews?.length > 0 || initialSalon.services?.length > 0 || initialSalon.loyalty_enabled) && (
-              <div className="profile-hero-meta">
-                {initialSalon.reviews?.length > 0 && (
-                  <span className="profile-hero-meta-item">
-                    <svg width={13} height={13} viewBox="0 0 20 20" fill={accent}>
-                      <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
-                    </svg>
-                    <span>{avgRating} · {initialSalon.reviews.length} {t.reviews.toLowerCase()}</span>
-                  </span>
-                )}
-                {/* Aantal diensten alleen op desktop: op mobiel houdt de regel
-                    ruimte voor beoordeling + eerstvolgende dag. */}
-                {!isMobile && initialSalon.reviews?.length > 0 && initialSalon.services?.length > 0 && (
-                  <span className="profile-hero-meta-sep" />
-                )}
-                {!isMobile && initialSalon.services?.length > 0 && (
-                  <span className="profile-hero-meta-item">
-                    <NavIcon name="scissors" size={13} color="rgba(255,255,255,0.88)" />
-                    <span>{initialSalon.services.length} {t.profileServices.toLowerCase()}</span>
-                  </span>
-                )}
-                {/* Stempelkaart van de salon — de actie mag gezien worden. */}
-                {initialSalon.loyalty_enabled && (initialSalon.reviews?.length > 0 || initialSalon.services?.length > 0) && (
-                  <span className="profile-hero-meta-sep" />
-                )}
-                {initialSalon.loyalty_enabled && (
-                  <span className="profile-hero-meta-item">
-                    <NavIcon name="tag" size={13} color="rgba(255,255,255,0.88)" />
-                    <span>{lang === "nl"
-                      ? `Na elke ${initialSalon.loyalty_visits} bezoeken ${initialSalon.loyalty_discount_pct}% korting`
-                      : lang === "es"
-                        ? `${initialSalon.loyalty_discount_pct}% de descuento cada ${initialSalon.loyalty_visits} visitas`
-                        : `${initialSalon.loyalty_discount_pct}% off after every ${initialSalon.loyalty_visits} visits`}</span>
-                  </span>
-                )}
-                {/* Eerstvolgende dag: de vertrouwensregel uit de mockup (15-09). */}
-                {nextOpen && (
-                  <>
-                    <span className="profile-hero-meta-sep" />
-                    <span className="profile-hero-meta-item" data-hero-next>
-                      <NavIcon name="calendar" size={13} color="rgba(255,255,255,0.88)" />
-                      <span>{nextAvailableLabel} <b style={{ color: "#fff", fontWeight: 600 }}>{nextOpen.dayLabel} {nextOpen.hrs.open}</b></span>
-                    </span>
-                  </>
-                )}
-              </div>
-            )}
+            {(() => {
+              // Puntjes alleen TUSSEN twee dingen (Faisal 11-11: "1–3"). Eerst
+              // stond elk puntje met een eigen voorwaarde; op de telefoon valt
+              // het aantal diensten weg en bleef bij een salon zonder reviews
+              // (Aura nails, Brilliant Beauty) een los puntje vooraan staan.
+              const items = [];
+              if (initialSalon.reviews?.length > 0) items.push(
+                <span key="rating" className="profile-hero-meta-item">
+                  <svg width={13} height={13} viewBox="0 0 20 20" fill={accent} aria-hidden="true">
+                    <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.28l-4.77 2.43.91-5.32L2.27 6.62l5.34-.78L10 1z" />
+                  </svg>
+                  <span>{avgRating} · {initialSalon.reviews.length} {t.reviews.toLowerCase()}</span>
+                </span>
+              );
+              // Aantal diensten alleen op desktop: op mobiel houdt de regel
+              // ruimte voor beoordeling + eerstvolgende dag.
+              if (!isMobile && initialSalon.services?.length > 0) items.push(
+                <span key="services" className="profile-hero-meta-item">
+                  <NavIcon name="scissors" size={13} color="rgba(255,255,255,0.92)" />
+                  <span>{initialSalon.services.length} {t.profileServices.toLowerCase()}</span>
+                </span>
+              );
+              // Stempelkaart van de salon — de actie mag gezien worden.
+              if (initialSalon.loyalty_enabled) items.push(
+                <span key="loyalty" className="profile-hero-meta-item">
+                  <NavIcon name="tag" size={13} color="rgba(255,255,255,0.92)" />
+                  <span>{lang === "nl"
+                    ? `Na elke ${initialSalon.loyalty_visits} bezoeken ${initialSalon.loyalty_discount_pct}% korting`
+                    : lang === "es"
+                      ? `${initialSalon.loyalty_discount_pct}% de descuento cada ${initialSalon.loyalty_visits} visitas`
+                      : `${initialSalon.loyalty_discount_pct}% off after every ${initialSalon.loyalty_visits} visits`}</span>
+                </span>
+              );
+              // Eerstvolgende dag: de vertrouwensregel uit de mockup (15-09).
+              // Op de telefoon een eigen regel: dan breekt de rij nooit midden
+              // tussen twee dingen af met een puntje aan het eind.
+              const next = nextOpen ? (
+                <span key="next" className="profile-hero-meta-item" data-hero-next>
+                  <NavIcon name="calendar" size={13} color="rgba(255,255,255,0.92)" />
+                  <span>{nextAvailableLabel} <b style={{ color: "#fff", fontWeight: 600 }}>{nextOpen.dayLabel} {nextOpen.hrs.open}</b></span>
+                </span>
+              ) : null;
+              const row = isMobile || !next ? items : [...items, next];
+              if (!row.length && !next) return null;
+              return (
+                <div className="profile-hero-meta">
+                  {row.flatMap((it, i) => i ? [<span key={`sep-${i}`} className="profile-hero-meta-sep" aria-hidden="true" />, it] : [it])}
+                  {isMobile && next && <div className="profile-hero-meta-row">{next}</div>}
+                </div>
+              );
+            })()}
             {/* Boeken + Delen naast elkaar onder de naam (15-09): de hoofdactie
                 stond eerst alleen in de zijkolom en de zwevende pil. */}
             <div style={{ marginTop: 16, display: "flex", justifyContent: "center", alignItems: "center", gap: 10, position: "relative", flexWrap: "wrap" }}>
@@ -3389,7 +3461,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             hero omdat die overflow: hidden heeft. */}
         <div className="profile-hero-logo-wrap" aria-hidden="true">
           {initialSalon.logo_url
-            ? <img src={initialSalon.logo_url} className="profile-hero-logo" alt="" />
+            ? <img src={thumbOf(initialSalon.logo_url, 240)} onError={thumbFallback(initialSalon.logo_url)} className="profile-hero-logo" alt="" />
             : <div className="profile-hero-logo profile-hero-logo-placeholder">{initialSalon.name?.[0] || "S"}</div>}
         </div>
         </>);
@@ -3426,7 +3498,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 {(servicesExpanded ? profileFilteredServices : profileFilteredServices.slice(0, 12)).map(s => (
                   <div key={s.id} className="profile-service-row" data-service-card onClick={() => enterBooking(s)}>
                     <div className="profile-service-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", ...(s.photos?.length > 0 ? {} : { background: `${accent}14`, borderColor: `${accent}33` }) }}>
-                      {s.photos?.length > 0 ? <img src={s.photos[0].url || s.photos[0]} alt={svcName(s)} loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${s.photos[0].focal_x ?? 50}% ${s.photos[0].focal_y ?? 50}%`, position: "absolute", inset: 0, zIndex: 1 }} /> : null}
+                      {s.photos?.length > 0 ? <img src={thumbOf(s.photos[0].url || s.photos[0], 240)} alt={svcName(s)} loading="lazy" onError={thumbFallback(s.photos[0].url || s.photos[0], e => { e.target.style.display = "none"; })} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${s.photos[0].focal_x ?? 50}% ${s.photos[0].focal_y ?? 50}%`, position: "absolute", inset: 0, zIndex: 1 }} /> : null}
                       <NavIcon name={s.photos?.length > 0 ? "scissors" : svcIcon(s)} size={20} color={s.photos?.length > 0 ? c.textMuted : accent} />
                     </div>
                     <div className="profile-service-info">
@@ -3559,7 +3631,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     return (
                     <div key={p.id} className="profile-product-card" data-product-card>
                       {p.photo_url
-                        ? <img src={p.photo_url} alt={prodNameOf(p)} loading="lazy" className="profile-product-thumb" />
+                        ? <img src={thumbOf(p.photo_url, 240)} onError={thumbFallback(p.photo_url)} alt={prodNameOf(p)} loading="lazy" className="profile-product-thumb" />
                         : <div className="profile-product-thumb" style={{ background: `${accent}14`, display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="bag" size={16} color={accent} /></div>}
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.3, color: c.text }}>{prodNameOf(p)}</div>
@@ -3594,7 +3666,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                         const isMore = rest > 0 && idx === shown.length - 1;
                         return (
                           <div key={photo.id || idx} className={`profile-gallery-item${isMore ? " more" : ""}`} data-gallery-item onClick={() => setGallery({ photos: allPhotos, idx })}>
-                            <img src={photo.url || photo} loading="lazy" alt={photo.serviceName || (t.galleryPhoto)} />
+                            <img src={thumbOf(photo.url || photo, 800)} onError={thumbFallback(photo.url || photo)} loading="lazy" alt={photo.serviceName || (t.galleryPhoto)} />
                             {isMore && <span className="profile-gallery-more">+{rest} {lang === "nl" ? "foto's" : lang === "es" ? "fotos" : "photos"}</span>}
                           </div>
                         );
@@ -4367,7 +4439,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     </button>
                   <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                     {initialSalon.logo_url && (
-                      <img src={initialSalon.logo_url} style={{ width: 50, height: 50, borderRadius: 12, objectFit: "cover", border: "1px solid " + c.inputBorder }} />
+                      <img src={thumbOf(initialSalon.logo_url, 240)} onError={thumbFallback(initialSalon.logo_url)} style={{ width: 50, height: 50, borderRadius: 12, objectFit: "cover", border: "1px solid " + c.inputBorder }} />
                     )}
                     <div>
                       <div style={{ fontFamily: displayFont, fontSize: initialSalon.logo_url ? 22 : 28, fontWeight: 300, color: c.text, lineHeight: 1.2 }}>
@@ -4440,7 +4512,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 <PTitle sub={t.selectLocationSub}>{t.selectLocation}</PTitle>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   {(initialSalon.locations || []).map(loc => (
-                    <div key={loc.id} className={`service-card ${selectedLocation?.id === loc.id ? "sel" : ""}`} onClick={() => { setSelectedLocation(loc); setDate(fmt(getToday())); setTime(null); }}>
+                    <div key={loc.id} className={`service-card ${selectedLocation?.id === loc.id ? "sel" : ""}`} onClick={() => { setSelectedLocation(loc); autoDateRef.current = fmt(getToday()); setDate(autoDateRef.current); setTime(null); }}>
                       <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 4 }}>{loc.name}</div>
                       {loc.address && <div style={{ fontSize: 11, color: c.textLabel }}>{loc.address}{loc.city ? `, ${loc.city}` : ""}</div>}
                       {loc.phone && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}><NavIcon name="phone" size={10} color={c.textMuted} /> {loc.phone}</div>}
@@ -4532,7 +4604,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       {/* Thumbnail or placeholder */}
                       <div style={{ width: 52, height: 52, borderRadius: 12, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", position: "relative" }}
                         onClick={e => { if (heroThumb && s.photos?.length > 0) { e.stopPropagation(); setGallery({ photos: s.photos, idx: 0 }); } }}>
-                        {heroThumb ? <img src={heroThumb} alt="" loading="lazy" onError={e => { e.target.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${s.photos?.[0]?.focal_x ?? 50}% ${s.photos?.[0]?.focal_y ?? 50}%`, position: "absolute", inset: 0, zIndex: 1 }} /> : null}
+                        {heroThumb ? <img src={thumbOf(heroThumb, 240)} alt="" loading="lazy" onError={thumbFallback(heroThumb, e => { e.target.style.display = "none"; })} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${s.photos?.[0]?.focal_x ?? 50}% ${s.photos?.[0]?.focal_y ?? 50}%`, position: "absolute", inset: 0, zIndex: 1 }} /> : null}
                         {!heroThumb && <NavIcon name="scissors" size={18} color={c.textMuted} />}
                       </div>
                       {/* Name + meta */}
@@ -4731,7 +4803,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                           <div key={p.id} onClick={() => setProductSel(s => ({ ...s, [p.id]: qty > 0 ? 0 : 1 }))}
                             style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 14, cursor: "pointer", background: qty > 0 ? `${accent}10` : c.bgCard, border: `1.5px solid ${qty > 0 ? accent : c.border}`, transition: "all 0.15s" }}>
                             {p.photo_url
-                              ? <img src={p.photo_url} alt="" loading="lazy" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+                              ? <img src={thumbOf(p.photo_url, 240)} onError={thumbFallback(p.photo_url)} alt="" loading="lazy" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
                               : <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="bag" size={17} color={c.textMuted} /></div>}
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontWeight: 500, fontSize: 13, color: qty > 0 ? accent : c.text }}>{prodNameOf(p)}</div>
@@ -4871,15 +4943,15 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   const bookedCount = availableTimes.filter(tt => isTimeSlotBooked(tt)).length;
                   const freeCount = totalSlots - bookedCount;
 
+                  // Geen enkele tijd = de dag is dicht (gesloten, of vandaag na
+                  // de laatste boekbare tijd). Daar komt nooit een plek vrij, dus
+                  // geen wachtlijst; die hoort alleen bij een volle dag hieronder.
                   if (totalSlots === 0) return (
                     <div style={{ textAlign: "center", padding: "40px 20px", color: c.textLabel }}>
                       <div style={{ marginBottom: 8, opacity: 0.4 }}><NavIcon name="clock" size={28} color={c.textMuted} /></div>
                       <div style={{ fontSize: 13, marginBottom: 16 }}>{t.noTimesAvailable}</div>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                         <FirstAvailableHint />
-                        {initialSalon.waitlist_enabled !== false && (
-                          <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
-                        )}
                       </div>
                     </div>
                   );
@@ -5275,7 +5347,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             ) : (
               <div style={{ padding: "16px 22px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid " + c.border }}>
                 {initialSalon.logo_url && (
-                  <img src={initialSalon.logo_url} style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", border: "1px solid " + c.inputBorder }} />
+                  <img src={thumbOf(initialSalon.logo_url, 240)} onError={thumbFallback(initialSalon.logo_url)} style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", border: "1px solid " + c.inputBorder }} />
                 )}
                 <div>
                   <div style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 400, color: c.text }}>{initialSalon.name}</div>
@@ -5298,7 +5370,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   {step === 0 && hasLocations && <>
                     <PTitle sub={t.selectLocationSub}>{t.selectLocation}</PTitle>
                     {(initialSalon.locations || []).map(loc => (
-                      <div key={loc.id} className={`service-card ${selectedLocation?.id === loc.id ? "sel" : ""}`} onClick={() => { setSelectedLocation(loc); setDate(fmt(getToday())); setTime(null); }}>
+                      <div key={loc.id} className={`service-card ${selectedLocation?.id === loc.id ? "sel" : ""}`} onClick={() => { setSelectedLocation(loc); autoDateRef.current = fmt(getToday()); setDate(autoDateRef.current); setTime(null); }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <div>
                             <div style={{ fontWeight: 500, fontSize: 14 }}>{loc.name}</div>
@@ -5402,7 +5474,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                           {(s.photos || []).length > 0 && (
                             <div className="photo-grid" style={{ marginLeft: 30 }}>
                               {s.photos.map((p, i) => (
-                                <img key={p.id || i} src={p.url || p} className="photo-thumb" loading="lazy" onClick={e => { e.stopPropagation(); setGallery({ photos: s.photos, idx: i }); }} />
+                                <img key={p.id || i} src={thumbOf(p.url || p, 240)} onError={thumbFallback(p.url || p)} className="photo-thumb" loading="lazy" onClick={e => { e.stopPropagation(); setGallery({ photos: s.photos, idx: i }); }} />
                               ))}
                             </div>
                           )}
@@ -5523,7 +5595,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                             <div key={p.id} onClick={() => setProductSel(s => ({ ...s, [p.id]: qty > 0 ? 0 : 1 }))}
                               className={`service-card ${qty > 0 ? "sel" : ""}`} style={{ padding: "10px 14px", marginBottom: 6, display: "flex", alignItems: "center", gap: 10 }}>
                               {p.photo_url
-                                ? <img src={p.photo_url} alt="" loading="lazy" style={{ width: 36, height: 36, borderRadius: 9, objectFit: "cover", flexShrink: 0 }} />
+                                ? <img src={thumbOf(p.photo_url, 240)} onError={thumbFallback(p.photo_url)} alt="" loading="lazy" style={{ width: 36, height: 36, borderRadius: 9, objectFit: "cover", flexShrink: 0 }} />
                                 : <div style={{ width: 36, height: 36, borderRadius: 9, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="bag" size={16} color={c.textMuted} /></div>}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontWeight: 500, fontSize: 12 }}>{prodNameOf(p)}</div>
@@ -5631,7 +5703,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                             <FirstAvailableHint />
-                            {initialSalon.waitlist_enabled !== false && (
+                            {/* Wachtlijst alleen op een volle dag; een dag zonder tijden is dicht. */}
+                            {availableTimes.length > 0 && initialSalon.waitlist_enabled !== false && (
                               <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
                             )}
                           </div>
@@ -5956,10 +6029,12 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   {/* Pick one or more specific days to be notified about. Seeded with
                       the day they were on; other fully-booked days are offered too. */}
                   {(() => {
+                    // Dichte dagen nooit: zelfde toets als het zaad hierboven
+                    // (waitlistDayOk), anders stond er een onzichtbare dag aangevinkt.
                     const wlCandidates = Array.from(new Set([
                       ...(date ? [date] : []),
                       ...days.filter(d => dayAvailability[fmt(d)] === "full").map(fmt),
-                    ])).sort();
+                    ])).filter(waitlistDayOk).sort();
                     return (
                       <div style={{ marginBottom: 16 }}>
                         <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
@@ -6092,7 +6167,7 @@ function GalleryLightbox({ gallery, setGallery, accent, lang, t }) {
           telefoons de viewport uit zonder scroll. */}
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 8, marginTop: 12, maxWidth: "min(92vw, 700px)", maxHeight: 128, overflowY: "auto" }} onClick={e => e.stopPropagation()}>
         {gallery.photos.map((p, i) => (
-          <img key={p.id || i} src={p.url || p} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
+          <img key={p.id || i} src={thumbOf(p.url || p, 240)} onError={thumbFallback(p.url || p)} onClick={e => { e.stopPropagation(); setGallery(g => ({...g, idx: i})); }}
             style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: `2px solid ${i === gallery.idx ? accent : "transparent"}`, opacity: i === gallery.idx ? 1 : 0.5 }} loading="lazy" alt="" />
         ))}
       </div>

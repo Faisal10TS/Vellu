@@ -3003,9 +3003,15 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     width: calc(100% + 56px); height: calc(100% + 56px);
     object-fit: cover; filter: blur(26px) saturate(1.05) brightness(0.8);
   }
+  /* Leesbaarheid op drukke foto's (Faisal 11-11): naast de verloop van boven
+     naar onder een zachte donkere vlek achter het midden, waar naam, plaats en
+     de infoline staan. Brilliant Beauty (flyer met eigen tekst) en Beauty By
+     Eydy (logo op de muur) lieten de plaatsnaam anders wegvallen. */
   .profile-hero-gradient {
     position: absolute; inset: 0;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.4) 60%, rgba(0,0,0,0.7) 100%);
+    background:
+      radial-gradient(ellipse 62% 52% at 50% 50%, rgba(0,0,0,0.34) 0%, rgba(0,0,0,0.16) 55%, rgba(0,0,0,0) 100%),
+      linear-gradient(to bottom, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.42) 60%, rgba(0,0,0,0.7) 100%);
   }
   .profile-hero-content {
     position: relative; z-index: 2; display: flex; flex-direction: column;
@@ -3014,19 +3020,28 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   }
   .profile-hero-name {
     font-family: var(--display-font, 'Cormorant Garamond', serif); font-weight: 300; color: #fff;
-    letter-spacing: 0.03em; text-shadow: 0 2px 16px rgba(0,0,0,0.5);
+    letter-spacing: 0.03em; text-shadow: 0 1px 3px rgba(0,0,0,0.45), 0 2px 18px rgba(0,0,0,0.55);
+  }
+  /* Plaatsnaam onder de naam: was 50% wit en viel op foto's weg. */
+  .profile-hero-city {
+    font-size: 14px; color: rgba(255,255,255,0.88); margin-top: 4px;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6), 0 1px 10px rgba(0,0,0,0.5);
   }
   .profile-hero-meta {
-    display: flex; align-items: center; justify-content: center; gap: 14px;
-    margin-top: 12px; font-size: 13px; color: rgba(255,255,255,0.88);
-    text-shadow: 0 1px 8px rgba(0,0,0,0.5); flex-wrap: wrap;
+    display: flex; align-items: center; justify-content: center; gap: 6px 14px;
+    margin-top: 12px; font-size: 13px; color: rgba(255,255,255,0.94);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6), 0 1px 10px rgba(0,0,0,0.5); flex-wrap: wrap;
   }
   .profile-hero-meta-item {
     display: inline-flex; align-items: center; gap: 6px;
   }
   .profile-hero-meta-sep {
-    width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,0.5);
+    width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,0.7);
+    box-shadow: 0 0 4px rgba(0,0,0,0.5);
   }
+  /* Telefoon: eerstvolgende dag op een eigen regel onder de rest. */
+  .profile-hero-meta-row { flex-basis: 100%; display: flex; justify-content: center; }
   /* Boek-knop in de hero, naast Delen (15-09). */
   .profile-hero-book {
     height: 44px; padding: 0 22px; border-radius: 8px; cursor: pointer;

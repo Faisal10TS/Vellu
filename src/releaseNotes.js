@@ -14,6 +14,40 @@
 
 export const RELEASES = [
   {
+    // 11-11 (zevende): boekingspagina-ronde, punten 1-3. De wachtlijstfix van
+    // 05-10 (42768bd) stond alleen op een zijtak; de serverhelft was wel live.
+    // Plus kleine foto's via Supabase en een leesbare bovenkant.
+    id: "2026-11-11g",
+    date: "2026-11-11",
+    title: { nl: "Je boekingspagina: sneller en duidelijker", en: "Your booking page: faster and clearer", es: "Tu página de reservas: más rápida y clara" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Na je laatste tijd van vandaag bood je boekingspagina klanten nog de wachtlijst voor vandaag aan. Nu springt de pagina naar de eerste dag met vrije tijden, en de wachtlijst staat alleen nog bij volgeboekte dagen.",
+          en: "After today's last time, your booking page still offered clients the waitlist for today. It now jumps to the first day with free times, and the waitlist only shows on fully booked days.",
+          es: "Después de tu última hora de hoy, tu página de reservas aún ofrecía la lista de espera para hoy. Ahora salta al primer día con horas libres y la lista de espera solo aparece en días completos.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Je foto's laden op de telefoon veel sneller: in kleine vakjes staat nu een kleine versie in plaats van de hele foto. Op een volle pagina scheelt dat zo'n 2 MB.",
+          en: "Your photos load much faster on phones: small spots now show a small version instead of the full photo. On a full page that saves about 2 MB.",
+          es: "Tus fotos cargan mucho más rápido en el móvil: los espacios pequeños muestran ahora una versión pequeña en vez de la foto entera. En una página completa ahorra unos 2 MB.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Bovenaan je boekingspagina zijn je plaatsnaam en de regel eronder beter te lezen op een drukke omslagfoto.",
+          en: "At the top of your booking page, your city and the line below it are easier to read on a busy cover photo.",
+          es: "Arriba en tu página de reservas, tu ciudad y la línea de debajo se leen mejor sobre una foto de portada llena de detalles.",
+        },
+      },
+    ],
+  },
+  {
     // 11-11 (zesde): het inlezen vertaalde ook in de eigen taal ("Lash lift
     // incl. tint" werd "incl. verven", "Mini facial" werd "Mini
     // gezichtsbehandeling"). Nu precies zoals op de lijst.
