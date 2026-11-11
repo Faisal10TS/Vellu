@@ -713,7 +713,9 @@ function AtHead({ title, accent, sub, tone = "bone" }) {
   const body = at < 0 ? title : (
     <>
       {title.slice(0, at)}
-      <em style={{ fontStyle: "italic", color: accentCol }}>{accent}</em>
+      {/* key: wisselt het accent (maand/jaar bij de prijzen), dan komt het
+          woord opnieuw binnen met een korte fade (.at-accent). */}
+      <em key={accent} className="at-accent" style={{ fontStyle: "italic", color: accentCol }}>{accent}</em>
       {title.slice(at + accent.length)}
     </>
   );
@@ -1118,6 +1120,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-hero-note-sub { display: block; font-size: 11px; color: ${P.textSub}; line-height: 1.3; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           .at-hero-note-meta { font-size: 9.5px; color: ${EARTH}; letter-spacing: 0.04em; white-space: nowrap; }
           @keyframes atNoteFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+          .at-accent { animation: atAccentIn 0.45s ease; }
+          @keyframes atAccentIn { from { opacity: 0; } to { opacity: 1; } }
+          @media (prefers-reduced-motion: reduce) { .at-accent { animation: none; } }
           @media (max-width: 420px) {
             .at-hero-note { width: 188px; min-width: 0; max-width: none; }
             .at-hero-note.n2 { right: max(0px, calc(50% - 202px)); }
@@ -1449,7 +1454,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               Professional espresso. ── */}
         <div style={{ background: MUSHROOM, position: "relative", zIndex: 10 }}>
         <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}`, position: "relative" }}>
-          <AtHead title={t.simplePricing} accent={lang === "nl" ? "maandprijzen" : lang === "es" ? "mensuales" : "monthly pricing"} tone="mushroom" />
+          {/* Kop volgt de schakelaar eronder: maandprijzen of jaarprijzen (Faisal 11-11). */}
+          <AtHead
+            title={billingCycle === "yearly" ? t.simplePricingYearly : t.simplePricing}
+            accent={billingCycle === "yearly"
+              ? (lang === "nl" ? "jaarprijzen" : lang === "es" ? "anuales" : "yearly pricing")
+              : (lang === "nl" ? "maandprijzen" : lang === "es" ? "mensuales" : "monthly pricing")}
+            tone="mushroom" />
           <Reveal delay={90}>
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
               <div role="radiogroup" aria-label={t.simplePricing} style={{ display: "inline-flex", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: R, padding: 4 }}>
