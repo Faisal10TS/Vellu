@@ -8,13 +8,17 @@
 //
 // HOE
 // vercel.json herschrijft /:slug naar deze functie ALLEEN als de user-agent
-// een bekende linkvoorbeeld-bot is. Mensen krijgen gewoon de SPA. Deze functie
+// een bekende linkvoorbeeld-bot of (sinds 11-11-2026) zoekmachine is
+// (Googlebot, Bingbot, ...): die kregen anders in de ruwe HTML de canonical
+// van de homepage. Mensen krijgen gewoon de SPA. Deze functie
 // haalt de echte index.html van dezelfde site op en vervangt daarin titel,
 // beschrijving, canonical en de og:/twitter:-tags door die van de salon. Er
 // is dus geen doorverwijzing: komt er toch een mens langs met zo'n
 // user-agent, dan laadt de gewone app (geen lus). Onbekende salon, Vellu's
 // eigen pagina's (/owner, /privacy, ...) of een storing: index.html
-// ongewijzigd, precies zoals nu.
+// ongewijzigd, precies zoals nu (zonder canonical; die zet de pagina zelf).
+// Adressen altijd met www: vellu.cc verwijst door naar www.vellu.cc, en daar
+// woont ook de inlogsessie (localStorage is per domein).
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://pqvovkwqkapmpibktpwb.supabase.co';
 const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY || 'sb_publishable_9a56u0YAwjJFjeQ6AGpJeg_qrzPnl0k';
@@ -34,7 +38,7 @@ function shellUrl(req) {
   // Alleen onze eigen domeinen (en Vercel-previews); nooit een willekeurige
   // Host-header volgen.
   const h = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().toLowerCase();
-  const host = (h === 'vellu.cc' || h === 'www.vellu.cc' || /^[a-z0-9-]+\.vercel\.app$/.test(h)) ? h : 'vellu.cc';
+  const host = (h === 'vellu.cc' || h === 'www.vellu.cc' || /^[a-z0-9-]+\.vercel\.app$/.test(h)) ? h : 'www.vellu.cc';
   return `https://${host}/index.html`;
 }
 
@@ -70,7 +74,7 @@ function metaFor(salon, slug) {
     ? `Reserva una cita en ${name}${city ? ` en ${city}` : ''}. Reserva online, sin comisiones.`
     : `Book an appointment at ${name}${city ? ` in ${city}` : ''}. Book online, no commission.`;
   const img = [salon.cover_image_url, salon.logo_url].find((u) => typeof u === 'string' && /^https:\/\//.test(u)) || '';
-  return { title: `${name} | Vellu`, description, url: `https://vellu.cc/${slug}`, image: img, lang };
+  return { title: `${name} | Vellu`, description, url: `https://www.vellu.cc/${slug}`, image: img, lang };
 }
 
 // og:locale volgt de taal van de beschrijving; de andere twee talen van de
@@ -116,7 +120,7 @@ function minimal(m) {
   // link (geen automatische doorverwijzing).
   const t = m ? m.title : 'Vellu';
   const d = m ? m.description : '';
-  const u = m ? m.url : 'https://vellu.cc/';
+  const u = m ? m.url : 'https://www.vellu.cc/';
   const lang = (m && m.lang) || 'nl';
   return `<!doctype html>
 <html lang="${lang}">
@@ -131,7 +135,7 @@ ${localeTags(lang).join('\n')}
 <meta property="og:url" content="${esc(u)}">
 <meta property="og:title" content="${esc(t)}">
 <meta property="og:description" content="${esc(d)}">
-<meta property="og:image" content="${esc((m && m.image) || 'https://vellu.cc/og-image-v2.png')}">
+<meta property="og:image" content="${esc((m && m.image) || 'https://www.vellu.cc/og-image-v2.png')}">
 </head>
 <body><a href="${esc(u)}">${esc(t)}</a></body>
 </html>`;

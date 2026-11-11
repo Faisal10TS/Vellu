@@ -465,7 +465,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   useSEO({
     title: lang === "nl" ? "Vellu - Beauty Booking Platform | 0% Commissie" : lang === "es" ? "Vellu - Plataforma de reservas de belleza | 0% de comisión" : "Vellu - Beauty Booking Platform | 0% Commission",
     description: lang === "nl" ? "Je eigen boekingspagina met jouw naam, jouw kleuren en jouw diensten. Vast tarief, 0% commissie." : lang === "es" ? "Tu propia página de reservas con tu nombre, tus colores y tus servicios. Precio fijo, 0% de comisión." : "Your own booking page with your name, your colors and your services. Fixed price, 0% commission.",
-    url: "https://vellu.cc/"
+    url: "https://www.vellu.cc/"
   });
   const [faqOpen, setFaqOpen] = useState(null);
   // Alle salons zoeken: klapt open onder de uitgelichte salons (11-11-2026);
@@ -601,12 +601,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     const data = {
       "@context": "https://schema.org",
       "@graph": [
-        { "@type": "Organization", "@id": "https://vellu.cc/#org", name: "Vellu", url: "https://vellu.cc/", logo: "https://vellu.cc/icon-512.png", email: "mirahventures@vellu.cc",
+        { "@type": "Organization", "@id": "https://www.vellu.cc/#org", name: "Vellu", url: "https://www.vellu.cc/", logo: "https://www.vellu.cc/icon-512.png", email: "mirahventures@vellu.cc",
           parentOrganization: { "@type": "Organization", name: "Mirah Ventures" } },
-        { "@type": "WebSite", "@id": "https://vellu.cc/#site", url: "https://vellu.cc/", name: "Vellu", inLanguage: lang, publisher: { "@id": "https://vellu.cc/#org" } },
+        { "@type": "WebSite", "@id": "https://www.vellu.cc/#site", url: "https://www.vellu.cc/", name: "Vellu", inLanguage: lang, publisher: { "@id": "https://www.vellu.cc/#org" } },
         { "@type": "SoftwareApplication", name: "Vellu", applicationCategory: "BusinessApplication", operatingSystem: "Web, iOS, Android",
           description: lang === "nl" ? "Boekingssysteem voor salons: eigen boekingspagina, herinneringen, kassa en facturen. Vast tarief, 0% commissie." : lang === "es" ? "Sistema de reservas para salones: página de reservas propia, recordatorios, caja y facturas. Precio fijo, 0% de comisión." : "Booking system for salons: your own booking page, reminders, till and invoices. Fixed price, 0% commission.",
-          publisher: { "@id": "https://vellu.cc/#org" },
+          publisher: { "@id": "https://www.vellu.cc/#org" },
           offers: plans.map((p) => ({ "@type": "Offer", name: p.name, price: String(p.price), priceCurrency: "EUR", category: "subscription",
             priceSpecification: { "@type": "UnitPriceSpecification", price: String(p.price), priceCurrency: "EUR", unitText: "MONTH" } })) },
         { "@type": "FAQPage", mainEntity: faqs.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })) },

@@ -70,7 +70,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|Slackbot|LinkedInBot|TelegramBot|Discordbot|Pinterestbot|SkypeUriPreview).*"
+          "value": ".*(facebookexternalhit|Facebot|WhatsApp|Twitterbot|Slackbot|LinkedInBot|TelegramBot|Discordbot|Pinterestbot|SkypeUriPreview|Googlebot|Google-InspectionTool|bingbot|Applebot|DuckDuckBot).*"
         }
       ],
       "destination": "/api/og?slug=:slug"

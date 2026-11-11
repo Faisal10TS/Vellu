@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
   const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY;
-  const baseUrl = "https://vellu.cc";
+  const baseUrl = "https://www.vellu.cc";
   const today = new Date().toISOString().split("T")[0];
 
   let profiles = [];

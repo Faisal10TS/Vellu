@@ -64,7 +64,7 @@ function PrivacyPage({ lang, setLang }) {
     description: lang === "nl" ? "Hoe Vellu persoonsgegevens verwerkt: welke gegevens, waarom, hoe lang, met wie we ze delen en welke rechten je hebt."
       : lang === "es" ? "Cómo trata Vellu los datos personales: qué datos, por qué, durante cuánto tiempo, con quién los compartimos y cuáles son tus derechos."
       : "How Vellu processes personal data: what we collect, why, for how long, who we share it with and what your rights are.",
-    url: "https://vellu.cc/privacy"
+    url: "https://www.vellu.cc/privacy"
   });
   const content = lang === "nl" ? {
     title: "Privacybeleid",
@@ -127,7 +127,7 @@ function TermsPage({ lang, setLang }) {
     description: lang === "nl" ? "De algemene voorwaarden van Vellu, het boekingsplatform voor beautyprofessionals: abonnementen, verplichtingen, aansprakelijkheid en opzeggen."
       : lang === "es" ? "Los términos del servicio de Vellu, la plataforma de reservas para profesionales de la belleza: suscripciones, obligaciones, responsabilidad y baja."
       : "The terms of service of Vellu, the booking platform for beauty professionals: subscriptions, obligations, liability and cancellation.",
-    url: "https://vellu.cc/terms"
+    url: "https://www.vellu.cc/terms"
   });
   const content = lang === "nl" ? {
     title: "Algemene Voorwaarden",
@@ -196,7 +196,7 @@ function ContactPage({ lang, setLang }) {
     description: lang === "nl" ? "Over Vellu en contact: mail info@vellu.cc. Bedrijfsgegevens van Mirah Ventures (KVK 42045867)."
       : lang === "es" ? "Sobre Vellu y cómo contactarnos: escribe a info@vellu.cc. Datos de la empresa Mirah Ventures (KVK 42045867)."
       : "About Vellu and how to reach us: email info@vellu.cc. Company details of Mirah Ventures (CoC 42045867).",
-    url: "https://vellu.cc/contact"
+    url: "https://www.vellu.cc/contact"
   });
   // Eigen Spaanse versie (L3-10): dit is geen juridische tekst maar uitleg,
   // contact en de verplichte bedrijfsgegevens.
@@ -326,7 +326,7 @@ function DpaPage({ lang, setLang }) {
     description: lang === "nl" ? "De verwerkersovereenkomst tussen Vellu en salons: welke gegevens we verwerken, sub-verwerkers, beveiliging en de meldplicht bij datalekken."
       : lang === "es" ? "El acuerdo de tratamiento de datos entre Vellu y los salones: qué datos tratamos, subencargados, seguridad y notificación de brechas."
       : "The data processing agreement between Vellu and salons: the data we process, sub-processors, security and breach notification.",
-    url: "https://vellu.cc/dpa"
+    url: "https://www.vellu.cc/dpa"
   });
   const content = lang === "nl" ? {
     title: "Verwerkingsovereenkomst",
@@ -410,7 +410,7 @@ function GoogleIntegrationPage({ lang, setLang }) {
     description: lang === "nl" ? "Hoe Vellu je Google Agenda gebruikt: welke toestemming, wat er gebeurt bij boeken, wijzigen en annuleren, en hoe je de koppeling intrekt."
       : lang === "es" ? "Cómo usa Vellu tu Google Calendar: el permiso que pide, qué pasa al reservar, cambiar o cancelar, y cómo desconectarlo."
       : "How Vellu uses your Google Calendar: the permission it requests, what happens on booking, changes and cancellation, and how to disconnect.",
-    url: "https://vellu.cc/integrations/google"
+    url: "https://www.vellu.cc/integrations/google"
   });
 
   const content = lang === "nl" ? {

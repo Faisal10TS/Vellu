@@ -378,10 +378,12 @@ function useSEO({ title, description, ogImage, url }) {
     if (title) { setMeta("og:title", title); setMeta("twitter:title", title); }
     if (ogImage) { setMeta("og:image", ogImage); setMeta("twitter:image", ogImage); }
     if (url) { setMeta("og:url", url); }
-    // Canonical volgt de pagina. index.html zet hem vast op https://vellu.cc/,
+    // Canonical volgt de pagina. index.html zette hem vast op de homepage,
     // en daarmee verklaarde elke salon- en juridische pagina zichzelf een
-    // kopie van de homepage (Google vouwde ze daarin op). Bij het verlaten van
-    // de pagina gaat de vorige waarde terug.
+    // kopie van de homepage (Google vouwde ze daarin op). Sinds 11-11-2026
+    // staat er in index.html geen canonical meer; deze hook maakt hem aan.
+    // Altijd met www (https://www.vellu.cc/...): vellu.cc verwijst daarheen.
+    // Bij het verlaten van de pagina gaat de vorige waarde terug.
     let canon = null;
     let prevCanon = null;
     let createdCanon = false;

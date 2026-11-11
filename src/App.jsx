@@ -1005,7 +1005,7 @@ function SalonRoute({ lang, setLang }) {
     ogImage: salon?.cover_image_url || salon?.logo_url || undefined,
     // De canonieke link is altijd de echte slug, ook als de pagina via een
     // oude of anders geschreven link werd geopend.
-    url: `https://vellu.cc/${salon?.slug || slug}`
+    url: `https://www.vellu.cc/${salon?.slug || slug}`
   });
 
   if (loading) return (
