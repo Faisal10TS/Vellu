@@ -18,7 +18,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
-  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, fmtAmt, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
+  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, fmtAmt, variantFromPrice, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf, staffScopedRow, partLabelOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, isOpenReceivable, receivableKeyOf, ageLabel, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
   useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars, fetchAllRows,
@@ -18392,7 +18392,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const extrasCount = (s.extras || []).length;
                   const photoCount = (s.photos || []).length;
                   const heroPhoto = s.photos?.[0]?.url || s.photos?.[0];
-                  const minVariantPrice = variantCount > 0 ? Math.min(...s.variants.map(v => parseFloat(v.price))) : null;
+                  const minVariantPrice = variantCount > 0 ? variantFromPrice(s.variants) : null;
                   const displayPrice = minVariantPrice !== null ? `${t.from} ${fmtAmt(cur, minVariantPrice)}` : `${fmtAmt(cur, parseFloat(s.price))}`;
 
                   return (

@@ -1160,6 +1160,18 @@ function fmtAmt(sym, n) {
   return (sym || "") + (neg ? "-" : "") + int.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + dec;
 }
 
+// "Vanaf"-prijs van een dienst met varianten: de laagste prijs, maar zonder
+// varianten van €0. Beauty By Eydy (11-11-2026) had bij drie diensten een
+// variant "Extra time" van €0, en de boekingspagina toonde "Vanaf $0,00"
+// terwijl de behandeling gewoon geld kost. Alleen als élke variant €0 is,
+// blijft het 0. Eén plek voor boekingspagina, eigenaars- en medewerkersapp.
+function variantFromPrice(variants) {
+  const prices = (variants || []).map((v) => parseFloat(v.price)).filter((p) => Number.isFinite(p));
+  if (!prices.length) return 0;
+  const paid = prices.filter((p) => p > 0);
+  return Math.min(...(paid.length ? paid : prices));
+}
+
 // ─── TAX RULES (per jurisdictie) ─────────────────────────────
 // De ENIGE plek waar een belastingtarief mag ontstaan. Gekeyed op country_code,
 // of op profiles.tax_region wanneer één landcode meerdere stelsels bevat: BQ
@@ -3942,7 +3954,7 @@ export {
   TAX_RULES, TAX_REGIONS_BY_COUNTRY, taxRuleFor, resolveTax,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded,
   makeCSS,
-  Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable, planMatrix,
+  Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable, planMatrix, variantFromPrice,
   Linkify,
   RESERVED_SLUGS,
   supabase,

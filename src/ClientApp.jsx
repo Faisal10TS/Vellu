@@ -11,7 +11,7 @@ import {
   getToday as deviceNow, fmt, parseDate, getDays, salonNow, tzFor, localToUtc, fetchAllRows,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
-  getPageFont, ensurePageFontLoaded, curSym, fmtAmt, Linkify, readableAccent, onAccentInk, blockAppliesOn, EmailTypoHint
+  getPageFont, ensurePageFontLoaded, curSym, fmtAmt, variantFromPrice, Linkify, readableAccent, onAccentInk, blockAppliesOn, EmailTypoHint
 } from "./shared.jsx";
 
 // Zoekterm voor de kaart, "Open in Maps" en de route na het boeken
@@ -3410,7 +3410,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     {/* Prijs boven de Boek-knop, rechts uitgelijnd (mockup 15-09). */}
                     <div className="profile-service-side">
                       <div className="profile-service-price">
-                        {s.variants?.length > 0 ? <><span className="profile-service-from">{t.from}</span>{fmtAmt(cur, Math.min(...s.variants.map(v => parseFloat(v.price))))}</> : `${fmtAmt(cur, parseFloat(s.price))}`}
+                        {s.variants?.length > 0 ? <><span className="profile-service-from">{t.from}</span>{fmtAmt(cur, variantFromPrice(s.variants))}</> : `${fmtAmt(cur, parseFloat(s.price))}`}
                       </div>
                       <button type="button" className="profile-service-book-btn" aria-label={`${t.book}: ${svcName(s)}`} onClick={e => { e.stopPropagation(); enterBooking(s); }}>
                         {t.book}
@@ -4474,7 +4474,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   // álle gekozen extra's uitvoert is nog kiesbaar.
                   const staffPickable = staffForService.filter(m => (item?.extras || []).every(e => extraAllowedFor(e, m.id)));
                   const heroThumb = s.photos?.[0]?.url || s.photos?.[0];
-                  const displayPrice = s.variants?.length > 0 ? `${t.from} ${fmtAmt(cur, Math.min(...s.variants.map(v => parseFloat(v.price))))}` : `${fmtAmt(cur, parseFloat(s.price))}`;
+                  const displayPrice = s.variants?.length > 0 ? `${t.from} ${fmtAmt(cur, variantFromPrice(s.variants))}` : `${fmtAmt(cur, parseFloat(s.price))}`;
                   return (
                   <div key={s.id} data-svc={s.id} style={{ marginBottom: 8 }}>
                     {/* Service card — clean, thumbnail-based */}
@@ -5359,7 +5359,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                               </div>
                             </div>
                             <div style={{ fontFamily: displayFont, fontSize: 20, color: c.text }}>
-                              {s.variants?.length > 0 ? `${t.from} ${fmtAmt(cur, Math.min(...s.variants.map(v => parseFloat(v.price))))}` : `${fmtAmt(cur, parseFloat(s.price))}`}
+                              {s.variants?.length > 0 ? `${t.from} ${fmtAmt(cur, variantFromPrice(s.variants))}` : `${fmtAmt(cur, parseFloat(s.price))}`}
                             </div>
                           </div>
                           {(s.photos || []).length > 0 && (

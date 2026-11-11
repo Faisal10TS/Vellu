@@ -14,6 +14,23 @@
 
 export const RELEASES = [
   {
+    // 11-11 (derde): Beauty By Eydy toonde "Vanaf $0,00" door een variant
+    // "Extra time" van 0.
+    id: "2026-11-11c",
+    date: "2026-11-11",
+    title: { nl: "Juiste vanaf-prijs", en: "Correct 'from' price", es: "Precio 'desde' correcto" },
+    items: [
+      {
+        kind: "fix", audience: ["owner", "staff"],
+        text: {
+          nl: "Heeft een behandeling een variant van €0 (bijvoorbeeld \"Extra tijd\")? Die telt niet meer mee voor de vanaf-prijs, dus je boekingspagina toont niet langer \"Vanaf €0,00\".",
+          en: "Does a treatment have a €0 variant (for example \"Extra time\")? It no longer counts for the 'from' price, so your booking page no longer shows \"From €0,00\".",
+          es: "¿Un tratamiento tiene una variante de €0 (por ejemplo \"Tiempo extra\")? Ya no cuenta para el precio 'desde', así que tu página de reservas ya no muestra \"Desde €0,00\".",
+        },
+      },
+    ],
+  },
+  {
     // 11-11 (tweede): klanten importeren nam alleen CSV; de exports van andere
     // systemen zijn vaak Excel.
     id: "2026-11-11b",

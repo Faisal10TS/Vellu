@@ -9,7 +9,7 @@ import {
   getPaymentLinkWithAmount,
   fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, fmtAmt, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, fmtAmt, variantFromPrice, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, getWhatsAppRefundMsg, partPricesOf, partLabelOf, useDashboardScrollbars,
   salonNow, tzFor, localToUtc, fetchAllRows,
   EmailTypoHint,
@@ -3425,7 +3425,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                 </div>
                               </div>
                               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 400, color: accent, flexShrink: 0, lineHeight: 1, whiteSpace: "nowrap" }}>
-                                {varCount > 0 ? `${t.from} ${fmtAmt(cur, Math.min(...s.variants.map(v => parseFloat(v.price))))}` : `${fmtAmt(cur, parseFloat(s.price))}`}
+                                {varCount > 0 ? `${t.from} ${fmtAmt(cur, variantFromPrice(s.variants))}` : `${fmtAmt(cur, parseFloat(s.price))}`}
                               </div>
                               <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                                 <button onClick={() => { setEditingSvc(s.id); setEditSvcForm({ name_nl: s.name_nl, name_en: s.name_en || "", price: s.price, duration: s.duration }); setExpandedStaffSvc(null); }}
