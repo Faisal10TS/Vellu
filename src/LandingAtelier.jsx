@@ -772,7 +772,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 // bar = kleur van de bovenrand van de screenshot (de statusbalk
                 // loopt daarin door; gemeten 11-11-2026, bij een nieuwe
                 // screenshot opnieuw meten).
-                { slug: "brilliantbeauty", bar: "#0c0b09", name: "Brilliant Beauty", place: "Kralendijk · Bonaire", what: { nl: "Vlechten · Acrylnagels", en: "Braids · Acrylic nails", es: "Trenzas · Uñas acrílicas" } },
+                // Beauty By Eydy i.p.v. Brilliant Beauty (Faisal 11-11).
+                { slug: "beautybyeydy", bar: "#faf9f7", name: "Beauty By Eydy", place: "Kralendijk · Bonaire", what: { nl: "Polygel · BIAB · Manicure & pedicure", en: "Polygel · BIAB · Manicure & pedicure", es: "Polygel · BIAB · Manicura y pedicura" } },
                 { slug: "ttnbdenhaag", bar: "#faf9f7", name: "TTNB Den Haag", place: lang === "en" ? "The Hague · Netherlands" : lang === "es" ? "La Haya · Países Bajos" : "Den Haag · Nederland", what: { nl: "Acryl & polygel · BIAB · Pedicures", en: "Acrylic & polygel · BIAB · Pedicures", es: "Acrílico y polygel · BIAB · Pedicuras" } },
                 { slug: "mywhimsandmorebv", bar: "#faf9f7", name: "My Whims and More", place: "Kralendijk · Bonaire", what: { nl: "Gezichtsbehandelingen · Massage · Nagels", en: "Facials · Massage · Nails", es: "Faciales · Masaje · Uñas" } },
               ].map((s, i) => (
