@@ -26,7 +26,7 @@ import SupportChat from "./SupportChat.jsx";
 import { supabase } from "./supabase.js";
 import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS, rememberRef, useReferralPromo, rewardLabel, promoEndLabel, planMatrix } from "./shared.jsx";
 import {
-  SalonFinder, HeroPhoneMockup, StickyStartPill, ArrowIcon,
+  SalonFinder, StickyStartPill, ArrowIcon,
   Reveal, KineticLine, HeroEnter, Marquee, TweenedNumber,
   ParallaxLayer, CursorRing, ScrollProgress, glowMove,
 } from "./LandingScreen.jsx";
@@ -37,6 +37,119 @@ const { ESPRESSO, EARTH, MUSHROOM, PUTTY, BONE } = AT;
 const INK = ESPRESSO;
 const ESPRESSO_DEEP = AT.DEEP;
 const P = AT_COLORS;
+
+// Nieuwe hero-telefoon (11-11-2026, homepage-review: "de hero toont de
+// backoffice, niet het resultaat"). In de telefoon staat nu de boekingspagina
+// die de klant van de salon ziet (de demosalon Bloom Studio, zelfde diensten
+// en prijzen als vellu.cc/bloomstudio, waar de link eronder heen gaat), met
+// eromheen drie kaartjes van wat Vellu vanzelf doet: een nieuwe boeking, de
+// herinnering, de factuur. Alles is HTML in plaats van screenshots: scherp op
+// elk scherm, geen afbeeldingen om te laden (de oude telefoon draaide zeven
+// JPG's rond, met een chatknop die in de screenshot zelf zat), en per taal.
+// De pagina wordt op echte maat (390 px breed) opgebouwd en daarna verkleind,
+// zodat de verhoudingen kloppen met de echte boekingspagina. Geen sterren of
+// reviewcijfers: dat zouden verzonnen cijfers zijn.
+const HERO_SCREEN_W = 390, HERO_SCREEN_H = 848, HERO_PHONE_INNER = 254;
+function AtHeroPhone({ lang, ready }) {
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  const services = [
+    { icon: "sparkle", name: L("Gel manicure", "Gel manicure", "Manicura en gel"), min: 45, price: "€38,00" },
+    { icon: "diamond", name: L("BIAB nieuwe set", "BIAB new set", "BIAB set nuevo"), min: 75, price: "€52,00" },
+    { icon: "eye", name: "Lash lift", min: 60, price: "€49,00" },
+    { icon: "star2", name: L("Brow shaping", "Brow shaping", "Diseño de cejas"), min: 20, price: "€18,00" },
+  ];
+  const book = L("Boek", "Book", "Reservar");
+  const scale = HERO_PHONE_INNER / HERO_SCREEN_W;
+  const notes = [
+    { cls: "n1", icon: "calendar", title: L("Nieuwe boeking", "New booking", "Nueva reserva"), sub: L("Naomi · BIAB nieuwe set", "Naomi · BIAB new set", "Naomi · BIAB set nuevo"), meta: L("do 14:30", "Thu 14:30", "jue 14:30"), delay: 900 },
+    { cls: "n2", icon: "send", title: L("Herinnering verstuurd", "Reminder sent", "Recordatorio enviado"), sub: L("Sophie · morgen 10:00", "Sophie · tomorrow 10:00", "Sophie · mañana 10:00"), meta: L("automatisch", "automatic", "automático"), delay: 1150 },
+    { cls: "n3", icon: "facturen", title: L("Factuur verstuurd", "Invoice sent", "Factura enviada"), sub: L("Naomi · €52,00", "Naomi · €52,00", "Naomi · €52,00"), meta: L("na afrekenen", "at checkout", "al cobrar"), delay: 1400 },
+  ];
+  return (
+    <div className="at-hero-phone" style={{ position: "relative", display: "flex", justifyContent: "center", padding: "14px 0 18px" }}>
+      <div aria-hidden="true" style={{ position: "absolute", inset: "-12% -8%", background: `radial-gradient(56% 50% at 50% 44%, ${MUSHROOM}40 0%, transparent 64%)`, pointerEvents: "none" }} />
+      {/* Toestel */}
+      <div style={{ position: "relative", width: HERO_PHONE_INNER + 22, borderRadius: 50, padding: 11, background: "linear-gradient(140deg, #6a6a72 0%, #23232a 22%, #0e0e11 58%, #4a4a53 100%)", boxShadow: `0 52px 92px -30px rgba(40,30,20,0.7), 0 0 84px -20px ${MUSHROOM}66, inset 0 1.6px 0 rgba(255,255,255,0.22), inset 0 -1.4px 2px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.10)` }}>
+        <div aria-hidden="true" style={{ position: "absolute", left: -2, top: 116, width: 3, height: 24, borderRadius: 3, background: "linear-gradient(#2b2b30, #111)" }} />
+        <div aria-hidden="true" style={{ position: "absolute", left: -2, top: 152, width: 3, height: 42, borderRadius: 3, background: "linear-gradient(#2b2b30, #111)" }} />
+        <div aria-hidden="true" style={{ position: "absolute", right: -2, top: 176, width: 3, height: 62, borderRadius: 3, background: "linear-gradient(#2b2b30, #111)" }} />
+        <div role="img" aria-label={L("Voorbeeld van een Vellu-boekingspagina", "Example of a Vellu booking page", "Ejemplo de una página de reservas de Vellu")}
+          style={{ position: "relative", width: HERO_PHONE_INNER, height: HERO_SCREEN_H * scale, borderRadius: 39, overflow: "hidden", background: "#F7F4EF" }}>
+          <div aria-hidden="true" style={{ position: "absolute", inset: 0, background: "linear-gradient(153deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.02) 20%, transparent 40%)", pointerEvents: "none", zIndex: 6 }} />
+          {/* Boekingspagina op ware grootte, verkleind */}
+          <div aria-hidden="true" style={{ position: "absolute", top: 0, left: 0, width: HERO_SCREEN_W, height: HERO_SCREEN_H, transform: `scale(${scale})`, transformOrigin: "0 0", fontFamily: "'Jost',sans-serif", color: "#2B2420" }}>
+            {/* Statusbalk */}
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 48, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 30px", zIndex: 3, color: BONE }}>
+              <span style={{ fontSize: 16, fontWeight: 600 }}>9:41</span>
+              <div style={{ position: "absolute", top: 11, left: "50%", transform: "translateX(-50%)", width: 118, height: 34, borderRadius: 100, background: "#000" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 2 }}>{[5, 8, 11, 14].map((h) => <span key={h} style={{ width: 3.5, height: h, borderRadius: 1, background: BONE }} />)}</div>
+                <div style={{ width: 27, height: 13, borderRadius: 4, border: `1.5px solid ${BONE}aa`, padding: 2, boxSizing: "border-box" }}><div style={{ width: "72%", height: "100%", borderRadius: 2, background: BONE }} /></div>
+              </div>
+            </div>
+            {/* Omslag */}
+            <div style={{ position: "relative", height: 330, background: `radial-gradient(70% 60% at 78% 18%, ${MUSHROOM}88 0%, transparent 60%), radial-gradient(60% 70% at 10% 90%, #3E3226 0%, transparent 70%), linear-gradient(165deg, #B39C7C 0%, ${EARTH} 46%, ${ESPRESSO} 100%)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: 34, textAlign: "center", color: BONE }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 40, fontWeight: 400, letterSpacing: "0.01em" }}>Bloom Studio</div>
+              <div style={{ fontSize: 13, letterSpacing: "0.26em", textTransform: "uppercase", opacity: 0.82, marginTop: 4 }}>Amsterdam</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 14, marginTop: 16, opacity: 0.95 }}>
+                <NavIcon name="clock" size={14} color={BONE} />
+                <span>{L("Eerstvolgend", "Next available", "Próxima disponibilidad")} <b style={{ fontWeight: 600 }}>{L("Vandaag 15:00", "Today 15:00", "Hoy 15:00")}</b></span>
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+                <span style={{ padding: "13px 22px", borderRadius: 9, background: BONE, color: ESPRESSO, fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>{book}</span>
+                <span style={{ padding: "13px 18px", borderRadius: 9, border: `1px solid ${BONE}88`, color: BONE, fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", display: "inline-flex", alignItems: "center", gap: 7 }}><NavIcon name="share" size={14} color={BONE} />{L("Delen", "Share", "Compartir")}</span>
+              </div>
+            </div>
+            {/* Logo over de rand */}
+            <div style={{ position: "absolute", top: 330 - 34, left: "50%", transform: "translateX(-50%)", width: 68, height: 68, borderRadius: "50%", background: "#FBF9F5", border: "3px solid #F7F4EF", boxShadow: "0 8px 18px -8px rgba(40,30,20,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: 30, color: EARTH }}>B</div>
+            {/* Behandelingen */}
+            <div style={{ padding: "52px 22px 0" }}>
+              <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 14 }}>{L("Behandelingen", "Services", "Servicios")}</div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 14, whiteSpace: "nowrap" }}>
+                {[L("Alle behandelingen", "All treatments", "Todos"), L("Nagels", "Nails", "Uñas"), "Brows & Lashes"].map((ch, i) => (
+                  <span key={i} style={{ padding: "9px 14px", borderRadius: 9, fontSize: 13, fontWeight: i === 0 ? 600 : 500, background: i === 0 ? EARTH : "#FBF9F5", color: i === 0 ? BONE : "#4A3F33", border: i === 0 ? "none" : "1px solid #E3DCD0" }}>{ch}</span>
+                ))}
+              </div>
+              {services.map((s, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 13, padding: "12px 14px", marginBottom: 10, borderRadius: 13, background: "#F1ECE4", border: "1px solid #E3DCD0", boxShadow: "0 10px 18px -14px rgba(40,30,20,0.35)" }}>
+                  <span style={{ width: 46, height: 46, borderRadius: 9, border: "1px solid #DCD3C5", background: "#F7F3EC", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name={s.icon} size={19} color={EARTH} /></span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{s.name}</div>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#6B5E4E", border: "1px solid #DCD3C5", borderRadius: 6, padding: "3px 8px" }}><NavIcon name="clock" size={11} color="#6B5E4E" />{s.min} min</span>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 19, marginBottom: 6 }}>{s.price}</div>
+                    <span style={{ display: "inline-block", padding: "7px 12px", borderRadius: 7, background: EARTH, color: BONE, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>{book}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Vaste boekknop onderaan */}
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "14px 18px 26px", background: "linear-gradient(to top, #F7F4EF 70%, rgba(247,244,239,0))" }}>
+              <div style={{ height: 52, borderRadius: 12, background: EARTH, color: BONE, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>{book}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* Wat Vellu vanzelf doet */}
+      {notes.map((n) => (
+        <div key={n.cls} className={`at-hero-note ${n.cls}`} data-hero-note
+          style={{ opacity: ready ? 1 : 0, transform: ready ? "none" : "translateY(12px)", transition: `opacity 0.7s ease ${n.delay}ms, transform 0.8s cubic-bezier(0.22, 1, 0.36, 1) ${n.delay}ms` }}>
+          <div className="at-hero-note-card">
+            <span className="at-hero-note-ico"><NavIcon name={n.icon} size={15} color={EARTH} /></span>
+            <span style={{ minWidth: 0, flex: 1 }}>
+              <span className="at-hero-note-head">
+                <span className="at-hero-note-title">{n.title}</span>
+                <span className="at-hero-note-meta">{n.meta}</span>
+              </span>
+              <span className="at-hero-note-sub">{n.sub}</span>
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // Plannen vergelijken (11-11-2026, Faisal: "can u also add a feature where u
 // can compare the both of them"). Knop onder de prijskaarten; open = tabel per
@@ -436,6 +549,29 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-quote-card { height: 100%; box-sizing: border-box; background: ${P.bgCard}; border: 1px solid ${PUTTY}; border-radius: 16px; padding: 22px 22px 20px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.5), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
           .at-quote-card:hover { transform: translateY(-5px); box-shadow: 0 34px 54px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); }
           @media (prefers-reduced-motion: reduce) { .at-quote-card, .at-quote-card:hover { transform: none; } }
+          /* Hero-kaartjes rond de telefoon (AtHeroPhone). Telefoon = 276 px breed
+             en gecentreerd; de kaartjes steken er half overheen. max()/min()
+             houden ze binnen de kolom op een smal scherm. */
+          .at-hero-note { position: absolute; width: 222px; z-index: 4; }
+          .at-hero-note.n1 { top: 8px; left: max(0px, calc(50% - 138px - 84px)); }
+          .at-hero-note.n2 { top: 252px; left: min(calc(100% - 222px), calc(50% + 138px - 124px)); }
+          .at-hero-note.n3 { top: 512px; left: max(0px, calc(50% - 138px - 66px)); }
+          .at-hero-note-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: #FBF8F3; border: 1px solid ${PUTTY}; box-shadow: 0 20px 36px -18px rgba(69,58,43,0.5), 0 2px 5px rgba(69,58,43,0.07); text-align: left; animation: atNoteFloat 6s ease-in-out infinite; }
+          .at-hero-note.n2 .at-hero-note-card { animation-delay: -2s; }
+          .at-hero-note.n3 .at-hero-note-card { animation-delay: -4s; }
+          .at-hero-note-ico { width: 32px; height: 32px; border-radius: 9px; background: ${EARTH}1a; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+          .at-hero-note-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+          .at-hero-note-title { font-size: 12px; font-weight: 600; color: ${INK}; line-height: 1.25; white-space: nowrap; }
+          .at-hero-note-sub { display: block; font-size: 11px; color: ${P.textSub}; line-height: 1.3; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .at-hero-note-meta { font-size: 9.5px; color: ${EARTH}; letter-spacing: 0.04em; white-space: nowrap; }
+          @keyframes atNoteFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+          @media (max-width: 420px) {
+            .at-hero-note { width: 188px; }
+            .at-hero-note.n2 { left: min(calc(100% - 188px), calc(50% + 138px - 124px)); }
+            .at-hero-note-card { padding: 8px 10px; gap: 8px; }
+            .at-hero-note-meta { display: none; }
+          }
+          @media (prefers-reduced-motion: reduce) { .at-hero-note-card { animation: none; } }
           .at-cmp-row { display: grid; grid-template-columns: minmax(0, 1fr) 104px 120px; align-items: center; }
           @media (max-width: 560px) { .at-cmp-row { grid-template-columns: minmax(0, 1fr) 70px 92px; } .at-cmp-plan { font-size: 9.5px !important; letter-spacing: 0.04em !important; } .at-cmp-price { font-size: 16px !important; } }
           .at-price-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
@@ -577,9 +713,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </div>
             <HeroEnter ready={heroReady} delay={460}>
               <ParallaxLayer speed={-0.035}>
-                {/* Telefoon vrijstaand en rechtop, zoals op de andere versies —
-                    geen sokkelpaneel, geen rotatie (feedback 27-08). */}
-                <HeroPhoneMockup lang={lang} c={P} accent={MUSHROOM} />
+                {/* Telefoon vrijstaand en rechtop (feedback 27-08), sinds
+                    11-11-2026 met de boekingspagina erin i.p.v. het dashboard. */}
+                <AtHeroPhone lang={lang} ready={heroReady} />
                 <div style={{ textAlign: "center", marginTop: 2 }}>
                   <button onClick={() => navigate("/bloomstudio")}
                     style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: INK, borderBottom: `1px solid ${EARTH}`, padding: "6px 2px" }}>
