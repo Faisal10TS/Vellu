@@ -696,27 +696,35 @@ function AtPlanCompare({ lang, yearly, onStart, startLabel }) {
   );
 }
 
-// Sectiekop: gecentreerde serif-titel met een korte lijn die zich uittekent
-// (nummers en streepje verwijderd op Faisals verzoek, 27-08). `tone` volgt de
-// band: bone (canvas), putty (lichte band), earth (rijke band, titel in bone)
-// of mushroom (FAQ-band, verdiept espresso).
-function AtHead({ title, sub, tone = "bone" }) {
+// Sectiekop: gecentreerde serif-titel (nummers en streepje verwijderd op
+// Faisals verzoek, 27-08). Sinds 11-11-2026 ook geen lijntje meer onder de
+// titel ("ziet er AI-achtig uit"): in plaats daarvan staat één woord of stukje
+// cursief in een accenttint (`accent`), net als "Jouw omzet." in de hero.
+// `tone` volgt de band: bone (canvas), putty (lichte band), earth (rijke
+// band, titel in bone) of mushroom (prijzenband, verdiept espresso); de
+// accenttint is per band gekozen zodat hij leesbaar blijft.
+function AtHead({ title, accent, sub, tone = "bone" }) {
   const onEarth = tone === "earth";
   const onMush = tone === "mushroom";
   const titleCol = onEarth ? BONE : onMush ? ESPRESSO_DEEP : INK;
+  const accentCol = onEarth ? PUTTY : onMush ? ESPRESSO : EARTH;
   const subCol = onEarth ? `${BONE}e6` : onMush ? ESPRESSO_DEEP : tone === "putty" ? "#5f5240" : P.textLabel;
-  const rule = onEarth ? `${BONE}66` : onMush ? `${ESPRESSO_DEEP}66` : EARTH;
+  const at = accent ? String(title).indexOf(accent) : -1;
+  const body = at < 0 ? title : (
+    <>
+      {title.slice(0, at)}
+      <em style={{ fontStyle: "italic", color: accentCol }}>{accent}</em>
+      {title.slice(at + accent.length)}
+    </>
+  );
   return (
     <div style={{ textAlign: "center", marginBottom: 42 }}>
       <Reveal from="translateY(14px)" duration={0.55}>
-        <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(30px, 5.4vw, 46px)", fontWeight: 300, lineHeight: 1.1, color: titleCol, letterSpacing: "0.01em" }}>{title}</h2>
-      </Reveal>
-      <Reveal delay={140} from="scaleX(0)" duration={0.8}>
-        <div style={{ width: 56, height: 1, background: `linear-gradient(90deg, transparent, ${rule}, transparent)`, margin: "16px auto 0", transformOrigin: "center" }} />
+        <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(30px, 5.4vw, 46px)", fontWeight: 300, lineHeight: 1.1, color: titleCol, letterSpacing: "0.01em" }}>{body}</h2>
       </Reveal>
       {sub && (
-        <Reveal delay={200}>
-          <div style={{ fontSize: 13, color: subCol, lineHeight: 1.65, maxWidth: 480, margin: "14px auto 0" }}>{sub}</div>
+        <Reveal delay={160}>
+          <div style={{ fontSize: 13, color: subCol, lineHeight: 1.65, maxWidth: 480, margin: "16px auto 0" }}>{sub}</div>
         </Reveal>
       )}
     </div>
@@ -1316,7 +1324,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             hun eigen categorieën. */}
         <div id="find-salon-section" style={{ background: PUTTY, position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(40px, 6vw, 64px) ${pad} clamp(40px, 6vw, 64px)` }}>
-            <AtHead title={lang === "nl" ? "Salons in de spotlight" : lang === "es" ? "Salones destacados" : "Salons in the spotlight"}
+            <AtHead title={lang === "nl" ? "Salons in de spotlight" : lang === "es" ? "Salones destacados" : "Salons in the spotlight"} accent={lang === "es" ? "destacados" : "spotlight"}
               sub={lang === "nl" ? "Getalenteerde salons waar je meteen kunt boeken, elk op hun eigen pagina. Neem een kijkje en boek je volgende afspraak." : lang === "es" ? "Salones con talento donde puedes reservar al momento, cada uno en su propia página. Échales un vistazo y reserva tu próxima cita." : "Talented salons you can book with right away, each on their own page. Take a look and book your next appointment."} tone="putty" />
             <div className="at-show-row">
               {[
@@ -1392,7 +1400,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* ── 03 · HOE HET WERKT — terug op bone, redactionele rijen. ── */}
         <div id="how-it-works" style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(50px, 8vw, 84px) ${pad} 0`, position: "relative", zIndex: 10 }}>
-          <AtHead title={t.liveIn3} />
+          <AtHead title={t.liveIn3} accent={lang === "nl" ? "live" : lang === "es" ? "En línea" : "Live"} />
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {steps.map((s, i) => (
               <Reveal key={i} delay={i * 110}>
@@ -1429,7 +1437,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               lopen de banden door: mushroom (prijzen) → earth (FAQ) → espresso. ── */}
         <div style={{ background: PUTTY, position: "relative", zIndex: 10, marginTop: "clamp(44px, 7vw, 76px)" }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}` }}>
-            <AtHead title={t.everythingNeeded} tone="putty" />
+            <AtHead title={t.everythingNeeded} accent={lang === "nl" ? "nodig heeft" : lang === "es" ? "necesita" : "needs"} tone="putty" />
             <Reveal delay={80}>
               <AtFeatureThemes lang={lang} />
             </Reveal>
@@ -1441,7 +1449,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               Professional espresso. ── */}
         <div style={{ background: MUSHROOM, position: "relative", zIndex: 10 }}>
         <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}`, position: "relative" }}>
-          <AtHead title={t.simplePricing} tone="mushroom" />
+          <AtHead title={t.simplePricing} accent={lang === "nl" ? "eerlijke prijzen" : lang === "es" ? "honestos" : "honest pricing"} tone="mushroom" />
           <Reveal delay={90}>
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
               <div role="radiogroup" aria-label={t.simplePricing} style={{ display: "inline-flex", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: R, padding: 4 }}>
@@ -1526,7 +1534,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               in bone. ── */}
         <div style={{ background: EARTH, position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}` }}>
-          <AtHead title={t.faqTitle} tone="earth" />
+          <AtHead title={t.faqTitle} accent={lang === "nl" ? "vragen" : lang === "es" ? "frecuentes" : "FAQ"} tone="earth" />
           {/* Elke vraag een zwevende bone-kaart op de earth-band (Faisal 15-09):
               past bij stappen/functies/prijzen én lost het contrast op — bone
               op earth haalde voor kleine tekst geen AA, espresso op bone wel. */}
