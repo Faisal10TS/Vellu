@@ -1255,6 +1255,12 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   // gegevens-stap en markeren het telefoonveld — een toast alleen verdwijnt
   // en laat de klant raden wat ze moet doen (TTNB-klant, 29-08).
   const [phoneError, setPhoneError] = useState(false);
+  // Stap Gegevens: niets roods vóór de klant iets doet (audit 11-11: "Enter
+  // your first name" stond al rood voordat er iets getypt was). Rood komt pas
+  // na een klik op Volgende (detailsTried), of na het verlaten van een e-mail-
+  // of telefoonveld met een fout formaat (detailsTouched).
+  const [detailsTried, setDetailsTried] = useState(false);
+  const [detailsTouched, setDetailsTouched] = useState({});
   const [clientNoShows, setClientNoShows] = useState(0);
   const [done, setDone] = useState(false);
   // Vooruitbetalen: book-appointment geeft bedrag, termijn en betaalgegevens
@@ -1564,6 +1570,24 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
         : (lang === "nl" ? "Vul een geldig telefoonnummer in" : lang === "es" ? "Introduce un número de teléfono válido" : "Enter a valid phone number"))
     : !policyValid ? (lang === "nl" ? "Accepteer de voorwaarden" : lang === "es" ? "Acepta los términos" : "Please accept the terms")
     : "";
+  // Dezelfde regels per veld, voor de melding onder dat veld.
+  const detailsErr = {
+    firstName: !form.firstName.trim() ? (lang === "nl" ? "Vul je voornaam in" : lang === "es" ? "Introduce tu nombre" : "Enter your first name") : "",
+    lastName: !form.lastName.trim() ? (lang === "nl" ? "Vul je achternaam in" : lang === "es" ? "Introduce tus apellidos" : "Enter your last name") : "",
+    email: !form.email.trim() ? (lang === "nl" ? "Vul je e-mailadres in" : lang === "es" ? "Introduce tu correo electrónico" : "Enter your email address")
+      : !emailValid ? (lang === "nl" ? "Vul een geldig e-mailadres in" : lang === "es" ? "Introduce un correo electrónico válido" : "Enter a valid email address") : "",
+    phone: phoneValid ? "" : !(form.phone || "").trim()
+      ? (lang === "nl" ? "Deze salon heeft je telefoonnummer nodig voor je afspraak" : lang === "es" ? "El salón necesita tu número de teléfono para la cita" : "This salon needs your phone number for the appointment")
+      : (lang === "nl" ? "Vul een geldig telefoonnummer in" : lang === "es" ? "Introduce un número de teléfono válido" : "Enter a valid phone number"),
+  };
+  // Lege velden pas rood na een klik op Volgende; een half ingevuld e-mailadres
+  // of nummer al zodra de klant het veld verlaat.
+  const showDetailsErr = (k) => !!detailsErr[k] && (detailsTried
+    || ((k === "email" || k === "phone") && !!detailsTouched[k] && !!(form[k] || "").trim()));
+  // Terug naar de stap = weer schoon beginnen, zonder rood.
+  useEffect(() => {
+    if (step !== 3) { setDetailsTried(false); setDetailsTouched({}); }
+  }, [step]);
 
   // Multi-service helpers
   const getStaffForService = (serviceId) => {
@@ -1838,6 +1862,100 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
         </div>
         {discountError && <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{discountError}</div>}
       </div>
+    );
+  };
+
+  // Stap Gegevens, één implementatie voor desktop en telefoon (gewone functie,
+  // geen component — zelfde reden als hierboven). Naam eerst, dan e-mail: zo
+  // vult iedereen een formulier in. De terugkeer-check op het e-mailadres
+  // werkt nog steeds; die vult alleen velden die nog leeg zijn. Labels staan
+  // boven de velden, zodat ook na het typen zichtbaar blijft welk veld wat is.
+  // A real <form> + name/autocomplete attributes: iOS and Android only
+  // reliably offer contact AutoFill inside an actual form whose fields they
+  // can identify. The honeypot stays LAST — in front it broke Safari's
+  // field-group detection (silently killed autofill for returning clients).
+  const renderDetailsForm = () => {
+    const label = (id, text, hint) => (
+      <label htmlFor={id} style={{ display: "block", fontSize: 12, fontWeight: 500, color: c.textSub, marginBottom: 6 }}>
+        {text}{hint && <span style={{ fontWeight: 400, color: c.textMuted }}> ({hint})</span>}
+      </label>
+    );
+    const err = (k) => showDetailsErr(k)
+      ? <div id={`vl-err-${k}`} style={{ fontSize: 11, color: c.danger, lineHeight: 1.4, marginTop: 6 }}>{detailsErr[k]}</div>
+      : null;
+    const bad = (k) => showDetailsErr(k) || (k === "phone" && phoneError);
+    const fieldProps = (k) => ({
+      "aria-invalid": bad(k) || undefined,
+      "aria-describedby": showDetailsErr(k) ? `vl-err-${k}` : undefined,
+      style: bad(k) ? { borderColor: c.danger } : undefined,
+    });
+    const touch = (k) => () => setDetailsTouched(s => (s[k] ? s : { ...s, [k]: true }));
+    return (
+      <form autoComplete="on" onSubmit={e => e.preventDefault()} style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ minWidth: 0 }}>
+            {label("vl-f-first", t.firstName)}
+            <input id="vl-f-first" className="input-field" type="text" name="given-name" autoComplete="given-name" value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} {...fieldProps("firstName")} />
+            {err("firstName")}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            {label("vl-f-last", t.lastName)}
+            <input id="vl-f-last" className="input-field" type="text" name="family-name" autoComplete="family-name" value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} {...fieldProps("lastName")} />
+            {err("lastName")}
+          </div>
+        </div>
+        <div>
+          {label("vl-f-email", t.email)}
+          <input id="vl-f-email" className="input-field" type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} onBlur={touch("email")} {...fieldProps("email")} />
+          {err("email")}
+          <EmailTypoHint value={form.email} onFix={v => setForm(f => ({ ...f, email: v }))} lang={lang} c={c} accent={accent} style={{ margin: "6px 0 0" }} />
+        </div>
+        {clientFound && (
+          <div style={{ background: `${accent}12`, border: `1px solid ${accent}30`, borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+            <NavIcon name="wave" size={18} color={accent} />
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: accent }}>{t.welcomeBackClient}!</div>
+              <div style={{ fontSize: 10, color: c.textSub }}>{t.foundYourDetails}</div>
+            </div>
+          </div>
+        )}
+        <div>
+          {label("vl-booking-phone", t.phone, initialSalon.phone_required ? t.required : t.optional)}
+          <input id="vl-booking-phone" className="input-field" type="tel" name="tel" autoComplete="tel" inputMode="tel" value={form.phone} onChange={e => { setPhoneError(false); setForm(f => ({...f, phone: e.target.value})); }} onBlur={touch("phone")} {...fieldProps("phone")} />
+          {phoneError ? (
+            <div style={{ fontSize: 11, color: c.danger, lineHeight: 1.4, marginTop: 6 }}>
+              {lang === "nl" ? "Vul eerst je telefoonnummer in — deze salon heeft het nodig voor je afspraak." : lang === "es" ? "Introduce primero tu número de teléfono — el salón lo necesita para tu cita." : "Please fill in your phone number first — this salon needs it for your appointment."}
+            </div>
+          ) : err("phone")}
+        </div>
+        <div>
+          {label("vl-f-notes", t.allergies, t.allergiesOptional)}
+          <input id="vl-f-notes" className="input-field" autoComplete="off" value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
+          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
+        </div>
+        {/* Verjaardag — alleen als de salon het aanzet (Instellingen →
+            Verjaardagsmail). Geen autoFocus (iOS opent anders de picker). */}
+        {initialSalon.ask_birthday_on_booking && (
+          <div>
+            {label("vl-f-bday", t.birthday, t.allergiesOptional)}
+            <input id="vl-f-bday" className="input-field" type="date" name="bday" autoComplete="bday" max={new Date().toISOString().slice(0, 10)} value={form.birthday} onChange={e => setForm(f => ({...f, birthday: e.target.value}))} />
+            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>{t.birthdayHint}</div>
+          </div>
+        )}
+        {/* Honeypot — invisible to real users, bots fill it. Offscreen
+            positioning beats display:none (savvier bots skip hidden inputs).
+            tabIndex=-1 keeps keyboard users out. Kept LAST (autofill). */}
+        <input
+          type="text"
+          name="website"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          value={form.website}
+          onChange={e => setForm(f => ({...f, website: e.target.value}))}
+          style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+        />
+      </form>
     );
   };
 
@@ -4113,6 +4231,20 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     if (form.payment === "prepay" && !prepayOffered) setForm(f => ({ ...f, payment: "on-arrival" }));
     goToStep(4);
   };
+  // Volgende op stap Gegevens: klopt alles, dan door. Anders worden de
+  // ontbrekende velden rood en springt de pagina naar het eerste ervan (met
+  // het toetsenbord open), in plaats van een dode knop zonder uitleg.
+  const detailsNext = () => {
+    if (canConfirm) { toConfirmStep(); return; }
+    setDetailsTried(true);
+    const ids = { firstName: "vl-f-first", lastName: "vl-f-last", email: "vl-f-email", phone: "vl-booking-phone" };
+    const k = ["firstName", "lastName", "email", "phone"].find(f => detailsErr[f]);
+    try {
+      const el = document.getElementById(k ? ids[k] : "vl-f-policy");
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      el?.focus({ preventScroll: true });
+    } catch { /* focus is best-effort */ }
+  };
   // Bevestigen: is de 4-uursgrens intussen gepasseerd (pagina bleef open op
   // stap 4), dan terug naar stap 3 met uitleg in plaats van een serverfout.
   const confirmWithPayCheck = () => {
@@ -5037,65 +5169,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     <div style={{ fontSize: 12, color: c.textLabel, marginTop: 2 }}>{t.yourDetailsSub}</div>
                   </div>
                 </div>
-                {/* A real <form> + name/autocomplete attributes: iOS and
-                    Android only reliably offer contact AutoFill and previously
-                    typed values inside an actual form whose fields they can
-                    identify. The honeypot moved to the END of the form — in
-                    front it broke Safari's field-group detection (this is what
-                    silently killed autofill for returning clients). */}
-                <form autoComplete="on" onSubmit={e => e.preventDefault()} style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-                  {/* Email first for client lookup */}
-                  <input className="input-field" aria-label={t.email} placeholder={t.email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
-                  <EmailTypoHint value={form.email} onFix={v => setForm(f => ({ ...f, email: v }))} lang={lang} c={c} accent={accent} style={{ margin: "-4px 0 0" }} />
-
-                  {/* Client found indicator */}
-                  {clientFound && (
-                    <div style={{ background: `${accent}12`, border: `1px solid ${accent}30`, borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                      <NavIcon name="wave" size={18} color={accent} />
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 500, color: accent }}>{t.welcomeBackClient}!</div>
-                        <div style={{ fontSize: 10, color: c.textSub }}>{t.foundYourDetails}</div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <input className="input-field" aria-label={t.firstName} type="text" name="given-name" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
-                    <input className="input-field" aria-label={t.lastName} type="text" name="family-name" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
-                  </div>
-                  <input id="vl-booking-phone" className="input-field" aria-label={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => { setPhoneError(false); setForm(f => ({...f, phone: e.target.value})); }} style={phoneError ? { borderColor: "rgba(248,113,113,0.9)" } : (initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {})} />
-                  {phoneError && (
-                    <div style={{ fontSize: 11, color: c.danger, lineHeight: 1.4 }}>
-                      {lang === "nl" ? "Vul eerst je telefoonnummer in — deze salon heeft het nodig voor je afspraak." : lang === "es" ? "Introduce primero tu número de teléfono — el salón lo necesita para tu cita." : "Please fill in your phone number first — this salon needs it for your appointment."}
-                    </div>
-                  )}
-                  <input className="input-field" aria-label={`${t.allergies} (${t.allergiesOptional})`} autoComplete="off" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
-                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
-                  {/* Verjaardag — alleen als de salon het aanzet (Instellingen →
-                      Verjaardagsmail). Date-inputs tonen geen placeholder, dus een
-                      eigen label erboven; geen autoFocus (iOS opent anders de picker). */}
-                  {initialSalon.ask_birthday_on_booking && (
-                    <div>
-                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.birthday} <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>({t.allergiesOptional})</span></div>
-                      <input className="input-field" type="date" name="bday" autoComplete="bday" max={new Date().toISOString().slice(0, 10)} value={form.birthday} onChange={e => setForm(f => ({...f, birthday: e.target.value}))} />
-                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.birthdayHint}</div>
-                    </div>
-                  )}
-                  {/* Honeypot — invisible to real users, bots fill it. Offscreen
-                      positioning beats display:none (savvier bots skip hidden
-                      inputs). tabIndex=-1 keeps keyboard users out. Kept LAST
-                      so it can't disturb autofill field-group detection. */}
-                  <input
-                    type="text"
-                    name="website"
-                    tabIndex={-1}
-                    autoComplete="off"
-                    aria-hidden="true"
-                    value={form.website}
-                    onChange={e => setForm(f => ({...f, website: e.target.value}))}
-                    style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
-                  />
-                </form>
+                {renderDetailsForm()}
                 
                 {/* No-show warning */}
                 {clientNoShows > 0 && (
@@ -5156,10 +5230,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     {/* De hele regel is het vinkje (05-10-2026): eerst reageerde
                         alleen het hokje en was het niet met het toetsenbord te
                         bedienen — zonder akkoord kan er niet geboekt worden. */}
-                    <div role="checkbox" tabIndex={0} aria-checked={policyAgreed}
+                    <div id="vl-f-policy" role="checkbox" tabIndex={0} aria-checked={policyAgreed}
                       onClick={() => setPolicyAgreed(v => !v)} onKeyDown={chipKeys(() => setPolicyAgreed(v => !v))}
                       style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", minHeight: 40 }}>
-                      <div aria-hidden="true" style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${policyAgreed ? accent : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", flexShrink: 0 }}>
+                      <div aria-hidden="true" style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${policyAgreed ? accent : detailsTried ? c.danger : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", flexShrink: 0 }}>
                         {policyAgreed && <NavIcon name="check" size={14} color={c.btnOnDark} />}
                       </div>
                       <span style={{ fontSize: 13, color: policyAgreed ? c.text : c.textSub }}>{t.agreeToPolicy}</span>
@@ -5280,8 +5354,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               )}
               {step === 3 && (
                 <>
-                {invalidReason && <div style={{ fontSize: 11, color: c.danger, marginBottom: 8, textAlign: "center" }}>{invalidReason}</div>}
-                <button className="btn-primary" disabled={!canConfirm} onClick={toConfirmStep}>{t.next}</button>
+                {detailsTried && invalidReason && <div role="alert" style={{ fontSize: 11, color: c.danger, marginBottom: 8, textAlign: "center" }}>{invalidReason}</div>}
+                <button className="btn-primary" aria-disabled={!canConfirm} onClick={detailsNext}>{t.next}</button>
                 </>
               )}
               {step === 4 && (
@@ -5307,12 +5381,15 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           // iOS Safari only collapses the URL bar when the body scrolls — a 100dvh
           // wrapper with an inner scroll area pins the URL bar and cramps the UI.
           <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
-            {/* Mobile Cover Image */}
-            {initialSalon.cover_image_url && (
-              /* Achtergrond op een eigen binnenlaag: de zoom-transform mag de
-                 terugknop (latere sibling, tekent er dus overheen) niet meeschalen
-                 en het gescalede beeld moet binnen het kader blijven. */
-              <div style={{ width: "100%", height: 140, position: "relative", overflow: "hidden" }}>
+            {/* Mobile header. Met omslagfoto: foto, terugknop, schakelaars, logo
+                en naam samen in één strook van ~115px. Eerst was het 140px foto
+                plus een naambalk van 77px: een derde van het scherm vóór de
+                stap begon (audit 11-11). */}
+            {initialSalon.cover_image_url ? (
+              <div data-flow-head style={{ position: "relative", overflow: "hidden", padding: "calc(12px + env(safe-area-inset-top, 0px)) 12px 12px", borderBottom: "1px solid " + c.border }}>
+                {/* Achtergrond op een eigen binnenlaag: de zoom-transform mag de
+                    knoppen niet meeschalen en het gescalede beeld moet binnen
+                    het kader blijven. */}
                 <div style={{
                   position: "absolute", inset: 0,
                   backgroundImage: `url(${initialSalon.cover_image_url})`,
@@ -5321,21 +5398,30 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   transform: `scale(${Number(initialSalon.cover_zoom) || 1})`,
                   transformOrigin: `${initialSalon.cover_focal_x ?? 50}% ${initialSalon.cover_focal_y ?? 50}%`,
                 }} />
-                {/* Back button on cover. top respects the iOS safe area so it
-                    isn't tucked under the status bar/notch in the installed PWA
-                    (where it became untappable). */}
-                <button onClick={done ? reset : goBack} aria-label={lang === "nl" ? "Terug" : lang === "es" ? "Atrás" : "Back"} style={{ position: "absolute", top: "calc(12px + env(safe-area-inset-top, 0px))", left: 12, zIndex: 10, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "none", borderRadius: 100, width: 38, height: 38, color: "#fff", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
+                {/* Donker naar onderen, zodat de witte naam op elke foto leesbaar is. */}
+                <div aria-hidden="true" style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0.3) 45%, rgba(0,0,0,0.62) 100%)" }} />
+                {/* Top respects the iOS safe area (padding above) so the back
+                    button isn't tucked under the status bar/notch in the PWA. */}
+                <div style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <button onClick={done ? reset : goBack} aria-label={lang === "nl" ? "Terug" : lang === "es" ? "Atrás" : "Back"} style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "none", borderRadius: 100, width: 38, height: 38, flexShrink: 0, color: "#fff", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
                     <FlowGlyph name="left" size={16} />
                   </button>
-                <div style={{ position: "absolute", top: "calc(12px + env(safe-area-inset-top, 0px))", right: 12, zIndex: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                  <ThemeToggle lang={lang} />
-                  <LangToggle lang={lang} setLang={setLang} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <ThemeToggle lang={lang} />
+                    <LangToggle lang={lang} setLang={setLang} />
+                  </div>
+                </div>
+                <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 10, marginTop: 12, paddingLeft: 10 }}>
+                  {initialSalon.logo_url && (
+                    <img src={thumbOf(initialSalon.logo_url, 240)} onError={thumbFallback(initialSalon.logo_url)} alt="" style={{ width: 34, height: 34, borderRadius: 8, objectFit: "cover", flexShrink: 0, background: c.bg, border: "1px solid rgba(255,255,255,0.6)" }} />
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 400, color: "#fff", lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textShadow: "0 1px 3px rgba(0,0,0,0.45), 0 2px 14px rgba(0,0,0,0.5)" }}>{initialSalon.name}</div>
+                    {initialSalon.city && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.88)", letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>{initialSalon.city}</div>}
+                  </div>
                 </div>
               </div>
-            )}
-
-            {/* Mobile Header with Logo */}
-            {!initialSalon.cover_image_url ? (
+            ) : (
               <Header
                 title={initialSalon.name}
                 subtitle={initialSalon.city}
@@ -5344,25 +5430,15 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 accent={accent}
                 lang={lang}
               />
-            ) : (
-              <div style={{ padding: "16px 22px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid " + c.border }}>
-                {initialSalon.logo_url && (
-                  <img src={thumbOf(initialSalon.logo_url, 240)} onError={thumbFallback(initialSalon.logo_url)} style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", border: "1px solid " + c.inputBorder }} />
-                )}
-                <div>
-                  <div style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 400, color: c.text }}>{initialSalon.name}</div>
-                  <div style={{ fontSize: 11, color: c.textLabel }}>{initialSalon.city}</div>
-                </div>
-              </div>
             )}
 
             {/* Mobile Content — natural page scroll, no nested overflow.
                 Padding-bottom reserves space for the fixed Volgende pill. */}
-            <div style={{ padding: `14px 22px ${!done && selectedServices.length > 0 ? 120 : 24}px` }}>
+            <div style={{ padding: `12px 22px ${!done && selectedServices.length > 0 ? 120 : 24}px` }}>
               {!done ? (
                 <div key={step} className="fade-up">
                   {/* Progress bar */}
-                  <div style={{ display: "flex", gap: 5, margin: "12px 0 22px" }}>
+                  <div style={{ display: "flex", gap: 5, margin: "6px 0 18px" }}>
                     {(hasLocations ? [0,1,2,3,4] : [1,2,3,4]).map(s => <div key={s} style={{ flex:1, height:2, borderRadius:4, background: step >= s ? accent : c.border, transition:"background 0.4s" }} />)}
                   </div>
 
@@ -5717,54 +5793,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   {/* Step 3 — Details (mobile) */}
                   {step === 3 && <>
                     <PTitle sub={t.yourDetailsSub}>{t.yourDetails}</PTitle>
-                    {/* Real <form> + autofill attributes — see other branch. */}
-                    <form autoComplete="on" onSubmit={e => e.preventDefault()} style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-                      {/* Email first for client lookup */}
-                      <input className="input-field" aria-label={t.email} placeholder={t.email} type="email" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
-                      <EmailTypoHint value={form.email} onFix={v => setForm(f => ({ ...f, email: v }))} lang={lang} c={c} accent={accent} style={{ margin: "-4px 0 0" }} />
-                      
-                      {/* Client found indicator */}
-                      {clientFound && (
-                        <div style={{ background: `${accent}12`, border: `1px solid ${accent}30`, borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                          <NavIcon name="wave" size={18} color={accent} />
-                          <div>
-                            <div style={{ fontSize: 12, fontWeight: 500, color: accent }}>{t.welcomeBackClient}!</div>
-                            <div style={{ fontSize: 10, color: c.textSub }}>{t.foundYourDetails}</div>
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        <input className="input-field" aria-label={t.firstName} type="text" name="given-name" autoComplete="given-name" placeholder={t.firstName} value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))} />
-                        <input className="input-field" aria-label={t.lastName} type="text" name="family-name" autoComplete="family-name" placeholder={t.lastName} value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))} />
-                      </div>
-                      <input id="vl-booking-phone" className="input-field" aria-label={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} type="tel" name="tel" autoComplete="tel" inputMode="tel" placeholder={`${t.phone}${initialSalon.phone_required ? ` (${t.required})` : ` (${t.optional})`}`} value={form.phone} onChange={e => { setPhoneError(false); setForm(f => ({...f, phone: e.target.value})); }} style={phoneError ? { borderColor: "rgba(248,113,113,0.9)" } : (initialSalon.phone_required && !form.phone ? { borderColor: "rgba(248,113,113,0.3)" } : {})} />
-                  {phoneError && (
-                    <div style={{ fontSize: 11, color: c.danger, lineHeight: 1.4 }}>
-                      {lang === "nl" ? "Vul eerst je telefoonnummer in — deze salon heeft het nodig voor je afspraak." : lang === "es" ? "Introduce primero tu número de teléfono — el salón lo necesita para tu cita." : "Please fill in your phone number first — this salon needs it for your appointment."}
-                    </div>
-                  )}
-                      <input className="input-field" aria-label={`${t.allergies} (${t.allergiesOptional})`} autoComplete="off" placeholder={`${t.allergies} (${t.allergiesOptional})`} value={form.allergies} onChange={e => setForm(f => ({...f, allergies: e.target.value}))} />
-                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.allergyDisclaimer}</div>
-                      {initialSalon.ask_birthday_on_booking && (
-                        <div>
-                          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{t.birthday} <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>({t.allergiesOptional})</span></div>
-                          <input className="input-field" type="date" name="bday" autoComplete="bday" max={new Date().toISOString().slice(0, 10)} value={form.birthday} onChange={e => setForm(f => ({...f, birthday: e.target.value}))} />
-                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.5 }}>{t.birthdayHint}</div>
-                        </div>
-                      )}
-                      {/* Honeypot — kept LAST so it can't disturb autofill. */}
-                      <input
-                        type="text"
-                        name="website"
-                        tabIndex={-1}
-                        autoComplete="off"
-                        aria-hidden="true"
-                        value={form.website}
-                        onChange={e => setForm(f => ({...f, website: e.target.value}))}
-                        style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
-                      />
-                    </form>
+                    {renderDetailsForm()}
                     
                     {/* No-show warning */}
                     {clientNoShows > 0 && (
@@ -5816,10 +5845,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                         <div style={{ fontSize: 10, color: c.textLabel, marginBottom: 8, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>{t.bookingPolicy}</div>
                         <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{effectivePolicy}</div>
                         {/* Hele regel = het vinkje, ook met toetsenbord (zie desktop). */}
-                        <div role="checkbox" tabIndex={0} aria-checked={policyAgreed}
+                        <div id="vl-f-policy" role="checkbox" tabIndex={0} aria-checked={policyAgreed}
                           onClick={() => setPolicyAgreed(v => !v)} onKeyDown={chipKeys(() => setPolicyAgreed(v => !v))}
                           style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", minHeight: 40 }}>
-                          <div aria-hidden="true" style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${policyAgreed ? accent : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", flexShrink: 0 }}>
+                          <div aria-hidden="true" style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${policyAgreed ? accent : detailsTried ? c.danger : c.textMuted}`, background: policyAgreed ? accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", flexShrink: 0 }}>
                             {policyAgreed && <NavIcon name="check" size={12} color={c.btnOnDark} />}
                           </div>
                           <span style={{ fontSize: 12, color: policyAgreed ? c.text : c.textSub }}>{t.agreeToPolicy}</span>
@@ -5827,8 +5856,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       </div>
                     )}
 
-                    {invalidReason && <div style={{ fontSize: 11, color: c.danger, marginBottom: 8, textAlign: "center" }}>{invalidReason}</div>}
-                    <button className="btn-primary" disabled={!canConfirm} onClick={toConfirmStep}>{t.next}</button>
+                    {detailsTried && invalidReason && <div role="alert" style={{ fontSize: 11, color: c.danger, marginBottom: 8, textAlign: "center" }}>{invalidReason}</div>}
+                    <button className="btn-primary" aria-disabled={!canConfirm} onClick={detailsNext}>{t.next}</button>
                   </>}
 
                   {/* Step 4 — Confirm (mobile) */}
@@ -5951,9 +5980,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 )}
                 {step === 3 && (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                    {invalidReason && <div style={{ fontSize: 11, color: c.danger }}>{invalidReason}</div>}
                     <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }}
-                      disabled={!canConfirm} onClick={toConfirmStep}>{t.next}</button>
+                      aria-disabled={!canConfirm} onClick={detailsNext}>{t.next}</button>
                   </div>
                 )}
                 {step === 4 && (

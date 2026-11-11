@@ -14,6 +14,32 @@
 
 export const RELEASES = [
   {
+    // 11-11 (achtste): boekingspagina-ronde, punten 4-5. Stap Gegevens zonder
+    // rood vooraf, naam eerst, labels boven de velden; compactere kop in de
+    // telefoon-boekflow.
+    id: "2026-11-11h",
+    date: "2026-11-11",
+    title: { nl: "Boeken op de telefoon: rustiger en ruimer", en: "Booking on phones: calmer and roomier", es: "Reservar en el móvil: más tranquilo y espacioso" },
+    items: [
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Bij het invullen van hun gegevens zien klanten geen rode melding meer voordat ze iets getypt hebben. Ontbreekt er iets, dan wijst de knop Volgende het veld aan. Naam staat nu eerst en elk veld heeft een label erboven.",
+          en: "When filling in their details, clients no longer see a red message before they've typed anything. If something is missing, the Next button points to that field. Name now comes first and every field has a label above it.",
+          es: "Al rellenar sus datos, los clientes ya no ven un aviso rojo antes de escribir nada. Si falta algo, el botón Siguiente señala ese campo. El nombre va primero y cada campo tiene una etiqueta encima.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Op de telefoon neemt de bovenkant van het boeken minder ruimte in: je foto, logo en naam staan in één smalle strook, zodat klanten meer van elke stap zien.",
+          en: "On phones the top of the booking steps takes less space: your photo, logo and name sit in one slim strip, so clients see more of each step.",
+          es: "En el móvil la parte superior de los pasos de reserva ocupa menos espacio: tu foto, logo y nombre están en una franja estrecha, para que los clientes vean más de cada paso.",
+        },
+      },
+    ],
+  },
+  {
     // 11-11 (zevende): boekingspagina-ronde, punten 1-3. De wachtlijstfix van
     // 05-10 (42768bd) stond alleen op een zijtak; de serverhelft was wel live.
     // Plus kleine foto's via Supabase en een leesbare bovenkant.

@@ -1636,7 +1636,7 @@ const _T_RAW = {
     selectDateSub:"Pick a date and time", selectTime:"Select a Time",
     yourDetails:"Your Details", yourDetailsSub:"Fill in your information",
     confirmBooking:"Confirm Booking", confirmSub:"Review your details",
-    firstName:"First Name", lastName:"Last Name", email:"Email address",
+    firstName:"First name", lastName:"Last name", email:"Email address",
     phone:"Phone number", optional:"optional",
     payMethod:"Payment Method", payOnline:"Payment request afterwards", payArrival:"Pay at Appointment", payPrepay:"Pay in advance",
     next:"Next", confirm:"Confirm", newBooking:"New Booking",
@@ -2722,6 +2722,9 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   }
   .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 32px ${accent}55; }
   .btn-primary:disabled { opacity: 0.28; cursor: not-allowed; transform: none; box-shadow: none; }
+  /* Ziet er uit als "nog niet klaar", maar blijft klikbaar: de klik wijst
+     het veld aan dat nog ontbreekt (stap Gegevens). */
+  .btn-primary[aria-disabled="true"] { opacity: 0.4; transform: none; box-shadow: none; }
   .btn-primary:focus-visible { outline: 2px solid ${accent}; outline-offset: 2px; }
 
   .btn-ghost {
