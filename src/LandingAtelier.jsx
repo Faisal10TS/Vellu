@@ -868,6 +868,18 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   };
   const toggleFinder = () => { if (finderOpen) setFinderOpen(false); else openFinder(); };
   const [billingCycle, setBillingCycle] = useState("monthly");
+  // Schakelaar maand/jaar: positie van het glijdende blokje, gemeten op de
+  // gekozen knop. ResizeObserver meldt zich direct na observe(), dus geen
+  // setState in het effect zelf; meet ook opnieuw als de knop van maat wisselt.
+  const billRefs = useRef({});
+  const [billThumb, setBillThumb] = useState(null);
+  useEffect(() => {
+    const el = billRefs.current[billingCycle];
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setBillThumb({ left: el.offsetLeft, width: el.offsetWidth }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [billingCycle]);
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
@@ -1120,9 +1132,17 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-hero-note-sub { display: block; font-size: 11px; color: ${P.textSub}; line-height: 1.3; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           .at-hero-note-meta { font-size: 9.5px; color: ${EARTH}; letter-spacing: 0.04em; white-space: nowrap; }
           @keyframes atNoteFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-          .at-accent { animation: atAccentIn 0.45s ease; }
-          @keyframes atAccentIn { from { opacity: 0; } to { opacity: 1; } }
-          @media (prefers-reduced-motion: reduce) { .at-accent { animation: none; } }
+          /* Wisselen maand/jaar (Faisal 11-11: "animatie in plaats van gewoon
+             veranderen"): het cursieve woord en "/maand" komen omhoog uit een
+             lichte waas, de regel "2 maanden gratis" schuift open, en het
+             donkere blokje van de schakelaar glijdt mee. */
+          .at-accent, .at-swap { display: inline-block; animation: atSwapIn 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+          @keyframes atSwapIn { from { opacity: 0; transform: translateY(0.35em); filter: blur(5px); } to { opacity: 1; transform: none; filter: none; } }
+          .at-yearline { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 0.45s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.35s ease; }
+          .at-yearline.open { grid-template-rows: 1fr; opacity: 1; }
+          .at-yearline > div { overflow: hidden; min-height: 0; }
+          .at-bill-thumb { position: absolute; top: 4px; bottom: 4px; border-radius: ${R - 2}px; background: ${INK}; transition: left 0.42s cubic-bezier(0.22, 1, 0.36, 1), width 0.42s cubic-bezier(0.22, 1, 0.36, 1); }
+          @media (prefers-reduced-motion: reduce) { .at-accent, .at-swap { animation: none; } .at-yearline, .at-bill-thumb { transition: none; } }
           @media (max-width: 420px) {
             .at-hero-note { width: 188px; min-width: 0; max-width: none; }
             .at-hero-note.n2 { right: max(0px, calc(50% - 202px)); }
@@ -1463,12 +1483,15 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             tone="mushroom" />
           <Reveal delay={90}>
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
-              <div role="radiogroup" aria-label={t.simplePricing} style={{ display: "inline-flex", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: R, padding: 4 }}>
+              <div role="radiogroup" aria-label={t.simplePricing} style={{ position: "relative", display: "inline-flex", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: R, padding: 4 }}>
+                {/* Glijdend blokje achter de gekozen knop (gemeten); tot de
+                    eerste meting kleurt de knop zelf, dus nooit een lege staat. */}
+                {billThumb && <span aria-hidden="true" className="at-bill-thumb" style={{ left: billThumb.left, width: billThumb.width }} />}
                 {[{ key: "monthly", label: t.billingMonthly }, { key: "yearly", label: t.billingYearly }].map(opt => {
                   const active = billingCycle === opt.key;
                   return (
-                    <button key={opt.key} role="radio" aria-checked={active} onClick={() => setBillingCycle(opt.key)}
-                      style={{ padding: "9px 20px", borderRadius: R - 2, border: "none", background: active ? INK : "transparent", color: active ? BONE : P.textSub, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Jost',sans-serif", transition: "all 0.2s", display: "flex", alignItems: "center", gap: 8 }}>
+                    <button key={opt.key} ref={(el) => { billRefs.current[opt.key] = el; }} role="radio" aria-checked={active} onClick={() => setBillingCycle(opt.key)}
+                      style={{ position: "relative", zIndex: 1, padding: "9px 20px", borderRadius: R - 2, border: "none", background: active && !billThumb ? INK : "transparent", color: active ? BONE : P.textSub, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Jost',sans-serif", transition: "color 0.3s ease", display: "flex", alignItems: "center", gap: 8 }}>
                       {opt.label}
                       {opt.key === "yearly" && (
                         <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 4, background: active ? PUTTY : `${EARTH}26`, color: active ? INK : EARTH }}>
@@ -1497,13 +1520,15 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                     )}
                     <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 18, color: dark ? MUSHROOM : P.textLabel }}>{plan.name}</div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 56, fontWeight: 300, color: dark ? PUTTY : INK, lineHeight: 1 }}>
-                      €<TweenedNumber value={displayPrice} format={(n) => Math.round(n)} /><span style={{ fontSize: 16, color: dark ? `${BONE}88` : EARTH, fontFamily: "'Jost',sans-serif" }}>{displaySuffix}</span>
+                      €<TweenedNumber value={displayPrice} format={(n) => Math.round(n)} /><span key={displaySuffix} className="at-swap" style={{ fontSize: 16, color: dark ? `${BONE}88` : EARTH, fontFamily: "'Jost',sans-serif" }}>{displaySuffix}</span>
                     </div>
-                    {billingCycle === "yearly" && (
-                      <div style={{ fontSize: 11, marginTop: 6, color: dark ? `${BONE}99` : P.textSub }}>
-                        {t.yearlyEquivalent.replace("{m}", (yearlyTotal / 12).toFixed(2).replace(".", ","))} · <span style={{ color: dark ? MUSHROOM : EARTH }}>{t.twoMonthsFree}</span>
+                    <div className={`at-yearline${billingCycle === "yearly" ? " open" : ""}`} aria-hidden={billingCycle !== "yearly"}>
+                      <div>
+                        <div style={{ fontSize: 11, paddingTop: 6, color: dark ? `${BONE}99` : P.textSub }}>
+                          {t.yearlyEquivalent.replace("{m}", (yearlyTotal / 12).toFixed(2).replace(".", ","))} · <span style={{ color: dark ? MUSHROOM : EARTH }}>{t.twoMonthsFree}</span>
+                        </div>
                       </div>
-                    )}
+                    </div>
                     <div style={{ height: 1, background: dark ? `${BONE}22` : PUTTY, margin: "22px 0" }} />
                     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 26 }}>
                       {(lang === "nl" ? plan.features.nl : lang === "es" ? plan.features.es : plan.features.en).map((f, j) => (
