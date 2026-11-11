@@ -367,6 +367,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     url: "https://vellu.cc/"
   });
   const [faqOpen, setFaqOpen] = useState(null);
+  // Alle salons zoeken: klapt open onder de uitgelichte salons (11-11-2026);
+  // de zoeker laadt pas dan (scheelt de omslagfoto's van alle salons).
+  const [finderOpen, setFinderOpen] = useState(false);
   const [billingCycle, setBillingCycle] = useState("monthly");
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   useEffect(() => {
@@ -572,6 +575,19 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             .at-hero-note-meta { display: none; }
           }
           @media (prefers-reduced-motion: reduce) { .at-hero-note-card { animation: none; } }
+          .at-show-row { display: flex; justify-content: center; align-items: flex-start; gap: clamp(22px, 4vw, 56px); margin-top: 8px; }
+          .at-show-item.mid { margin-top: -26px; }
+          .at-show-phone { width: 214px; border-radius: 40px; padding: 9px; background: linear-gradient(140deg, #6a6a72 0%, #23232a 22%, #0e0e11 58%, #4a4a53 100%); box-shadow: 0 40px 70px -30px rgba(40,30,20,0.65), inset 0 1.4px 0 rgba(255,255,255,0.2), inset 0 0 0 1px rgba(255,255,255,0.08); transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
+          .at-show-item a:hover .at-show-phone { transform: translateY(-6px); }
+          .at-show-screen { border-radius: 31px; overflow: hidden; aspect-ratio: 390 / 760; background: #F7F4EF; }
+          .at-show-screen img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
+          @media (max-width: 760px) {
+            .at-show-row { justify-content: flex-start; overflow-x: auto; scroll-snap-type: x mandatory; padding: 30px 20px 10px; margin: 0 -20px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+            .at-show-row::-webkit-scrollbar { display: none; }
+            .at-show-row > * { scroll-snap-align: center; flex: 0 0 auto; }
+            .at-show-item.mid { margin-top: 0; }
+            .at-show-phone { width: 200px; }
+          }
           .at-cmp-row { display: grid; grid-template-columns: minmax(0, 1fr) 104px 120px; align-items: center; }
           @media (max-width: 560px) { .at-cmp-row { grid-template-columns: minmax(0, 1fr) 70px 92px; } .at-cmp-plan { font-size: 9.5px !important; letter-spacing: 0.04em !important; } .at-cmp-price { font-size: 16px !important; } }
           .at-price-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
@@ -631,7 +647,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: `calc(14px + env(safe-area-inset-top, 0px)) ${pad} 14px`, maxWidth: maxW, margin: "0 auto" }}>
             <div style={{ fontFamily: "'Jost',sans-serif", fontSize: "clamp(20px, 5vw, 24px)", fontWeight: 400, letterSpacing: "0.22em", color: INK }}>vellu</div>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <button className="at-nav-find" onClick={() => scrollToSection("find-salon-section")} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: EARTH, whiteSpace: "nowrap" }}>
+              <button className="at-nav-find" onClick={() => { setFinderOpen(true); setTimeout(() => scrollToSection("all-salons"), 60); }} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: EARTH, whiteSpace: "nowrap" }}>
                 {t.findSalonNav}
               </button>
               <div style={{ display: "flex", gap: 2, border: `1px solid ${PUTTY}`, borderRadius: R, padding: 3, background: P.bgCard }}>
@@ -736,13 +752,60 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
         {/* ── 01 · SALON VINDEN — op de putty-band, in één stuk met de marquee.
               Kleurenladder (Faisal 15-09): hero bone → putty → earth, en daarna
               nog eens bone → putty → mushroom → earth → espresso. ── */}
+        {/* Salons in de spotlight (11-11-2026, Faisal: "worded more as a promo
+            for the salons then showing off we have people using our app").
+            Drie salons met hun echte boekingspagina (screenshots in
+            public/showcase/, af en toe verversen) en wat ze doen, met een knop
+            om direct te boeken. Daaronder klapt de volledige salonzoeker open.
+            Wie er staat is een redactionele keuze; de specialiteiten komen uit
+            hun eigen categorieën. */}
         <div id="find-salon-section" style={{ background: PUTTY, position: "relative", zIndex: 10 }}>
-          <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(40px, 6vw, 64px) ${pad} 8px` }}>
-            <AtHead title={t.findSalonTitle} sub={t.findSalonSub} tone="putty" />
+          <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(40px, 6vw, 64px) ${pad} clamp(40px, 6vw, 64px)` }}>
+            <AtHead title={lang === "nl" ? "Salons in de spotlight" : lang === "es" ? "Salones destacados" : "Salons in the spotlight"}
+              sub={lang === "nl" ? "Getalenteerde salons waar je meteen kunt boeken, elk op hun eigen pagina. Neem een kijkje en boek je volgende afspraak." : lang === "es" ? "Salones con talento donde puedes reservar al momento, cada uno en su propia página. Échales un vistazo y reserva tu próxima cita." : "Talented salons you can book with right away, each on their own page. Take a look and book your next appointment."} tone="putty" />
+            <div className="at-show-row">
+              {[
+                { slug: "brilliantbeauty", name: "Brilliant Beauty", place: "Kralendijk · Bonaire", what: { nl: "Vlechten · Acrylnagels", en: "Braids · Acrylic nails", es: "Trenzas · Uñas acrílicas" } },
+                { slug: "ttnbdenhaag", name: "TTNB Den Haag", place: lang === "en" ? "The Hague · Netherlands" : lang === "es" ? "La Haya · Países Bajos" : "Den Haag · Nederland", what: { nl: "Acryl & polygel · BIAB · Pedicures", en: "Acrylic & polygel · BIAB · Pedicures", es: "Acrílico y polygel · BIAB · Pedicuras" } },
+                { slug: "mywhimsandmorebv", name: "My Whims and More", place: "Kralendijk · Bonaire", what: { nl: "Gezichtsbehandelingen · Massage · Nagels", en: "Facials · Massage · Nails", es: "Faciales · Masaje · Uñas" } },
+              ].map((s, i) => (
+                <Reveal key={s.slug} delay={i * 120}>
+                  <div className={`at-show-item${i === 1 ? " mid" : ""}`}>
+                    <a href={`/${s.slug}`} onClick={(e) => { e.preventDefault(); navigate(`/${s.slug}`); }} aria-label={s.name} style={{ display: "block", textDecoration: "none" }}>
+                      <div className="at-show-phone">
+                        <div className="at-show-screen">
+                          <img src={`/showcase/${s.slug}.jpg`} alt={lang === "nl" ? `Boekingspagina van ${s.name}` : lang === "es" ? `Página de reservas de ${s.name}` : `${s.name} booking page`} loading="lazy" decoding="async" width="546" height="1181" />
+                        </div>
+                      </div>
+                    </a>
+                    <div style={{ textAlign: "center", marginTop: 16, maxWidth: 230, marginLeft: "auto", marginRight: "auto" }}>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 23, color: INK }}>{s.name}</div>
+                      <div style={{ fontSize: 11, color: EARTH, letterSpacing: "0.08em", marginTop: 2 }}>{s.place}</div>
+                      <div data-show-what style={{ fontSize: 12.5, color: P.textSub, marginTop: 8, lineHeight: 1.45 }}>{lang === "nl" ? s.what.nl : lang === "es" ? s.what.es : s.what.en}</div>
+                      <button type="button" data-show-book onClick={() => navigate(`/${s.slug}`)} style={{ marginTop: 14, padding: "11px 20px", borderRadius: R, border: `1px solid ${INK}`, background: "transparent", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: INK, display: "inline-flex", alignItems: "center", gap: 7 }}>
+                        {lang === "nl" ? "Bekijk & boek" : lang === "es" ? "Ver y reservar" : "View & book"} <ArrowIcon size={10} />
+                      </button>
+                    </div>
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+            <div style={{ textAlign: "center", marginTop: "clamp(30px, 4vw, 44px)", fontSize: 13, color: P.textSub }}>
+              {!finderOpen && (lang === "nl" ? "Op zoek naar een andere salon? " : lang === "es" ? "¿Buscas otro salón? " : "Looking for another salon? ")}
+              <button type="button" data-all-salons-toggle aria-expanded={finderOpen} onClick={() => { const open = !finderOpen; setFinderOpen(open); if (open) setTimeout(() => scrollToSection("all-salons"), 60); }}
+                style={{ background: "none", border: "none", borderBottom: `1px solid ${INK}`, cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 13, color: INK, padding: "2px 0", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {finderOpen
+                  ? (lang === "nl" ? "Zoeken sluiten" : lang === "es" ? "Cerrar búsqueda" : "Close search")
+                  : (lang === "nl" ? "Zoek alle salons" : lang === "es" ? "Buscar todos los salones" : "Search all salons")}
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transition: "transform 0.25s", transform: finderOpen ? "rotate(180deg)" : "none" }}><polyline points="6 9 12 15 18 9" /></svg>
+              </button>
+            </div>
           </div>
-          <div style={{ paddingBottom: "clamp(40px, 6vw, 64px)" }}>
-            <SalonFinder lang={lang} t={t} c={{ ...P, border: `${EARTH}3d` }} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} radius={R} atelier />
-          </div>
+          {finderOpen && (
+            <div id="all-salons" style={{ paddingBottom: "clamp(40px, 6vw, 64px)" }}>
+              <SalonFinder lang={lang} t={t} c={{ ...P, border: `${EARTH}3d` }} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} radius={R} atelier />
+            </div>
+          )}
         </div>
 
         {/* De besparingsrekensom (earth-band) is weg sinds 11-11-2026: hij ging
