@@ -653,7 +653,30 @@ const normStr = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, ""
 // (vierkant, Faisal 15-09); zonder prop blijft het de oude pilvorm.
 // atelier: zwevende kaarten + zoekbalk met schaduw (Faisal 15-09), zoals de
 // rest van de Atelier-landing; zonder de prop blijft de oude landing gelijk.
-function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCENT, radius = 100, atelier = false }) {
+// newTab (11-11-2026, Faisal): salonkaarten openen de salonpagina in een
+// nieuw tabblad, zodat de bezoeker op vellu.cc blijft (zelfde als de
+// spotlight erboven). De kaart "Jouw salon hier?" blijft in hetzelfde tabblad.
+// oneRow (11-11-2026, Faisal: "1 row of salons instead of 2"): ook op de
+// computer één rij die je zijwaarts doorloopt, met pijlknoppen; op de telefoon
+// was het al een veegstrook.
+function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCENT, radius = 100, atelier = false, newTab = false, oneRow = false }) {
+  const openSalon = (slug) => { if (newTab) window.open("/" + slug, "_blank", "noopener"); else navigate("/" + slug); };
+  const stripRef = useRef(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const measureStrip = () => {
+    const el = stripRef.current;
+    if (!el) return;
+    const left = el.scrollLeft > 4, right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
+    // Alleen bij een verandering: de ref-callback meet na elke render, en een
+    // nieuw object zou anders eindeloos opnieuw renderen.
+    setEdges((e) => (e.left === left && e.right === right ? e : { left, right }));
+  };
+  useEffect(() => {
+    if (!oneRow) return;
+    window.addEventListener("resize", measureStrip);
+    return () => window.removeEventListener("resize", measureStrip);
+  }, [oneRow]);
+  const scrollStrip = (dir) => { const el = stripRef.current; if (el) el.scrollBy({ left: dir * Math.max(220, el.clientWidth * 0.75), behavior: "smooth" }); };
   const smallRadius = radius >= 100 ? 100 : Math.max(4, radius - 2);
   const [q, setQ] = useState("");
   const [salons, setSalons] = useState(null); // null = loading
@@ -800,12 +823,31 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
           .salon-card-float { border-radius: 16px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); transition: transform .28s ease, box-shadow .28s ease; }
           .salon-card-float:hover { transform: translateY(-5px); box-shadow: 0 34px 54px -26px rgba(69,58,43,0.6), 0 2px 4px rgba(69,58,43,0.05); }
           @media (min-width: 720px) { .salon-strip { justify-content: center; flex-wrap: wrap; overflow-x: visible; } }
+          /* Eén rij: niet afbreken, zijwaarts scrollen; auto-marges centreren
+             een korte rij (zoekresultaat) zonder het scrollen te breken. */
+          .salon-strip.one-row { flex-wrap: nowrap !important; overflow-x: auto !important; justify-content: flex-start !important; scrollbar-width: none; scroll-padding-inline: 8px; }
+          .salon-strip.one-row::-webkit-scrollbar { display: none; }
+          .salon-strip.one-row > :first-child { margin-left: auto; }
+          .salon-strip.one-row > :last-child { margin-right: auto; }
+          .salon-row-arrow { position: absolute; top: calc(50% - 30px); z-index: 3; width: 42px; height: 42px; border-radius: 50%; border: 1px solid ${c.border}; background: ${c.bgCard}; color: ${c.text}; display: none; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 14px 26px -14px rgba(69,58,43,0.55); }
+          .salon-row-arrow.prev { left: -14px; } .salon-row-arrow.next { right: -14px; }
+          @media (min-width: 720px) and (hover: hover) { .salon-row-arrow.on { display: inline-flex; } }
           @media (prefers-reduced-motion: reduce) { .salon-card, .salon-card:hover, .salon-card-float, .salon-card-float:hover { transition: none; transform: none; } }
         `}</style>
         {salons === null ? (
           <div style={{ textAlign: "center", fontSize: 12, color: c.textMuted, padding: "16px 0" }}>…</div>
         ) : (
-          <div className={atelier ? "salon-strip salon-strip-float" : "salon-strip"} data-salon-fold={SALON_FOLD}>
+          <div style={{ position: "relative" }}>
+          {oneRow && (<>
+            <button type="button" className={`salon-row-arrow prev${edges.left ? " on" : ""}`} data-salon-prev onClick={() => scrollStrip(-1)} aria-label={lang === "nl" ? "Vorige salons" : lang === "es" ? "Salones anteriores" : "Previous salons"}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+            </button>
+            <button type="button" className={`salon-row-arrow next${edges.right ? " on" : ""}`} data-salon-next onClick={() => scrollStrip(1)} aria-label={lang === "nl" ? "Volgende salons" : lang === "es" ? "Más salones" : "Next salons"}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
+            </button>
+          </>)}
+          <div ref={(el) => { stripRef.current = el; if (el && oneRow) requestAnimationFrame(measureStrip); }} onScroll={oneRow ? measureStrip : undefined}
+            className={`${atelier ? "salon-strip salon-strip-float" : "salon-strip"}${oneRow ? " one-row" : ""}`} data-salon-fold={SALON_FOLD}>
             {shown.map(s => {
               const acc = s.accent_color || accent;
               // Zelfde leesbaarheid als op de boekingspagina (27-08): tekst in
@@ -815,7 +857,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
               const accInk = readableAccent(acc, "light");
               const accPillEdge = accentEdge(acc, "light");
               return (
-                <button key={s.slug} className={atelier ? "salon-card salon-card-float vl-glow" : "salon-card"} data-salon-card onMouseMove={atelier ? glowMove : undefined} onClick={() => navigate("/" + s.slug)} aria-label={s.business_name}
+                <button key={s.slug} className={atelier ? "salon-card salon-card-float vl-glow" : "salon-card"} data-salon-card onMouseMove={atelier ? glowMove : undefined} onClick={() => openSalon(s.slug)} aria-label={s.business_name}
                   style={{ border: `1px solid ${c.border}`, background: c.bgCard }}>
                   {/* Cover / brand band — the salon's own colours, not ours.
                       Als <img loading="lazy"> i.p.v. een CSS-achtergrond: de
@@ -854,6 +896,7 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
               <div style={{ fontSize: 10, color: c.textLabel, marginTop: 4, lineHeight: 1.5 }}>{t.findSalonCtaSub}</div>
               <div style={{ marginTop: 10, padding: "6px 14px", borderRadius: smallRadius, background: accent, color: "#fff", fontSize: 10, fontWeight: 600 }}>{t.startFree}</div>
             </button>
+          </div>
           </div>
         )}
 

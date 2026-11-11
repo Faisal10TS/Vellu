@@ -404,11 +404,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
   };
 
+  // Alleen voor de salonzoeker (getypte salonlink): nieuw tabblad, net als de
+  // salonkaarten (Faisal 11-11-2026).
   const goToSlug = (slug) => {
     let clean = slug.toLowerCase().trim().replace(/^https?:\/\//, "").replace(/^(www\.)?vellu\.cc\//, "");
     clean = clean.replace(/[^a-z0-9-]/g, "");
     if (!clean) return;
-    navigate("/" + clean);
+    window.open("/" + clean, "_blank", "noopener");
   };
 
   const marqueeWords = lang === "nl"
@@ -811,14 +813,14 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 style={{ background: "none", border: "none", borderBottom: `1px solid ${INK}`, cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 13, color: INK, padding: "2px 0", display: "inline-flex", alignItems: "center", gap: 6 }}>
                 {finderOpen
                   ? (lang === "nl" ? "Zoeken sluiten" : lang === "es" ? "Cerrar búsqueda" : "Close search")
-                  : (lang === "nl" ? "Zoek alle salons" : lang === "es" ? "Buscar todos los salones" : "Search all salons")}
+                  : (lang === "nl" ? "Zoek andere salons" : lang === "es" ? "Buscar otros salones" : "Search for other salons")}
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transition: "transform 0.25s", transform: finderOpen ? "rotate(180deg)" : "none" }}><polyline points="6 9 12 15 18 9" /></svg>
               </button>
             </div>
           </div>
           {finderOpen && (
             <div id="all-salons" style={{ paddingBottom: "clamp(40px, 6vw, 64px)" }}>
-              <SalonFinder lang={lang} t={t} c={{ ...P, border: `${EARTH}3d` }} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} radius={R} atelier />
+              <SalonFinder lang={lang} t={t} c={{ ...P, border: `${EARTH}3d` }} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} radius={R} atelier newTab oneRow />
             </div>
           )}
         </div>
