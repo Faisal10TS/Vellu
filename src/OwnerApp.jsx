@@ -3160,8 +3160,21 @@ function PriceListImport({ salonData, update, lang, c, accent, panelBg, onDone, 
   }[code]);
 
   // Uitkomst van de server → regels ter controle (of het mislukt-scherm).
-  const showResult = (res, importId) => {
-    if (!res?.readable || !res?.count) { setResult(res || null); setFailedImportId(importId); setPhase("failed"); return; }
+  const showResult = (resIn, importId) => {
+    if (!resIn?.readable || !resIn?.count) { setResult(resIn || null); setFailedImportId(importId); setPhase("failed"); return; }
+    // Namen precies zoals op de lijst (Faisal 11-11): het model vertaalde ook
+    // in de eigen taal ("Lash lift incl. tint" werd "incl. verven", "Mini
+    // facial" werd "Mini gezichtsbehandeling"). `name` is wat er op de lijst
+    // staat (alleen typfouten en HOOFDLETTERS rechtgezet); die komt in de taal
+    // van de salon én in de taal van de lijst. Alleen de andere talen krijgen
+    // de vertaling van het model.
+    const listLang = ["nl", "en", "es"].includes(resIn.language) ? resIn.language : null;
+    const asWritten = (o) => {
+      const orig = String(o?.name || "").trim();
+      if (!orig) return {};
+      return { [nameKey]: orig, ...(listLang ? { [`name_${listLang}`]: orig } : {}) };
+    };
+    const res = { ...resIn, categories: (resIn.categories || []).map(cat => ({ ...cat, ...asWritten(cat), services: (cat.services || []).map(s => ({ ...s, ...asWritten(s) })) })) };
     const existing = new Set((salonData.services || []).flatMap(s => [s.name, s.name_nl, s.name_en, s.name_es]).filter(Boolean).map(n => String(n).trim().toLowerCase()));
     let k = 0;
     const built = res.categories.flatMap((cat, ci) => cat.services.map(s => {

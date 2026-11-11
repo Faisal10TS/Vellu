@@ -14,6 +14,24 @@
 
 export const RELEASES = [
   {
+    // 11-11 (zesde): het inlezen vertaalde ook in de eigen taal ("Lash lift
+    // incl. tint" werd "incl. verven", "Mini facial" werd "Mini
+    // gezichtsbehandeling"). Nu precies zoals op de lijst.
+    id: "2026-11-11f",
+    date: "2026-11-11",
+    title: { nl: "Namen zoals op je prijslijst", en: "Names as on your price list", es: "Nombres como en tu lista" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Prijslijst inlezen: de namen van je behandelingen blijven precies zoals ze op je lijst staan, ook Engelse woorden als facial of tint. Alleen de andere talen worden vertaald.",
+          en: "Read price list: your treatment names stay exactly as they are on your list. Only the other languages are translated.",
+          es: "Leer lista de precios: los nombres de tus tratamientos se quedan exactamente como en tu lista. Solo se traducen los otros idiomas.",
+        },
+      },
+    ],
+  },
+  {
     // 11-11 (vijfde): venster "Prijslijst inlezen" bij Diensten had geen
     // kruisje (alleen "Liever zelf invoeren") en de tekst viel op de iPhone
     // terug op Times.
