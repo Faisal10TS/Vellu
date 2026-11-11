@@ -579,8 +579,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-show-item.mid { margin-top: -26px; }
           .at-show-phone { width: 214px; border-radius: 40px; padding: 9px; background: linear-gradient(140deg, #6a6a72 0%, #23232a 22%, #0e0e11 58%, #4a4a53 100%); box-shadow: 0 40px 70px -30px rgba(40,30,20,0.65), inset 0 1.4px 0 rgba(255,255,255,0.2), inset 0 0 0 1px rgba(255,255,255,0.08); transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
           .at-show-item a:hover .at-show-phone { transform: translateY(-6px); }
-          .at-show-screen { border-radius: 31px; overflow: hidden; aspect-ratio: 390 / 760; background: #F7F4EF; }
-          .at-show-screen img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
+          .at-show-screen { border-radius: 31px; overflow: hidden; aspect-ratio: 390 / 790; background: #F7F4EF; display: flex; flex-direction: column; }
+          .at-show-bar { flex: 0 0 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px 0 24px; font-family: 'Jost', sans-serif; font-size: 10px; font-weight: 600; position: relative; }
+          .at-show-island { position: absolute; left: 50%; top: 7px; transform: translateX(-50%); width: 62px; height: 17px; border-radius: 20px; background: #000; }
+          .at-show-screen img { width: 100%; flex: 1; min-height: 0; object-fit: cover; object-position: top center; display: block; }
           @media (max-width: 760px) {
             .at-show-row { justify-content: flex-start; overflow-x: auto; scroll-snap-type: x mandatory; padding: 30px 20px 10px; margin: 0 -20px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
             .at-show-row::-webkit-scrollbar { display: none; }
@@ -765,15 +767,28 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               sub={lang === "nl" ? "Getalenteerde salons waar je meteen kunt boeken, elk op hun eigen pagina. Neem een kijkje en boek je volgende afspraak." : lang === "es" ? "Salones con talento donde puedes reservar al momento, cada uno en su propia página. Échales un vistazo y reserva tu próxima cita." : "Talented salons you can book with right away, each on their own page. Take a look and book your next appointment."} tone="putty" />
             <div className="at-show-row">
               {[
-                { slug: "brilliantbeauty", name: "Brilliant Beauty", place: "Kralendijk · Bonaire", what: { nl: "Vlechten · Acrylnagels", en: "Braids · Acrylic nails", es: "Trenzas · Uñas acrílicas" } },
-                { slug: "ttnbdenhaag", name: "TTNB Den Haag", place: lang === "en" ? "The Hague · Netherlands" : lang === "es" ? "La Haya · Países Bajos" : "Den Haag · Nederland", what: { nl: "Acryl & polygel · BIAB · Pedicures", en: "Acrylic & polygel · BIAB · Pedicures", es: "Acrílico y polygel · BIAB · Pedicuras" } },
-                { slug: "mywhimsandmorebv", name: "My Whims and More", place: "Kralendijk · Bonaire", what: { nl: "Gezichtsbehandelingen · Massage · Nagels", en: "Facials · Massage · Nails", es: "Faciales · Masaje · Uñas" } },
+                // bar = kleur van de bovenrand van de screenshot (de statusbalk
+                // loopt daarin door; gemeten 11-11-2026, bij een nieuwe
+                // screenshot opnieuw meten).
+                { slug: "brilliantbeauty", bar: "#0c0b09", name: "Brilliant Beauty", place: "Kralendijk · Bonaire", what: { nl: "Vlechten · Acrylnagels", en: "Braids · Acrylic nails", es: "Trenzas · Uñas acrílicas" } },
+                { slug: "ttnbdenhaag", bar: "#faf9f7", name: "TTNB Den Haag", place: lang === "en" ? "The Hague · Netherlands" : lang === "es" ? "La Haya · Países Bajos" : "Den Haag · Nederland", what: { nl: "Acryl & polygel · BIAB · Pedicures", en: "Acrylic & polygel · BIAB · Pedicures", es: "Acrílico y polygel · BIAB · Pedicuras" } },
+                { slug: "mywhimsandmorebv", bar: "#faf9f7", name: "My Whims and More", place: "Kralendijk · Bonaire", what: { nl: "Gezichtsbehandelingen · Massage · Nagels", en: "Facials · Massage · Nails", es: "Faciales · Masaje · Uñas" } },
               ].map((s, i) => (
                 <Reveal key={s.slug} delay={i * 120}>
                   <div className={`at-show-item${i === 1 ? " mid" : ""}`}>
-                    <a href={`/${s.slug}`} onClick={(e) => { e.preventDefault(); navigate(`/${s.slug}`); }} aria-label={s.name} style={{ display: "block", textDecoration: "none" }}>
+                    {/* Nieuw tabblad (Faisal 11-11): de bezoeker blijft op vellu.cc. */}
+                    <a href={`/${s.slug}`} target="_blank" rel="noopener" aria-label={s.name} style={{ display: "block", textDecoration: "none" }}>
                       <div className="at-show-phone">
-                        <div className="at-show-screen">
+                        <div className="at-show-screen" style={{ background: s.bar }}>
+                          {/* Statusbalk: de schermhoeken sneden het logo en de
+                              taalknoppen van de salonpagina af (Faisal 11-11). */}
+                          {(() => { const ink = s.bar === "#0c0b09" ? "#F4EFE6" : "#1f1a15"; return (
+                            <div aria-hidden="true" className="at-show-bar" style={{ color: ink }}>
+                              <span>9:41</span>
+                              <span className="at-show-island" />
+                              <span style={{ display: "inline-flex", alignItems: "flex-end", gap: 1.5 }}>{[3, 5, 7, 9].map((h) => <span key={h} style={{ width: 2.2, height: h, borderRadius: 1, background: ink }} />)}<span style={{ width: 15, height: 8, borderRadius: 2.5, border: `1px solid ${ink}`, marginLeft: 4, padding: 1, boxSizing: "border-box", display: "inline-block" }}><span style={{ display: "block", width: "70%", height: "100%", borderRadius: 1, background: ink }} /></span></span>
+                            </div>
+                          ); })()}
                           <img src={`/showcase/${s.slug}.jpg`} alt={lang === "nl" ? `Boekingspagina van ${s.name}` : lang === "es" ? `Página de reservas de ${s.name}` : `${s.name} booking page`} loading="lazy" decoding="async" width="546" height="1181" />
                         </div>
                       </div>
@@ -782,9 +797,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 23, color: INK }}>{s.name}</div>
                       <div style={{ fontSize: 11, color: EARTH, letterSpacing: "0.08em", marginTop: 2 }}>{s.place}</div>
                       <div data-show-what style={{ fontSize: 12.5, color: P.textSub, marginTop: 8, lineHeight: 1.45 }}>{lang === "nl" ? s.what.nl : lang === "es" ? s.what.es : s.what.en}</div>
-                      <button type="button" data-show-book onClick={() => navigate(`/${s.slug}`)} style={{ marginTop: 14, padding: "11px 20px", borderRadius: R, border: `1px solid ${INK}`, background: "transparent", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: INK, display: "inline-flex", alignItems: "center", gap: 7 }}>
+                      <a href={`/${s.slug}`} target="_blank" rel="noopener" data-show-book style={{ marginTop: 14, padding: "11px 20px", borderRadius: R, border: `1px solid ${INK}`, background: "transparent", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: INK, display: "inline-flex", alignItems: "center", gap: 7, textDecoration: "none" }}>
                         {lang === "nl" ? "Bekijk & boek" : lang === "es" ? "Ver y reservar" : "View & book"} <ArrowIcon size={10} />
-                      </button>
+                      </a>
                     </div>
                   </div>
                 </Reveal>
