@@ -326,7 +326,7 @@ function AtStepVisual({ n, lang }) {
     const items = [[L("Gel manicure", "Gel manicure", "Manicura en gel"), "38"], ["BIAB", "52"], ["Lash lift", "49"]];
     return (
       <div style={{ ...box, display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 98, flexShrink: 0, background: "#FFFDF8", border: `1px solid ${PUTTY}`, borderRadius: 6, padding: "8px 8px 9px", transform: "rotate(-4deg)", boxShadow: "0 8px 14px -10px rgba(69,58,43,0.5)" }}>
+        <div style={{ width: 98, flexShrink: 0, background: "#FFFDF8", border: `1px solid ${PUTTY}`, borderRadius: 6, padding: "8px 8px 9px", boxShadow: "0 8px 14px -10px rgba(69,58,43,0.5)" }}>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontSize: 13, marginBottom: 4 }}>{L("Prijslijst", "Price list", "Precios")}</div>
           {items.map(([nm, p]) => (
             <div key={nm} style={{ display: "flex", alignItems: "baseline", gap: 3, fontSize: 8.5, color: sub, lineHeight: 1.7 }}>
@@ -372,8 +372,11 @@ function AtStepVisual({ n, lang }) {
   return (
     <div style={box}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, padding: 2, background: `linear-gradient(140deg, ${MUSHROOM}, ${EARTH})` }}>
-          <span style={{ width: "100%", height: "100%", borderRadius: "50%", background: "#FBF8F3", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: EARTH }}>B</span>
+        {/* Het echte logo van de demosalon (public/demo/bloom-logo.png, ook op
+            vellu.cc/bloomstudio), in een gewone cirkel (Faisal 11-11). */}
+        {/* Het logo heeft veel witruimte rond de B: 1,8x vergroot in de cirkel. */}
+        <span style={{ width: 42, height: 42, borderRadius: "50%", flexShrink: 0, overflow: "hidden", border: `1px solid ${PUTTY}`, background: "#FBF9F5", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+          <img src="/demo/bloom-logo.png" alt="" width={42} height={42} loading="lazy" style={{ width: 42, height: 42, transform: "scale(1.8)", display: "block" }} />
         </span>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 600 }}>bloomstudio</div>
