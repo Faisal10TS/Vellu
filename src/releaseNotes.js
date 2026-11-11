@@ -14,6 +14,24 @@
 
 export const RELEASES = [
   {
+    // 11-11 (vierde): kaart pas na een klik (9c5fbd3) en daarom ook op de
+    // salonpagina geen cookiebanner meer. Homepage-wijzigingen van dezelfde
+    // dag staan hier niet in: die zien salons niet in hun eigen pagina.
+    id: "2026-11-11d",
+    date: "2026-11-11",
+    title: { nl: "Geen cookiebanner meer", en: "No more cookie banner", es: "Sin aviso de cookies" },
+    items: [
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Boekingspagina: je klanten krijgen geen cookiebanner meer. De kaart van Google laadt pas als een klant op Kaart tonen tikt; zonder die tik gaat er niets naar Google en is een banner niet nodig. Open in Maps werkt zoals altijd.",
+          en: "Booking page: your clients no longer see a cookie banner. The Google map only loads when a client taps Show map; without that tap nothing goes to Google, so no banner is needed. Open in Maps works as always.",
+          es: "Página de reservas: tus clientes ya no ven el aviso de cookies. El mapa de Google solo se carga cuando un cliente toca Mostrar mapa; sin ese toque no se envía nada a Google, así que no hace falta el aviso. Abrir en Maps funciona como siempre.",
+        },
+      },
+    ],
+  },
+  {
     // 11-11 (derde): Beauty By Eydy toonde "Vanaf $0,00" door een variant
     // "Extra time" van 0.
     id: "2026-11-11c",

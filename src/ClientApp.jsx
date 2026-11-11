@@ -99,7 +99,8 @@ function ClickToMap({ query, title, height, lang, c, theme }) {
         {L("Kaart tonen", "Show map", "Mostrar mapa")}
       </button>
       <span style={{ fontSize: 10.5, color: c.textMuted, lineHeight: 1.4 }}>
-        {L("Laadt Google Maps", "Loads Google Maps", "Carga Google Maps")}
+        {/* Er is geen cookiebanner meer; de bezoeker hoort het hier, vóór de klik. */}
+        {L("Laadt Google Maps; Google kan cookies plaatsen", "Loads Google Maps; Google may set cookies", "Carga Google Maps; Google puede usar cookies")}
       </span>
     </div>
   );

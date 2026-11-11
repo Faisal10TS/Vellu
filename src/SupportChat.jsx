@@ -30,8 +30,19 @@ function plainText(s) {
     .replace(/\n{3,}/g, "\n\n");
 }
 
-export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting: greetingOverride, subtitle: subtitleOverride, side = "right", launcherBottom }) {
+export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting: greetingOverride, subtitle: subtitleOverride, side = "right", launcherBottom, hideLauncher = false }) {
   const [open, setOpen] = useState(false);
+  // Openen van buitenaf: de onderbalk van de homepage op de telefoon heeft
+  // een eigen chatknop (hideLauncher verbergt dan de ronde knop). Het venster
+  // meldt terug of het open is, zodat die balk kan wijken.
+  useEffect(() => {
+    const onOpen = () => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 100); };
+    window.addEventListener("vellu-open-chat", onOpen);
+    return () => window.removeEventListener("vellu-open-chat", onOpen);
+  }, []);
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("vellu-chat-state", { detail: { open } }));
+  }, [open]);
   // Drie talen voor alle teksten van het venster (Spaans kreeg eerst Engels).
   const tr = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
   const greeting = greetingOverride || tr(
@@ -114,7 +125,7 @@ export default function SupportChat({ lang = "nl", c, accent, isMobile, greeting
   return createPortal((
     <>
       {/* Floating launcher */}
-      {!open && (
+      {!open && !hideLauncher && (
         <button
           onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 100); }}
           aria-label={tr("Hulp", "Help", "Ayuda")}

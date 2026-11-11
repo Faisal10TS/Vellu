@@ -864,12 +864,12 @@ function SalonFinder({ lang, t, c, goToSlug, navigate, hideHeader, accent = ACCE
                       volle omslagfoto's (tot ~390 KB) laden zo pas als de
                       zoeker in beeld komt, niet al bij de eerste verf. */}
                   <div style={{ height: 66, position: "relative", overflow: "hidden", background: s.cover_image_url ? c.bgCard : `linear-gradient(120deg, ${acc}55, ${acc}18 60%, transparent), linear-gradient(160deg, ${acc}22, transparent)` }}>
-                    {s.cover_image_url && <img src={s.cover_image_url} alt="" loading="lazy" decoding="async" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", display: "block" }} />}
+                    {s.cover_image_url && <img src={s.cover_image_url} alt={lang === "nl" ? `Foto van ${s.business_name}` : lang === "es" ? `Foto de ${s.business_name}` : `${s.business_name} photo`} loading="lazy" decoding="async" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", display: "block" }} />}
                   </div>
                   <div style={{ padding: "0 14px 14px", position: "relative" }}>
                     <div style={{ display: "flex", alignItems: "flex-end", marginTop: -17 }}>
                       {s.logo_url
-                        ? <img src={s.logo_url} alt="" loading="lazy" decoding="async" style={{ width: 40, height: 40, borderRadius: 13, objectFit: "cover", border: `2.5px solid ${c.bgCard}`, background: c.bgCard, flexShrink: 0 }} />
+                        ? <img src={s.logo_url} alt={lang === "nl" ? `Logo van ${s.business_name}` : lang === "es" ? `Logo de ${s.business_name}` : `${s.business_name} logo`} loading="lazy" decoding="async" style={{ width: 40, height: 40, borderRadius: 13, objectFit: "cover", border: `2.5px solid ${c.bgCard}`, background: c.bgCard, flexShrink: 0 }} />
                         : <div style={{ width: 40, height: 40, borderRadius: 13, background: `linear-gradient(135deg, ${acc}, ${acc}88)`, border: `2.5px solid ${c.bgCard}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: 16, color: "#1a1713", flexShrink: 0 }}>{(s.business_name || "?").trim().slice(0, 1).toUpperCase()}</div>}
                     </div>
                     <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, marginTop: 8, color: c.text, lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.business_name}</div>

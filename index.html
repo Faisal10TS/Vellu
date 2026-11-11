@@ -17,7 +17,7 @@
     <meta property="og:url" content="https://vellu.cc/" />
     <meta property="og:title" content="Vellu - Jouw salon. Jouw regels. Jouw omzet." />
     <meta property="og:description" content="Je eigen boekingspagina met jouw naam, kleuren en diensten. Vast tarief, 0% commissie. Live binnen 10 minuten." />
-    <meta property="og:image" content="https://vellu.cc/og-image.png" />
+    <meta property="og:image" content="https://vellu.cc/og-image-v2.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:locale" content="nl_NL" />
@@ -28,7 +28,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Vellu - Beauty Booking Platform" />
     <meta name="twitter:description" content="Je eigen boekingspagina. 0% commissie. Live binnen 10 minuten." />
-    <meta name="twitter:image" content="https://vellu.cc/og-image.png" />
+    <meta name="twitter:image" content="https://vellu.cc/og-image-v2.png" />
 
     <!-- De app heeft een eigen licht én donker thema en kiest zelf (ThemeProvider
          zet color-scheme op <html>: "only light" of "dark"). Deze regel zegt
@@ -63,10 +63,12 @@
     <link rel="preconnect" href="https://pqvovkwqkapmpibktpwb.supabase.co" />
     <link rel="dns-prefetch" href="https://pqvovkwqkapmpibktpwb.supabase.co" />
 
-    <!-- Google Fonts (loaded once here instead of via CSS @import) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <!-- Lettertypen van vellu.cc zelf (11-11-2026; eerst Google Fonts). Alleen
+         een salon die een ander lettertype kiest, laadt dat nog via Google
+         (ensurePageFontLoaded in shared.jsx). -->
+    <link rel="preload" href="/fonts/Jost-normal-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/CormorantGaramond-normal-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/fonts/fonts.css" />
   </head>
   <body>
     <div id="root"></div>

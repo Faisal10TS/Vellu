@@ -1396,68 +1396,13 @@ function AppInner({ lang, setLang }) {
   );
 }
 
-// ─── COOKIE CONSENT ──────────────────────────────────────────
-function CookieConsent({ lang }) {
-  const { colors: c } = useTheme();
-  const location = useLocation();
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (!localStorage.getItem("vellu_cookies_accepted")) {
-      setTimeout(() => setVisible(true), 1500);
-    }
-  }, []);
-
-  // Don't show on authenticated dashboards or cancel page — those are logged-in
-  // contexts where the banner would be redundant noise (and the cancel page is
-  // reached from an email link where any consent dance is pointless).
-  if (!visible || location.pathname.startsWith("/owner") || location.pathname.startsWith("/staff") || location.pathname.startsWith("/cancel")) return null;
-
-  // Twee huiden (Faisal 16-09: "de cookiebanner heeft nog het oude thema"):
-  // op Vellu's eigen pagina's (landing, juridisch, contact) het Atelier-palet —
-  // bone-kaart, espresso-knop, vierkante hoeken; op de pagina van een salon
-  // neutraal in het thema van die pagina (inkt op papier, geen Vellu-goud), want
-  // daar hoort geen Vellu-branding. Op de telefoon staat hij boven de vaste
-  // Boek-balk van de salonpagina.
-  const path = location.pathname.replace(/\/+$/, "") || "/";
-  const eigen = path === "/" || ["/privacy", "/terms", "/voorwaarden", "/contact", "/dpa", "/admin"].includes(path) || path.startsWith("/integrations/");
-  // Geen banner meer op Vellu's eigen pagina's (11-11-2026, opruimronde
-  // homepage): daar staan alleen functionele cookies/opslag (taal, thema,
-  // inlog), geen analytics of advertenties, en daarvoor is geen toestemming
-  // nodig; de privacyverklaring (link in de footer) informeert. Op de pagina
-  // van een salon blijft hij: daar staat o.a. een Google-kaart.
-  if (eigen) return null;
-  const s = eigen
-    ? { bg: AT.BONE, border: AT.PUTTY, text: AT.ESPRESSO, sub: AT.EARTH, btnBg: AT.ESPRESSO, btnInk: AT.BONE, shadow: "0 22px 40px -26px rgba(69,58,43,0.6), 0 2px 4px rgba(69,58,43,0.08)" }
-    // c.bg en niet c.bgCard: die kaarttint is doorschijnend (3%) en de banner
-    // zweeft over de pagina — dan schijnt de inhoud erdoorheen.
-    : { bg: c.bg, border: c.border, text: c.text, sub: c.textSub, btnBg: c.text, btnInk: c.bg, shadow: "0 22px 40px -26px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.08)" };
-  const bovenBoekbalk = !eigen && typeof window !== "undefined" && window.innerWidth < 900;
-  return (
-    <div data-cookie-banner={eigen ? "atelier" : "salon"} style={{
-      position: "fixed", bottom: `calc(${bovenBoekbalk ? 86 : 20}px + env(safe-area-inset-bottom, 0px))`, left: 16, right: 16, maxWidth: 440, margin: "0 auto",
-      background: s.bg, border: `1px solid ${s.border}`, borderRadius: 12,
-      padding: "14px 16px 14px 18px", display: "flex", alignItems: "center", gap: 14,
-      boxShadow: s.shadow, zIndex: 9999,
-      fontFamily: "'Jost',sans-serif", animation: "fadeUp 0.4s ease"
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, color: s.text, fontWeight: 600, marginBottom: 3, display: "flex", alignItems: "center", gap: 6 }}><NavIcon name="cookie" size={13} color={s.text} /> Cookies</div>
-        <div style={{ fontSize: 11.5, color: s.sub, lineHeight: 1.5 }}>
-          {lang === "nl"
-            ? "Wij gebruiken alleen functionele cookies. "
-            : lang === "es" ? "Solo usamos cookies funcionales. " : "We only use functional cookies. "}
-          <a href="/privacy" style={{ color: s.text, textDecoration: "underline", textUnderlineOffset: 2 }}>{lang === "nl" ? "Meer info" : lang === "es" ? "Más información" : "Learn more"}</a>
-        </div>
-      </div>
-      <button onClick={() => { localStorage.setItem("vellu_cookies_accepted", "true"); setVisible(false); }}
-        aria-label={lang === "nl" ? "Begrepen" : lang === "es" ? "Entendido" : "Got it"}
-        style={{ background: s.btnBg, color: s.btnInk, border: `1px solid ${s.btnBg}`, borderRadius: AT_RADIUS, padding: "10px 16px", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Jost',sans-serif", flexShrink: 0 }}>
-        {lang === "nl" ? "Begrepen" : lang === "es" ? "Entendido" : "Got it"}
-      </button>
-    </div>
-  );
-}
+// ─── COOKIES ─────────────────────────────────────────────────
+// Geen cookiebanner meer (11-11-2026). Vellu zet alleen functionele opslag
+// (taal, thema, inloggen) en geen analytics of advertenties; daarvoor is geen
+// toestemming nodig. De Google-kaart op een salonpagina laadt pas na een klik
+// op "Kaart tonen" (ClickToMap in ClientApp.jsx), dus ook daar is geen banner
+// meer nodig. De privacyverklaring informeert. Eerder: de homepage op 11-11
+// (edf71a9), salonpagina's in deze ronde.
 
 // Route-level Suspense fallback. This used to be `null`, which renders a
 // completely blank page while a lazy chunk downloads — indistinguishable from
@@ -1546,7 +1491,6 @@ export default function VelluApp() {
               <Route path="*" element={<NotFoundView lang={lang} />} />
             </Routes>
           </Suspense>
-            <CookieConsent lang={lang} />
           </BrowserRouter>
       </ThemeProvider>
     </ErrorBoundary>

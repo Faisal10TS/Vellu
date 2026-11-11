@@ -35,6 +35,15 @@
       ]
     },
     {
+      "source": "/fonts/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=2592000, stale-while-revalidate=604800"
+        }
+      ]
+    },
+    {
       "source": "/hero-phone-(.*)",
       "headers": [
         {
@@ -44,7 +53,7 @@
       ]
     },
     {
-      "source": "/(icon-192\\.png|icon-512\\.png|favicon\\.svg|favicon-16\\.png|favicon-32\\.png|og-image\\.png)",
+      "source": "/(icon-192\\.png|icon-512\\.png|favicon\\.svg|favicon-16\\.png|favicon-32\\.png|og-image\\.png|og-image-v2\\.png)",
       "headers": [
         {
           "key": "Cache-Control",

@@ -131,7 +131,7 @@ ${localeTags(lang).join('\n')}
 <meta property="og:url" content="${esc(u)}">
 <meta property="og:title" content="${esc(t)}">
 <meta property="og:description" content="${esc(d)}">
-<meta property="og:image" content="${esc((m && m.image) || 'https://vellu.cc/og-image.png')}">
+<meta property="og:image" content="${esc((m && m.image) || 'https://vellu.cc/og-image-v2.png')}">
 </head>
 <body><a href="${esc(u)}">${esc(t)}</a></body>
 </html>`;

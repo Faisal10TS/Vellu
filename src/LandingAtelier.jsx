@@ -51,6 +51,58 @@ const P = AT_COLORS;
 // zodat de verhoudingen kloppen met de echte boekingspagina. Geen sterren of
 // reviewcijfers: dat zouden verzonnen cijfers zijn.
 const HERO_SCREEN_W = 390, HERO_SCREEN_H = 848, HERO_PHONE_INNER = 254;
+// Telefoon: één balk onderaan met chat + proefknop (11-11-2026). Eerst zweefden
+// er twee losse dingen: links een ronde chatbol, rechts de proefpil — ze lagen
+// over de inhoud en naast elkaar oogde het rommelig. De balk komt pas na de
+// hero (die blijft schoon), wijkt bij de finale (daar staat dezelfde knop al)
+// en zakt weg zolang de chat open is. Desktop houdt de pil + chatknop.
+function AtMobileBar({ lang, onStart }) {
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  const [pastHero, setPastHero] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  useEffect(() => {
+    const onScroll = () => {
+      const fin = document.querySelector("[data-finale-ctas]");
+      const finIn = fin ? fin.getBoundingClientRect().top < window.innerHeight - 24 : false;
+      setPastHero(window.scrollY > 600 && !finIn);
+    };
+    const onChat = (e) => setChatOpen(!!(e.detail && e.detail.open));
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    window.addEventListener("vellu-chat-state", onChat);
+    onScroll();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("vellu-chat-state", onChat);
+    };
+  }, []);
+  const show = pastHero && !chatOpen;
+  return (
+    <div data-mobile-bar={show ? "visible" : "hidden"} aria-hidden={!show}
+      style={{
+        position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 60,
+        display: "flex", gap: 10, padding: "10px 16px calc(10px + env(safe-area-inset-bottom, 0px))",
+        background: "rgba(244,239,230,0.94)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+        borderTop: `1px solid ${PUTTY}`, boxShadow: "0 -12px 28px -20px rgba(40,30,20,0.45)",
+        transform: show ? "translateY(0)" : "translateY(110%)", pointerEvents: show ? "auto" : "none",
+        transition: "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)",
+      }}>
+      <button type="button" tabIndex={show ? 0 : -1} onClick={() => window.dispatchEvent(new Event("vellu-open-chat"))}
+        aria-label={L("Stel een vraag", "Ask a question", "Haz una pregunta")}
+        style={{ width: 48, height: 48, flexShrink: 0, padding: 0, borderRadius: AT_RADIUS, border: `1px solid ${MUSHROOM}`, background: "transparent", color: ESPRESSO, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+        </svg>
+      </button>
+      <button type="button" tabIndex={show ? 0 : -1} onClick={onStart}
+        style={{ flex: 1, minWidth: 0, height: 48, borderRadius: AT_RADIUS, border: "none", background: ESPRESSO, color: BONE, fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer", whiteSpace: "nowrap" }}>
+        {L("Probeer 14 dagen gratis", "Try 14 days free", "Prueba 14 días gratis")}
+      </button>
+    </div>
+  );
+}
+
 function AtHeroPhone({ lang, ready }) {
   const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
   const services = [
@@ -540,6 +592,36 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
       es: ["Todo lo de Starter +", "Miembros del equipo ilimitados", "Acceso propio para cada miembro", "Caja, venta de productos e inventario", "Panel de analíticas", "Códigos de descuento", "Boletín y exportación de clientes", "Varias ubicaciones", "Tu propia tipografía en tu página", "Soporte prioritario"] } },
   ];
 
+  // Gestructureerde gegevens voor zoekmachines (11-11-2026): wie Vellu is,
+  // het product met de twee prijzen, en de veelgestelde vragen zoals ze op de
+  // pagina staan (in de taal van de bezoeker). Alleen op de homepage — de
+  // salonpagina's delen index.html, dus dit hoort niet statisch daarin. Geen
+  // beoordelingen of aantallen: die zouden we niet kunnen onderbouwen.
+  useEffect(() => {
+    const data = {
+      "@context": "https://schema.org",
+      "@graph": [
+        { "@type": "Organization", "@id": "https://vellu.cc/#org", name: "Vellu", url: "https://vellu.cc/", logo: "https://vellu.cc/icon-512.png", email: "mirahventures@vellu.cc",
+          parentOrganization: { "@type": "Organization", name: "Mirah Ventures" } },
+        { "@type": "WebSite", "@id": "https://vellu.cc/#site", url: "https://vellu.cc/", name: "Vellu", inLanguage: lang, publisher: { "@id": "https://vellu.cc/#org" } },
+        { "@type": "SoftwareApplication", name: "Vellu", applicationCategory: "BusinessApplication", operatingSystem: "Web, iOS, Android",
+          description: lang === "nl" ? "Boekingssysteem voor salons: eigen boekingspagina, herinneringen, kassa en facturen. Vast tarief, 0% commissie." : lang === "es" ? "Sistema de reservas para salones: página de reservas propia, recordatorios, caja y facturas. Precio fijo, 0% de comisión." : "Booking system for salons: your own booking page, reminders, till and invoices. Fixed price, 0% commission.",
+          publisher: { "@id": "https://vellu.cc/#org" },
+          offers: plans.map((p) => ({ "@type": "Offer", name: p.name, price: String(p.price), priceCurrency: "EUR", category: "subscription",
+            priceSpecification: { "@type": "UnitPriceSpecification", price: String(p.price), priceCurrency: "EUR", unitText: "MONTH" } })) },
+        { "@type": "FAQPage", mainEntity: faqs.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })) },
+      ],
+    };
+    const el = document.createElement("script");
+    el.type = "application/ld+json";
+    el.id = "vellu-ld";
+    el.textContent = JSON.stringify(data);
+    document.getElementById("vellu-ld")?.remove();
+    document.head.appendChild(el);
+    return () => el.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
+
   const maxW = 1080;
   const pad = "clamp(20px, 5vw, 44px)";
   // Hoekradius (Faisal 15-09): vierkante knoppen zoals vev.co, geen pillen.
@@ -614,10 +696,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           @media (prefers-reduced-motion: reduce) { .at-quote-card, .at-quote-card:hover { transform: none; } }
           /* Hero-kaartjes rond de telefoon (AtHeroPhone). Telefoon = 276 px breed
              en gecentreerd; de kaartjes steken er half overheen. max()/min()
-             houden ze binnen de kolom op een smal scherm. */
-          .at-hero-note { position: absolute; width: 222px; z-index: 4; }
+             houden ze binnen de kolom op een smal scherm. Breedte groeit mee
+             met de tekst ("Herinnering verstuurd · automatisch" paste niet in
+             222 px); n2 hangt aan de rechterkant en groeit dus over de telefoon. */
+          .at-hero-note { position: absolute; width: max-content; min-width: 222px; max-width: 280px; z-index: 4; }
           .at-hero-note.n1 { top: 8px; left: max(0px, calc(50% - 138px - 84px)); }
-          .at-hero-note.n2 { top: 252px; left: min(calc(100% - 222px), calc(50% + 138px - 124px)); }
+          .at-hero-note.n2 { top: 252px; right: max(0px, calc(50% - 236px)); }
           .at-hero-note.n3 { top: 512px; left: max(0px, calc(50% - 138px - 66px)); }
           .at-hero-note-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: #FBF8F3; border: 1px solid ${PUTTY}; box-shadow: 0 20px 36px -18px rgba(69,58,43,0.5), 0 2px 5px rgba(69,58,43,0.07); text-align: left; animation: atNoteFloat 6s ease-in-out infinite; }
           .at-hero-note.n2 .at-hero-note-card { animation-delay: -2s; }
@@ -629,8 +713,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-hero-note-meta { font-size: 9.5px; color: ${EARTH}; letter-spacing: 0.04em; white-space: nowrap; }
           @keyframes atNoteFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
           @media (max-width: 420px) {
-            .at-hero-note { width: 188px; }
-            .at-hero-note.n2 { left: min(calc(100% - 188px), calc(50% + 138px - 124px)); }
+            .at-hero-note { width: 188px; min-width: 0; max-width: none; }
+            .at-hero-note.n2 { right: max(0px, calc(50% - 202px)); }
             .at-hero-note-card { padding: 8px 10px; gap: 8px; }
             .at-hero-note-meta { display: none; }
           }
@@ -1176,7 +1260,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
 
         {/* Verdwijnt zodra de finale-CTA in beeld is: die heeft dezelfde knop,
             en anders hangt hij over de voetregels (Faisal 16-09). */}
-        <StickyStartPill onClick={() => ownerStart()} label={t.startFree} bg={INK} fg={BONE} radius={R} hideWhenInView="[data-finale-ctas]" />
+        {isMobile
+          ? <AtMobileBar lang={lang} onStart={() => ownerStart()} />
+          : <StickyStartPill onClick={() => ownerStart()} label={t.startFree} bg={INK} fg={BONE} radius={R} hideWhenInView="[data-finale-ctas]" />}
         <SupportChat
           lang={lang}
           c={P}
@@ -1184,6 +1270,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           isMobile={isMobile}
           side="left"
           launcherBottom={20}
+          hideLauncher={isMobile}
           greeting={lang === "nl"
             ? "Hoi! Vragen over Vellu? Ik help je graag — wat het kost, hoe het werkt, of het bij jouw salon past. Vraag maar raak. Kom je er met mij niet uit? Mail Mirah Ventures via mirahventures@vellu.cc."
             : lang === "es"
