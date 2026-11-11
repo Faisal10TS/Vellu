@@ -3596,7 +3596,10 @@ const planMatrix = (lang) => {
   return [
     { group: L("Boekingen & agenda", "Bookings & calendar", "Reservas y agenda"), rows: [
       [L("Eigen boekingspagina (vellu.cc/jouw-naam)", "Your own booking page (vellu.cc/your-name)", "Tu propia página de reservas (vellu.cc/tu-nombre)"), true, true],
+      [L("Boekingspagina in NL, EN en ES", "Booking page in EN, NL and ES", "Página de reservas en ES, NL y EN"), true, true],
       [L("Onbeperkte boekingen, 0% commissie", "Unlimited bookings, 0% commission", "Reservas ilimitadas, 0% de comisión"), true, true],
+      [L("Aanbetaling of vooruitbetalen", "Deposits or prepayment", "Depósito o pago por adelantado"), true, true],
+      [L("No-show-vergoeding", "No-show fee", "Tarifa por no presentarse"), true, true],
       [L("Agenda (dag / week / maand)", "Calendar (day / week / month)", "Agenda (día / semana / mes)"), true, true],
       [L("Wachtlijst", "Waitlist", "Lista de espera"), true, true],
       [L("Instelbaar tijdslot-interval", "Custom time slot interval", "Intervalo de horarios a tu medida"), true, true],
@@ -3612,6 +3615,7 @@ const planMatrix = (lang) => {
       [L("Bevestigings- & herinneringsmails", "Confirmation & reminder emails", "Correos de confirmación y recordatorio"), true, true],
       [L("Review-verzoek na bezoek", "Post-visit review request", "Solicitud de reseña tras la visita"), true, true],
       [L("Verjaardagsmail met kortingscode", "Birthday email with discount code", "Correo de cumpleaños con código de descuento"), true, true],
+      [L("Stempelkaart (spaarkaart)", "Stamp card (loyalty)", "Tarjeta de sellos (fidelidad)"), true, true],
       [L("Herboek-herinnering na een tijdje weg", "Rebook reminder after a while away", "Recordatorio para volver a reservar tras un tiempo"), true, true],
       [L("Nieuwsbrief naar al je klanten", "Newsletter to all your clients", "Boletín para todos tus clientes"), false, true],
       [L("Klantenlijst exporteren (CSV)", "Client export (CSV)", "Exportar clientes (CSV)"), false, true],
@@ -3626,6 +3630,7 @@ const planMatrix = (lang) => {
       [L("Categorieën, varianten & extra's", "Categories, variants & extras", "Categorías, variantes y extras"), true, true],
       [L("Portfolio foto's per behandeling", "Portfolio photos per treatment", "Fotos de portfolio por tratamiento"), true, true],
       [L("Vindbaar in de Vellu salon-zoeker", "Listed in the Vellu salon finder", "Visible en el buscador de salones de Vellu"), true, true],
+      [L("Eigen lettertype op je pagina", "Your own font on your page", "Tu propia tipografía en tu página"), false, true],
       [L("Meerdere locaties", "Multiple locations", "Varias ubicaciones"), false, true],
     ]},
     { group: L("Kassa & verkoop", "Till & sales", "Caja y ventas"), rows: [
@@ -3639,7 +3644,8 @@ const planMatrix = (lang) => {
     ]},
     { group: L("Klanten & inzicht", "Clients & insights", "Clientes y estadísticas"), rows: [
       [L("Klantenbeheer met historie", "Client management with history", "Gestión de clientes con historial"), true, true],
-      [L("Klanten importeren (CSV, incl. verjaardagen)", "Import clients (CSV, incl. birthdays)", "Importar clientes (CSV, incl. cumpleaños)"), true, true],
+      [L("Klanten importeren (Excel of CSV, incl. verjaardagen)", "Import clients (Excel or CSV, incl. birthdays)", "Importar clientes (Excel o CSV, incl. cumpleaños)"), true, true],
+      [L("Komende afspraken importeren uit je oude systeem", "Import upcoming appointments from your old system", "Importar las próximas citas de tu sistema anterior"), true, true],
       [L("Facturen met BTW", "VAT invoices", "Facturas con IVA"), true, true],
       [L("Kortingscodes", "Discount codes", "Códigos de descuento"), false, true],
       [L("Analytics dashboard", "Analytics dashboard", "Panel de estadísticas"), false, true],
@@ -3936,7 +3942,7 @@ export {
   TAX_RULES, TAX_REGIONS_BY_COUNTRY, taxRuleFor, resolveTax,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded,
   makeCSS,
-  Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
+  Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable, planMatrix,
   Linkify,
   RESERVED_SLUGS,
   supabase,

@@ -24,7 +24,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import SupportChat from "./SupportChat.jsx";
 import { supabase } from "./supabase.js";
-import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS, rememberRef, useReferralPromo, rewardLabel, promoEndLabel } from "./shared.jsx";
+import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS, rememberRef, useReferralPromo, rewardLabel, promoEndLabel, planMatrix } from "./shared.jsx";
 import {
   SalonFinder, HeroPhoneMockup, StickyStartPill, ArrowIcon,
   Reveal, KineticLine, HeroEnter, Marquee, TweenedNumber,
@@ -37,6 +37,73 @@ const { ESPRESSO, EARTH, MUSHROOM, PUTTY, BONE } = AT;
 const INK = ESPRESSO;
 const ESPRESSO_DEEP = AT.DEEP;
 const P = AT_COLORS;
+
+// Plannen vergelijken (11-11-2026, Faisal: "can u also add a feature where u
+// can compare the both of them"). Knop onder de prijskaarten; open = tabel per
+// groep met Starter en Professional naast elkaar. De inhoud komt uit
+// planMatrix (shared.jsx), dezelfde bron als de planvergelijking in de app,
+// zodat landingspagina en app nooit iets anders beloven. De kopregel blijft
+// onder de navigatiebalk hangen tijdens het scrollen (geen overflow:hidden op
+// de kaart, anders werkt sticky niet).
+function AtPlanCompare({ lang, yearly }) {
+  const [open, setOpen] = useState(false);
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  const groups = planMatrix(lang);
+  // Bedrag groot, "/maand" klein eronder-ernaast: op de telefoon paste
+  // "€19/maand" in serif niet in een kolom van 70 px.
+  const price = (m) => (
+    <span className="at-cmp-price" style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, color: EARTH }}>
+      €{yearly ? m * 10 : m}<span style={{ fontFamily: "'Jost',sans-serif", fontSize: 10.5, color: P.textLabel }}>{yearly ? L("/jaar", "/year", "/año") : L("/maand", "/month", "/mes")}</span>
+    </span>
+  );
+  const cell = (v, dark) => {
+    if (v === true) return <NavIcon name="check" size={15} color={dark ? INK : EARTH} />;
+    if (v === false) return <span aria-label={L("niet inbegrepen", "not included", "no incluido")} style={{ display: "inline-block", width: 12, height: 1.5, background: `${EARTH}66`, verticalAlign: "middle" }} />;
+    return <span style={{ fontSize: 12, fontWeight: 600, color: INK }}>{v}</span>;
+  };
+  return (
+    <div style={{ maxWidth: 820, margin: "30px auto 0" }}>
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <button type="button" data-plan-compare-toggle aria-expanded={open} onClick={() => setOpen((o) => !o)}
+          style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "14px 26px", borderRadius: AT_RADIUS, border: `1px solid ${INK}`, background: open ? INK : "transparent", color: open ? BONE : INK, fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer", transition: "background 0.2s, color 0.2s" }}>
+          {open ? L("Vergelijking sluiten", "Close comparison", "Cerrar comparación") : L("Vergelijk Starter en Professional", "Compare Starter and Professional", "Compara Starter y Professional")}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transition: "transform 0.25s", transform: open ? "rotate(180deg)" : "none" }}><polyline points="6 9 12 15 18 9" /></svg>
+        </button>
+      </div>
+      {open && (
+        <div data-plan-compare role="table" aria-label={L("Starter en Professional vergeleken", "Starter and Professional compared", "Starter y Professional comparados")}
+          style={{ marginTop: 18, background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 20, boxShadow: "0 26px 46px -28px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05)" }}>
+          <div role="row" className="at-cmp-row at-cmp-head" style={{ position: "sticky", top: 63, zIndex: 2, background: P.bgCard, borderRadius: "20px 20px 0 0", borderBottom: `1px solid ${PUTTY}`, padding: "16px clamp(14px, 3vw, 26px)" }}>
+            <div role="columnheader" style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: P.textLabel }}>{L("Functie", "Feature", "Función")}</div>
+            <div role="columnheader" style={{ textAlign: "center" }}>
+              <div className="at-cmp-plan" style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: INK }}>Starter</div>
+              <div>{price(19)}</div>
+            </div>
+            <div role="columnheader" className="at-cmp-pro" style={{ textAlign: "center" }}>
+              <div className="at-cmp-plan" style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: INK }}>Professional</div>
+              <div>{price(35)}</div>
+            </div>
+          </div>
+          {groups.map((g, gi) => (
+            <div key={gi} role="rowgroup">
+              <div style={{ padding: "18px clamp(14px, 3vw, 26px) 6px", fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: EARTH }}>{g.group}</div>
+              {g.rows.map(([label, starter, pro], ri) => {
+                const last = gi === groups.length - 1 && ri === g.rows.length - 1;
+                return (
+                  <div key={ri} role="row" data-cmp-row className="at-cmp-row" style={{ padding: "10px clamp(14px, 3vw, 26px)", borderBottom: last ? "none" : `1px solid ${PUTTY}99` }}>
+                    <div role="cell" style={{ fontSize: 13, color: P.textSub, lineHeight: 1.45, paddingRight: 10 }}>{label}</div>
+                    <div role="cell" style={{ textAlign: "center" }}>{cell(starter)}</div>
+                    <div role="cell" className="at-cmp-pro" style={{ textAlign: "center" }}>{cell(pro, true)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Sectiekop: gecentreerde serif-titel met een korte lijn die zich uittekent
 // (nummers en streepje verwijderd op Faisals verzoek, 27-08). `tone` volgt de
@@ -369,6 +436,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-quote-card { height: 100%; box-sizing: border-box; background: ${P.bgCard}; border: 1px solid ${PUTTY}; border-radius: 16px; padding: 22px 22px 20px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.5), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
           .at-quote-card:hover { transform: translateY(-5px); box-shadow: 0 34px 54px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); }
           @media (prefers-reduced-motion: reduce) { .at-quote-card, .at-quote-card:hover { transform: none; } }
+          .at-cmp-row { display: grid; grid-template-columns: minmax(0, 1fr) 104px 120px; align-items: center; }
+          @media (max-width: 560px) { .at-cmp-row { grid-template-columns: minmax(0, 1fr) 70px 92px; } .at-cmp-plan { font-size: 9.5px !important; letter-spacing: 0.04em !important; } .at-cmp-price { font-size: 16px !important; } }
           .at-price-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
           @media (min-width: 760px) { .at-price-grid { grid-template-columns: 1fr 1fr; align-items: stretch; } }
           /* Stappen als zwevende kaarten (Faisal 15-09), zelfde rij-indeling
@@ -683,6 +752,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               ? "Todos los precios en euros, IVA incluido. ¿Pagas desde fuera de la zona euro? Tu tarjeta hace la conversión automáticamente."
               : "All prices in euros, incl. VAT. Paying from outside the eurozone? Your card converts automatically."}
           </div>
+          <AtPlanCompare lang={lang} yearly={billingCycle === "yearly"} />
         </div>
         </div>
 
