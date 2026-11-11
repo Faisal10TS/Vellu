@@ -180,6 +180,10 @@ serve(async (req) => {
   const form = new URLSearchParams();
   form.set("source_lang", src === "EN-US" || src === "EN-GB" ? "EN" : src);
   form.set("target_lang", tgt);
+  // Context (wordt niet vertaald of gefactureerd): zonder dit vertaalde DeepL
+  // de categorie "Removals" als "Verhuizingen" / "Mudanzas" (verhuizen) bij
+  // Beauty By Eydy, Brilliant Beauty en TTNB (gecorrigeerd 11-11-2026).
+  form.set("context", "Text from a beauty salon's online booking page: names of treatments, treatment categories, variants and extras (nails, lashes, brows, hair, braids, waxing, facials, massage). 'Removal' or 'Removals' means taking off nails, gel, acrylic, braids, extensions or lashes, not moving house.");
   for (const j of jobs) form.append("text", j.text);
 
   try {
