@@ -370,6 +370,15 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   // Alle salons zoeken: klapt open onder de uitgelichte salons (11-11-2026);
   // de zoeker laadt pas dan (scheelt de omslagfoto's van alle salons).
   const [finderOpen, setFinderOpen] = useState(false);
+  const [finderMounted, setFinderMounted] = useState(false);
+  // Openen: eerst mounten (dicht), een frame later open zetten, anders start
+  // de animatie niet; daarna meescrollen terwijl hij uitklapt.
+  const openFinder = () => {
+    setFinderMounted(true);
+    requestAnimationFrame(() => requestAnimationFrame(() => setFinderOpen(true)));
+    setTimeout(() => scrollToSection("all-salons"), 120);
+  };
+  const toggleFinder = () => { if (finderOpen) setFinderOpen(false); else openFinder(); };
   const [billingCycle, setBillingCycle] = useState("monthly");
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   useEffect(() => {
@@ -577,6 +586,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             .at-hero-note-meta { display: none; }
           }
           @media (prefers-reduced-motion: reduce) { .at-hero-note-card { animation: none; } }
+          .at-finder { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.55s cubic-bezier(0.55, 0, 0.3, 1); }
+          .at-finder.open { grid-template-rows: 1fr; transition: grid-template-rows 0.75s cubic-bezier(0.45, 0, 0.2, 1); }
+          .at-finder-clip { overflow: hidden; min-height: 0; }
+          .at-finder-inner { opacity: 0; transform: translateY(-18px) scale(0.985); transform-origin: top center; transition: opacity 0.3s ease, transform 0.55s cubic-bezier(0.55, 0, 0.3, 1); }
+          .at-finder.open .at-finder-inner { opacity: 1; transform: none; transition: opacity 0.55s ease 0.15s, transform 0.75s cubic-bezier(0.45, 0, 0.2, 1); }
+          .at-finder:not(.open) .at-finder-inner { visibility: hidden; transition: opacity 0.3s ease, transform 0.55s cubic-bezier(0.55, 0, 0.3, 1), visibility 0s linear 0.55s; }
+          @media (prefers-reduced-motion: reduce) { .at-finder, .at-finder-inner, .at-finder.open .at-finder-inner { transition: none; } }
           .at-show-row { display: flex; justify-content: center; align-items: flex-start; gap: clamp(22px, 4vw, 56px); margin-top: 8px; }
           .at-show-item.mid { margin-top: -26px; }
           .at-show-phone { width: 214px; border-radius: 40px; padding: 9px; background: linear-gradient(140deg, #6a6a72 0%, #23232a 22%, #0e0e11 58%, #4a4a53 100%); box-shadow: 0 40px 70px -30px rgba(40,30,20,0.65), inset 0 1.4px 0 rgba(255,255,255,0.2), inset 0 0 0 1px rgba(255,255,255,0.08); transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
@@ -651,7 +667,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: `calc(14px + env(safe-area-inset-top, 0px)) ${pad} 14px`, maxWidth: maxW, margin: "0 auto" }}>
             <div style={{ fontFamily: "'Jost',sans-serif", fontSize: "clamp(20px, 5vw, 24px)", fontWeight: 400, letterSpacing: "0.22em", color: INK }}>vellu</div>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <button className="at-nav-find" onClick={() => { setFinderOpen(true); setTimeout(() => scrollToSection("all-salons"), 60); }} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: EARTH, whiteSpace: "nowrap" }}>
+              <button className="at-nav-find" onClick={() => { if (finderOpen) scrollToSection("all-salons"); else openFinder(); }} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: EARTH, whiteSpace: "nowrap" }}>
                 {t.findSalonNav}
               </button>
               <div style={{ display: "flex", gap: 2, border: `1px solid ${PUTTY}`, borderRadius: R, padding: 3, background: P.bgCard }}>
@@ -810,7 +826,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             </div>
             <div style={{ textAlign: "center", marginTop: "clamp(30px, 4vw, 44px)", fontSize: 13, color: P.textSub }}>
               {!finderOpen && (lang === "nl" ? "Op zoek naar een andere salon? " : lang === "es" ? "¿Buscas otro salón? " : "Looking for another salon? ")}
-              <button type="button" data-all-salons-toggle aria-expanded={finderOpen} onClick={() => { const open = !finderOpen; setFinderOpen(open); if (open) setTimeout(() => scrollToSection("all-salons"), 60); }}
+              <button type="button" data-all-salons-toggle aria-expanded={finderOpen} onClick={toggleFinder}
                 style={{ background: "none", border: "none", borderBottom: `1px solid ${INK}`, cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 13, color: INK, padding: "2px 0", display: "inline-flex", alignItems: "center", gap: 6 }}>
                 {finderOpen
                   ? (lang === "nl" ? "Zoeken sluiten" : lang === "es" ? "Cerrar búsqueda" : "Close search")
@@ -819,11 +835,18 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               </button>
             </div>
           </div>
-          {finderOpen && (
-            <div id="all-salons" style={{ paddingBottom: "clamp(40px, 6vw, 64px)" }}>
-              <SalonFinder lang={lang} t={t} c={{ ...P, border: `${EARTH}3d` }} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} radius={R} atelier newTab oneRow />
+          {/* Open- en dichtklappen met een animatie (Faisal 11-11: "now it just
+              teleports"): de hoogte groeit via grid-template-rows 0fr → 1fr,
+              de inhoud glijdt en vervaagt mee. De zoeker wordt pas bij de
+              eerste keer openen geladen en blijft daarna staan, zodat ook het
+              dichtklappen zichtbaar is. */}
+          <div className={`at-finder${finderOpen ? " open" : ""}`} data-finder-wrap aria-hidden={!finderOpen}>
+            <div className="at-finder-clip">
+              <div id="all-salons" className="at-finder-inner" style={{ paddingBottom: "clamp(40px, 6vw, 64px)" }}>
+                {finderMounted && <SalonFinder lang={lang} t={t} c={{ ...P, border: `${EARTH}3d` }} goToSlug={goToSlug} navigate={navigate} hideHeader accent={EARTH} radius={R} atelier newTab oneRow />}
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* De besparingsrekensom (earth-band) is weg sinds 11-11-2026: hij ging
