@@ -14,6 +14,23 @@
 
 export const RELEASES = [
   {
+    // 11-11 (tweede): klanten importeren nam alleen CSV; de exports van andere
+    // systemen zijn vaak Excel.
+    id: "2026-11-11b",
+    date: "2026-11-11",
+    title: { nl: "Klanten importeren uit Excel", en: "Import clients from Excel", es: "Importar clientes desde Excel" },
+    items: [
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Je klantenlijst importeren kan nu ook met een Excel-bestand (.xlsx), niet alleen met CSV: Klanten → Importeer, of Instellingen → Klanten & marketing.",
+          en: "You can now import your client list from an Excel file (.xlsx) as well as CSV: Customers → Import, or Settings → Clients & marketing.",
+          es: "Ahora puedes importar tu lista de clientes también desde un archivo de Excel (.xlsx), no solo CSV: Clientes → Importar, o Ajustes → Clientes y marketing.",
+        },
+      },
+    ],
+  },
+  {
     // 11-11: salons stapten niet over omdat hun agenda weken vooruit in een
     // ander systeem stond. Nu: export erin, afspraken in één keer in Vellu.
     id: "2026-11-11",

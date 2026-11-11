@@ -27,6 +27,7 @@ import {
 } from "./shared.jsx";
 import Kasboek from "./Kasboek.jsx";
 import AfsprakenImport from "./AfsprakenImport.jsx";
+import { readTableBytes, findHeaderRow, ImportError } from "./afsprakenImport.js";
 import { AUTOPAY_MONTHLY, autopayChargeYmd, autopayChargeDayReached, autopayOffDeadline, autopayPhase } from "./autopay.js";
 import { paymentsAsCashRows } from "./reportData.js";
 import WhatsNewModal from "./WhatsNewModal.jsx";
@@ -1131,6 +1132,29 @@ function UpgradeCard({ feature, lang, c, accent, onUpgrade, compact = false }) {
   );
 }
 
+// Klantenbestand als Excel (11-11-2026, Faisal: "Yes, add Excel"): .xlsx en de
+// HTML/XML-"xls" die sommige systemen maken gaan door de lezer van de
+// afsprakenimport (afsprakenImport.js); null = gewone CSV, dan blijft het pad
+// van elke import zoals het was. Geeft de rijen vanaf de kopregel (een titel
+// of filterregel bovenaan de export wordt overgeslagen). Oud binair .xls en PDF
+// geven een ImportError met een code (zie clientFileError).
+const isSpreadsheetFile = (file, bytes) =>
+  (bytes[0] === 0x50 && bytes[1] === 0x4b) || (bytes[0] === 0xd0 && bytes[1] === 0xcf) || /\.(xlsx|xls|xml|htm|html|pdf|numbers)$/i.test(file.name || "");
+async function readClientSpreadsheet(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (!isSpreadsheetFile(file, bytes)) return null;
+  const rows = (await readTableBytes(bytes, file.name || "")).map(r => r.map(x => String(x ?? "").trim()));
+  return rows.slice(findHeaderRow(rows));
+}
+const clientFileError = (err, lang) => {
+  const L = (nl, en, es) => (lang === "es" ? es : lang === "en" ? en : nl);
+  const code = err instanceof ImportError ? err.code : "";
+  if (code === "xls_binary") return L("Oud Excel-bestand (.xls): open het in Excel en bewaar het als .xlsx of CSV.", "Old Excel file (.xls): open it in Excel and save it as .xlsx or CSV.", "Archivo antiguo de Excel (.xls): ábrelo en Excel y guárdalo como .xlsx o CSV.");
+  if (code === "pdf") return L("Een PDF kunnen we niet inlezen. Exporteer je klanten als Excel of CSV.", "We can't read a PDF. Export your clients as Excel or CSV.", "No podemos leer un PDF. Exporta tus clientes como Excel o CSV.");
+  if (code === "xlsx_unsupported") return L("Deze browser kan dit Excel-bestand niet openen. Bewaar het als CSV.", "This browser can't open this Excel file. Save it as CSV.", "Este navegador no puede abrir este archivo de Excel. Guárdalo como CSV.");
+  return L("Bestand kon niet gelezen worden", "Could not read file", "No se pudo leer el archivo");
+};
+
 // Klanten-IMPORT — voor salons die overstappen vanuit een andere app.
 // Leest een CSV met (minimaal) een naam en zet elke regel in manual_clients,
 // de tabel voor handmatig toegevoegde klanten. Duplicaten op e-mail of naam
@@ -1139,6 +1163,13 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
   const [busy, setBusy] = useState(false);
 
   const parse = async (file) => {
+    // Excel: zelfde objectvorm (kolomnaam in kleine letters → waarde).
+    const sheet = await readClientSpreadsheet(file);
+    if (sheet) {
+      if (sheet.length < 2) return [];
+      const head = sheet[0].map(h => h.toLowerCase());
+      return sheet.slice(1).map(cells => { const o = {}; head.forEach((h, i) => { o[h] = cells[i] || ""; }); return o; });
+    }
     let text = await file.text();
     if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
     const first = text.split(/\r?\n/)[0] || "";
@@ -1204,7 +1235,7 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
         const name = (pick(r, ["naam", "name", "klant", "client", "cliente", "volledige naam", "full name"]) || (first + " " + last)).trim();
         if (!name) { skipped++; continue; }
         const email = pick(r, ["e-mail", "email", "mail", "emailadres", "e-mailadres", "correo"]).toLowerCase();
-        const phone = pick(r, ["telefoon", "phone", "tel", "mobiel", "mobile", "telefoonnummer", "tel\u00e9fono"]);
+        const phone = pick(r, ["telefoon", "phone", "tel", "mobiel", "mobile", "telefoonnummer", "tel\u00e9fono", "phone number", "mobile number", "mobile phone", "mobiel nummer", "cell", "celular"]);
         // De hulptekst bij de verjaardagsmail belooft een kolom "birthday" in
         // de import, maar die werd hier niet gelezen — iedereen die zijn
         // klanten importeerde had daarna geen enkele verjaardag in het systeem.
@@ -1287,7 +1318,7 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
         : (done + " client(s) imported" + (updated ? (" \u00b7 " + updated + " updated") : "") + (skipped ? (" \u00b7 " + skipped + " skipped") : "")));
     } catch (e) {
       console.error("client import failed:", e);
-      toast.show(lang === "nl" ? "Import mislukt" : lang === "es" ? "Error al importar" : "Import failed", "error");
+      toast.show(e instanceof ImportError ? clientFileError(e, lang) : (lang === "nl" ? "Import mislukt" : lang === "es" ? "Error al importar" : "Import failed"), "error");
     } finally { setBusy(false); }
   };
 
@@ -1306,16 +1337,16 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
       </div>
       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
         {lang === "nl"
-          ? "Overstappen vanuit een andere app? Exporteer daar je klantenlijst als CSV en upload hem hier. De kolommen Naam, E-mail, Telefoon, Verjaardag (dd-mm-jjjj) en Notitie worden herkend; klanten die je al hebt worden overgeslagen, maar hun verjaardag wordt wel aangevuld."
+          ? "Overstappen vanuit een andere app? Exporteer daar je klantenlijst als Excel of CSV en upload hem hier. De kolommen Naam, E-mail, Telefoon, Verjaardag (dd-mm-jjjj) en Notitie worden herkend; klanten die je al hebt worden overgeslagen, maar hun verjaardag wordt wel aangevuld."
           : lang === "es"
-          ? "\u00bfVienes de otra app? Exporta tus clientes como CSV y s\u00fabelo aqu\u00ed. Se reconocen Nombre, Correo, Tel\u00e9fono, Cumplea\u00f1os (dd-mm-aaaa) y Nota; los duplicados se omiten, pero su cumplea\u00f1os s\u00ed se completa."
-          : "Switching from another app? Export your client list there as CSV and upload it here. Name, Email, Phone, Birthday (dd-mm-yyyy) and Note columns are recognised; clients you already have are skipped, but their birthday is still filled in."}
+          ? "\u00bfVienes de otra app? Exporta tus clientes como Excel o CSV y s\u00fabelo aqu\u00ed. Se reconocen Nombre, Correo, Tel\u00e9fono, Cumplea\u00f1os (dd-mm-aaaa) y Nota; los duplicados se omiten, pero su cumplea\u00f1os s\u00ed se completa."
+          : "Switching from another app? Export your client list there as Excel or CSV and upload it here. Name, Email, Phone, Birthday (dd-mm-yyyy) and Note columns are recognised; clients you already have are skipped, but their birthday is still filled in."}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <label className="btn-ghost" style={{ padding: "11px 18px", fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7, color: accent, borderColor: accent + "55", opacity: busy ? 0.5 : 1 }}>
-          <input type="file" accept=".csv,text/csv,application/vnd.ms-excel" style={{ display: "none" }} disabled={busy} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) run(f); }} />
+          <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style={{ display: "none" }} disabled={busy} onChange={e => { const f = e.target.files[0]; e.target.value = ""; if (f) run(f); }} />
           <NavIcon name="download" size={13} color="currentColor" />
-          {busy ? (lang === "nl" ? "Bezig\u2026" : lang === "es" ? "Procesando\u2026" : "Working\u2026") : (lang === "nl" ? "CSV uploaden" : lang === "es" ? "Subir CSV" : "Upload CSV")}
+          {busy ? (lang === "nl" ? "Bezig\u2026" : lang === "es" ? "Procesando\u2026" : "Working\u2026") : (lang === "nl" ? "Excel of CSV uploaden" : lang === "es" ? "Subir Excel o CSV" : "Upload Excel or CSV")}
         </label>
         <button className="btn-ghost" style={{ padding: "11px 18px", fontSize: 11, color: c.textMuted }} onClick={template}>
           {lang === "nl" ? "Voorbeeldbestand" : lang === "es" ? "Archivo de ejemplo" : "Example file"}
@@ -3804,7 +3835,7 @@ function csvRowsToClients(rows) {
   const iFirst = findCol("first_name", "first name", "voornaam", "given name");
   const iLast = findCol("last_name", "last name", "achternaam", "surname", "family name");
   const iEmail = findCol("email", "e-mail", "e_mail", "mail", "emailadres", "e-mailadres");
-  const iPhone = findCol("phone", "telefoon", "tel", "mobile", "mobiel", "phone number", "telefoonnummer");
+  const iPhone = findCol("phone", "telefoon", "tel", "mobile", "mobiel", "phone number", "telefoonnummer", "mobile number", "mobile phone", "mobiel nummer", "cell", "celular", "teléfono", "telefono");
   const iNotes = findCol("notes", "notities", "opmerkingen", "comment", "comments", "memo");
   const iBirthday = findCol("birthday", "verjaardag", "geboortedatum", "date of birth", "dob", "birth date");
 
@@ -4666,11 +4697,15 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       // Nederlandse Excel bewaart "CSV (gescheiden door lijstscheidingsteken)"
       // als Windows-1252, niet als UTF-8: "Zoë" werd dan onleesbaar. Eerst streng
       // UTF-8 proberen, bij een ongeldige reeks terugvallen op Windows-1252.
-      const buf = await file.arrayBuffer();
-      let text;
-      try { text = new TextDecoder("utf-8", { fatal: true }).decode(buf); }
-      catch { text = new TextDecoder("windows-1252").decode(buf); }
-      const rows = parseCSV(text);
+      // Excel (.xlsx, HTML/XML-"xls") via de lezer van de afsprakenimport.
+      let rows = await readClientSpreadsheet(file);
+      if (!rows) {
+        const buf = await file.arrayBuffer();
+        let text;
+        try { text = new TextDecoder("utf-8", { fatal: true }).decode(buf); }
+        catch { text = new TextDecoder("windows-1252").decode(buf); }
+        rows = parseCSV(text);
+      }
       const { records, skipped } = csvRowsToClients(rows);
       if (records.length === 0) {
         toast.show(lang === "nl" ? "Geen klanten in dit bestand. Check de kolomnamen (naam/email/telefoon)." : lang === "es" ? "No se encontraron clientes en este archivo. Revisa los nombres de las columnas (name/email/phone)." : "No clients found in this file. Check column names (name/email/phone).", "error");
@@ -4697,7 +4732,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       setImportPreview({ rows: records, skipped, badBirthdays, fileName: file.name });
     } catch (err) {
       console.error("CSV parse error:", err);
-      toast.show(lang === "nl" ? "Bestand kon niet gelezen worden" : lang === "es" ? "No se pudo leer el archivo" : "Could not read file", "error");
+      toast.show(clientFileError(err, lang), "error");
     }
   };
 
@@ -4848,11 +4883,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           className="btn-ghost"
           onClick={() => fileInputRef.current?.click()}
           style={{ width: "auto", padding: "0 14px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, color: accent, borderColor: `${accent}55` }}
-          title={lang === "nl" ? "Importeer CSV (bewaar je Excel-bestand eerst als CSV)" : lang === "es" ? "Importar CSV (guarda antes tu archivo de Excel como CSV)" : "Import CSV (save your Excel file as CSV first)"}
+          title={lang === "nl" ? "Importeer je klantenlijst (Excel of CSV)" : lang === "es" ? "Importar tu lista de clientes (Excel o CSV)" : "Import your client list (Excel or CSV)"}
         >
           <NavIcon name="download" size={14} color="currentColor" /> {lang === "nl" ? "Importeer" : lang === "es" ? "Importar" : "Import"}
         </button>
-        <input ref={fileInputRef} type="file" accept=".csv,text/csv,.txt" onChange={onCSVPicked} style={{ display: "none" }} />
+        <input ref={fileInputRef} type="file" accept=".csv,.txt,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={onCSVPicked} style={{ display: "none" }} />
         <button className="btn-primary" onClick={() => setAddOpen(true)} style={{ width: "auto", padding: "0 16px", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           <NavIcon name="plus" size={14} color="currentColor" /> {lang === "nl" ? "Klant" : lang === "es" ? "Añadir" : "Add"}
         </button>
