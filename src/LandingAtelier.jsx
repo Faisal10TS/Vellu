@@ -26,7 +26,7 @@ import SupportChat from "./SupportChat.jsx";
 import { supabase } from "./supabase.js";
 import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS, rememberRef, useReferralPromo, rewardLabel, promoEndLabel } from "./shared.jsx";
 import {
-  SalonFinder, SavingsCalculator, HeroPhoneMockup, StickyStartPill, ArrowIcon,
+  SalonFinder, HeroPhoneMockup, StickyStartPill, ArrowIcon,
   Reveal, KineticLine, HeroEnter, Marquee, TweenedNumber,
   ParallaxLayer, CursorRing, ScrollProgress, glowMove,
 } from "./LandingScreen.jsx";
@@ -258,21 +258,21 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   // eerst terug op Engels, L3-09).
   const faqs = lang === "es" ? [
     ["¿Qué es Vellu y para quién es?", "Vellu te da tu propia página de reservas en vellu.cc/tu-nombre. Los clientes reservan directamente contigo, sin intermediarios, y tú gestionas todo desde tu panel. Hecho para profesionales independientes de la belleza: manicuristas, artistas de pestañas, especialistas en cejas, peluquerías y salones, solos o con equipo."],
-    ["¿Cuánto cuesta y por qué sin comisión?", "Starter cuesta €19 al mes y Professional €35 al mes. Precio fijo, 0% de comisión, sin costes ocultos. La mayoría de las plataformas de reservas cobran un 5–10% por reserva: con 50 reservas de €45 eso suma enseguida €100–€225 al mes. Con Vellu tus ingresos son tuyos, y tienes tu propia página con tu marca en lugar de un perfil en un buscador: tus clientes siguen siendo tus clientes."],
+    ["¿Cuánto cuesta y por qué sin comisión?", "Starter cuesta €19 al mes y Professional €35 al mes. Precio fijo, 0% de comisión, sin costes ocultos: nunca pagas por reserva ni por cliente nuevo, y con Professional todo tu equipo está incluido. Además tienes tu propia página con tu marca en lugar de un perfil en un buscador: tus clientes siguen siendo tus clientes."],
     ["¿Puedo probarlo primero?", "Sí. Cada salón nuevo empieza con 14 días de prueba gratis. Configura tu página, recibe reservas y después decide si sigues con Starter o Professional."],
     ["¿Puede mi equipo gestionar su propia agenda?", "Sí. Con el plan Professional cada miembro del equipo tiene su propio acceso. Solo ve sus propias citas y gestiona sus propios servicios y horarios."],
     ["¿Reciben recordatorios los clientes y cómo cancelan?", "Sí, automáticamente: una confirmación al reservar, un recordatorio 24 horas antes y, después de la visita, un seguimiento que pide una reseña. Cancelan con el enlace de su correo de confirmación; tú decides hasta cuándo se puede."],
     ["¿Puedo traer mis clientes y citas de otro sistema?", "Sí. Exporta tu lista de clientes y tus próximas citas desde tu plataforma actual. Los clientes se importan en Clientes > Importar y las citas con Importar citas en tu panel, ambos como Excel o CSV. Vellu reconoce las columnas habituales y te lo muestra todo antes de guardar; tus clientes no reciben una confirmación doble. ¿No lo consigues? Envíalo por Contacto y te ayudamos gratis."],
   ] : lang === "nl" ? [
     ["Wat is Vellu, en voor wie is het?", "Vellu geeft jou je eigen boekingspagina op vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij, en jij beheert alles vanuit je dashboard. Gemaakt voor onafhankelijke beauty professionals: nail techs, lash artists, brow specialists, kappers en salons — solo of met een team."],
-    ["Wat kost het, en waarom geen commissie?", "Starter is €19 per maand, Professional €35 per maand. Vast tarief, 0% commissie, geen verborgen kosten. De meeste boekingsplatformen rekenen 5–10% per boeking — bij 50 boekingen à €45 is dat al snel €100–€225 per maand. Bij Vellu blijft je omzet van jou, en je krijgt je eigen merkpagina in plaats van een profiel in een zoekplatform: jouw klanten blijven jouw klanten."],
+    ["Wat kost het, en waarom geen commissie?", "Starter is €19 per maand, Professional €35 per maand. Vast tarief, 0% commissie, geen verborgen kosten: je betaalt nooit per boeking of per nieuwe klant, en bij Professional is je hele team inbegrepen. Bovendien krijg je je eigen merkpagina in plaats van een profiel in een zoekplatform: jouw klanten blijven jouw klanten."],
     ["Kan ik het eerst uitproberen?", "Ja. Elke nieuwe salon start met 14 dagen gratis proberen. Zet je pagina op, ontvang boekingen en kies daarna of je doorgaat met Starter of Professional."],
     ["Kunnen mijn medewerkers hun eigen agenda beheren?", "Ja. Met het Professional-plan krijgt elke medewerker een eigen login. Ze zien alleen hun eigen afspraken en beheren hun eigen diensten en werktijden."],
     ["Krijgen klanten herinneringen, en hoe annuleren ze?", "Ja, automatisch: een bevestiging bij het boeken, een herinnering 24 uur van tevoren en na het bezoek een follow-up voor een review. Annuleren gaat via de link in hun bevestigingsmail; jij bepaalt tot wanneer dat kan."],
     ["Kan ik mijn klanten en afspraken meenemen van een ander systeem?", "Ja. Exporteer je klantenlijst en je komende afspraken uit je huidige platform. Klanten importeer je onder Klanten > Importeer, afspraken via Afspraken importeren op je dashboard, allebei als Excel of CSV. Vellu herkent de gangbare kolommen en laat alles eerst zien voordat er iets wordt opgeslagen; je klanten krijgen geen dubbele bevestiging. Lukt het niet? Stuur 'm naar Contact en wij helpen je gratis."],
   ] : [
     ["What is Vellu, and who is it for?", "Vellu gives you your own booking page at vellu.cc/your-name. Clients book directly with you, no middleman, and you manage everything from your dashboard. Built for independent beauty professionals: nail techs, lash artists, brow specialists, hairdressers and salons — solo or with a team."],
-    ["What does it cost, and why no commission?", "Starter is €19 a month, Professional €35 a month. Fixed price, 0% commission, no hidden fees. Most booking platforms take 5–10% per booking — at 50 bookings of €45 that quickly adds up to €100–€225 a month. With Vellu your revenue stays yours, and you get your own branded page instead of a profile in a marketplace: your clients stay your clients."],
+    ["What does it cost, and why no commission?", "Starter is €19 a month, Professional €35 a month. Fixed price, 0% commission, no hidden fees: you never pay per booking or per new client, and on Professional your whole team is included. And you get your own branded page instead of a profile in a marketplace: your clients stay your clients."],
     ["Can I try it first?", "Yes. Every new salon starts with a 14-day free trial. Set up your page, take bookings and then decide whether to continue with Starter or Professional."],
     ["Can my staff manage their own agenda?", "Yes. With the Professional plan, each staff member gets their own login. They only see their own appointments and manage their own services and hours."],
     ["Do clients get reminders, and how do they cancel?", "Yes, automatically: a confirmation when they book, a reminder 24 hours before, and a follow-up after the visit asking for a review. Cancelling goes through the link in their confirmation email; you set the cancellation deadline."],
@@ -280,8 +280,21 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   ];
 
   const plans = [
-    { name: "Starter", price: 19, popular: false, features: { nl: ["Online boekingen", "Email bevestigingen", "24u herinneringen", "Reviews systeem", "Eigen branding & logo", "Tot 3 medewerkers"], en: ["Online bookings", "Email confirmations", "24h reminders", "Reviews system", "Custom branding & logo", "Up to 3 staff members"], es: ["Reservas online", "Confirmaciones por correo", "Recordatorios 24 h antes", "Sistema de reseñas", "Tu propia marca y logo", "Hasta 3 miembros del equipo"] } },
-    { name: "Professional", price: 35, popular: true, features: { nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Team accounts (eigen login)", "Producten verkopen", "Analytics dashboard", "Kortingscodes", "Nieuwsbrief & klant-export", "Meerdere locaties", "Prioriteit support"], en: ["Everything in Starter +", "Unlimited staff members", "Team accounts (own login)", "Sell products", "Analytics dashboard", "Discount codes", "Newsletter & client export", "Multiple locations", "Priority support"], es: ["Todo lo de Starter +", "Miembros del equipo ilimitados", "Cuentas de equipo (acceso propio)", "Venta de productos", "Panel de analíticas", "Códigos de descuento", "Boletín y exportación de clientes", "Varias ubicaciones", "Soporte prioritario"] } },
+    // Volledige lijsten (11-11-2026): Starter noemde maar zes dingen terwijl
+    // stempelkaart, verjaardagscodes, aanbetaling, no-show-vergoeding,
+    // wachtlijst, facturen en importeren ook in Starter zitten. Pro-only volgens
+    // de code (isStarter/UpgradeCard): kassa en producten, analytics,
+    // kortingscodes, nieuwsbrief, klant-export, locaties, eigen login per
+    // medewerker, meer dan 3 medewerkers, eigen lettertype. Wijzigt de
+    // afscherming in OwnerApp, dan deze lijsten mee.
+    { name: "Starter", price: 19, popular: false, features: {
+      nl: ["Eigen boekingspagina in NL, EN en ES", "Bevestigingen en herinneringen per mail", "Reviews na elk bezoek", "Facturen automatisch verstuurd", "Stempelkaart en verjaardagscodes", "Aanbetaling en no-show-vergoeding", "Wachtlijst", "Eigen branding & logo", "Tot 3 medewerkers", "Klanten en afspraken importeren"],
+      en: ["Your own booking page in EN, NL and ES", "Email confirmations and reminders", "Reviews after every visit", "Invoices sent automatically", "Stamp card and birthday codes", "Deposits and no-show fees", "Waitlist", "Custom branding & logo", "Up to 3 staff members", "Import clients and appointments"],
+      es: ["Tu página de reservas en ES, NL y EN", "Confirmaciones y recordatorios por correo", "Reseñas después de cada visita", "Facturas enviadas automáticamente", "Tarjeta de sellos y códigos de cumpleaños", "Depósitos y tarifa por no presentarse", "Lista de espera", "Tu propia marca y logo", "Hasta 3 miembros del equipo", "Importa clientes y citas"] } },
+    { name: "Professional", price: 35, popular: true, features: {
+      nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Eigen login per medewerker", "Kassa, productverkoop en voorraad", "Analytics-dashboard", "Kortingscodes", "Nieuwsbrief & klant-export", "Meerdere locaties", "Eigen lettertype op je pagina", "Prioriteit support"],
+      en: ["Everything in Starter +", "Unlimited staff members", "Own login for each staff member", "Till, product sales and stock", "Analytics dashboard", "Discount codes", "Newsletter & client export", "Multiple locations", "Your own font on your page", "Priority support"],
+      es: ["Todo lo de Starter +", "Miembros del equipo ilimitados", "Acceso propio para cada miembro", "Caja, venta de productos e inventario", "Panel de analíticas", "Códigos de descuento", "Boletín y exportación de clientes", "Varias ubicaciones", "Tu propia tipografía en tu página", "Soporte prioritario"] } },
   ];
 
   const maxW = 1080;
@@ -527,24 +540,11 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           </div>
         </div>
 
-        {/* ── 02 · DE REKENSOM — de rijke earth-band, direct onder de putty-band;
-              de rekentool zelf staat in een bone-paneel zodat de kleine cijfers
-              leesbaar blijven. ── */}
-        <div style={{ background: EARTH, position: "relative", zIndex: 10 }}>
-          <div aria-hidden="true" style={{ position: "absolute", inset: 0, background: `radial-gradient(60% 90% at 85% 0%, ${MUSHROOM}33 0%, transparent 60%)`, pointerEvents: "none" }} />
-          <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}`, position: "relative" }}>
-            <AtHead title={t.calcTitle} tone="earth" />
-            <Reveal>
-              {/* Rekensom als zwevend paneel (Faisal 15-09): zelfde schaduwfamilie
-                  als de kaarten, breder voor de tweekoloms indeling; geen lift
-                  (schuiven verslepen op een bewegende kaart voelt onrustig). */}
-              <div className="vl-glow" data-calc-card onMouseMove={glowMove} style={{ maxWidth: 880, margin: "0 auto", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: 20, padding: "26px clamp(20px, 4vw, 36px) 30px", boxShadow: "0 26px 46px -28px rgba(69,58,43,0.6), 0 2px 4px rgba(69,58,43,0.05)" }}>
-                <div style={{ fontSize: 12.5, color: P.textLabel, lineHeight: 1.6, marginBottom: 20, maxWidth: 520 }}>{t.calcSub}</div>
-                <SavingsCalculator lang={lang} t={t} c={P} accent={EARTH} atelier />
-              </div>
-            </Reveal>
-          </div>
-        </div>
+        {/* De besparingsrekensom (earth-band) is weg sinds 11-11-2026: hij ging
+            uit van "de meeste platforms rekenen 5–10% per boeking", en dat klopt
+            niet voor Fresha, Setmore of Salonized (abonnement, plus bij Fresha
+            en Treatwell een eenmalige vergoeding op nieuwe marketplace-klanten).
+            Wat je voor €19/€35 krijgt staat nu volledig bij de prijzen. */}
 
         {/* ── 03 · HOE HET WERKT — terug op bone, redactionele rijen. ── */}
         <div id="how-it-works" style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(50px, 8vw, 84px) ${pad} 0`, position: "relative", zIndex: 10 }}>
@@ -667,7 +667,16 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               );
             })}
           </div>
-          <div style={{ fontSize: 11.5, color: ESPRESSO_DEEP, marginTop: 16, lineHeight: 1.6, maxWidth: 560, marginLeft: "auto", marginRight: "auto", textAlign: "center" }}>
+          {/* De eerlijke vergelijking i.p.v. de oude rekensom: geen bedragen van
+              andere platforms (die veranderen en verschillen per platform). */}
+          <div data-pricing-honest style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "clamp(18px, 2.4vw, 22px)", color: INK, marginTop: 26, lineHeight: 1.4, maxWidth: 640, marginLeft: "auto", marginRight: "auto", textAlign: "center" }}>
+            {lang === "nl"
+              ? "Je betaalt nooit per boeking of per nieuwe klant. Bij Professional is je hele team inbegrepen, voor één prijs."
+              : lang === "es"
+              ? "Nunca pagas por reserva ni por cliente nuevo. Con Professional todo tu equipo está incluido por un solo precio."
+              : "You never pay per booking or per new client. On Professional your whole team is included for one price."}
+          </div>
+          <div style={{ fontSize: 11.5, color: ESPRESSO_DEEP, marginTop: 12, lineHeight: 1.6, maxWidth: 560, marginLeft: "auto", marginRight: "auto", textAlign: "center" }}>
             {lang === "nl"
               ? "Alle prijzen in euro's, incl. btw. Betaal je van buiten de eurozone? Je kaart rekent automatisch om."
               : lang === "es"
