@@ -230,9 +230,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                 Vellu today. No inflated numbers, no fabricated quotes. */}
             <HeroEnter ready={heroReady} delay={1050}>
               <div className="hero-stats" style={{ display: "flex", marginTop: 22, fontSize: 11, color: c.textMuted, letterSpacing: "0.05em" }}>
-                {lang === "nl" ? "Gebruikt door salons in Nederland en het Caribisch gebied"
-                  : lang === "es" ? "Utilizado por salones en los Países Bajos y el Caribe"
-                  : "Used by salons in the Netherlands and the Caribbean"}
+                {lang === "nl" ? "Gebruikt door verschillende soorten beautyprofessionals"
+                  : lang === "es" ? "Usado por distintos tipos de profesionales de la belleza"
+                  : "Used by different types of beauty professionals"}
               </div>
             </HeroEnter>
           </div>

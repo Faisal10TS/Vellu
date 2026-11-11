@@ -103,6 +103,306 @@ function AtMobileBar({ lang, onStart }) {
   );
 }
 
+// "Alles wat je salon nodig heeft" als vier thema's met elk een eigen
+// app-beeld (11-11-2026, homepage-review: acht kaartjes met één regel
+// verkochten Vellu te klein en waren op de telefoon drie schermen lang).
+// Desktop: thema's links, beeld rechts. Telefoon: vier knoppen (2x2) boven het
+// beeld, punten eronder. De beelden zijn HTML, net als de hero-telefoon:
+// scherp, per taal, niets te laden. Ze bootsen echte schermen van de
+// demosalon Bloom Studio na (zelfde namen, diensten en prijzen). Geen
+// sterren of reviewcijfers: dat zouden verzonnen cijfers zijn. Elke belofte
+// hieronder bestaat echt in de app; Google Agenda-koppeling staat uit, dus
+// "agenda in je telefoon" (de agenda-feed) en niet "Google Agenda".
+const TH_W = 520, TH_H = 390;
+
+function useFitScale(designW, max = 1.1) {
+  const ref = useRef(null);
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    // ResizeObserver meldt zich direct na observe() één keer: geen setState in het effect zelf.
+    const ro = new ResizeObserver(() => setScale(Math.min(max, el.clientWidth / designW)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [designW, max]);
+  return [ref, scale];
+}
+
+function AtThemeVisual({ id, lang }) {
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  const sub = "#7A6A55";
+  const card = { position: "absolute", inset: 0, boxSizing: "border-box", background: "#FBF8F3", border: `1px solid ${PUTTY}`, borderRadius: 16, boxShadow: "0 34px 60px -34px rgba(69,58,43,0.55), 0 2px 5px rgba(69,58,43,0.06)", fontFamily: "'Jost',sans-serif", color: INK, overflow: "hidden" };
+  const label = { fontSize: 10, fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: EARTH };
+  const avatar = (txt, size = 34) => <span style={{ width: size, height: size, borderRadius: "50%", background: `${EARTH}1f`, color: EARTH, display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cormorant Garamond',serif", fontSize: size * 0.48, flexShrink: 0 }}>{txt}</span>;
+
+  if (id === "book") {
+    const days = L(["ma", "di", "wo", "do", "vr", "za"], ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], ["lun", "mar", "mié", "jue", "vie", "sáb"]);
+    const slots = ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "13:00", "13:30", "14:00", "15:00", "15:30", "16:30"];
+    const taken = new Set(["09:30", "11:00", "13:30"]);
+    return (
+      <div style={{ ...card, padding: "20px 22px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+          {avatar("B")}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600 }}>Bloom Studio</div>
+            <div style={{ fontSize: 11, color: sub, marginTop: 1 }}>{L("BIAB nieuwe set", "BIAB new set", "BIAB set nuevo")} · 75 min · €52,00</div>
+          </div>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10.5, color: EARTH, border: `1px solid ${PUTTY}`, borderRadius: 8, padding: "6px 9px", background: BONE }}><NavIcon name="link" size={12} color={EARTH} />vellu.cc/bloomstudio</span>
+        </div>
+        <div style={{ height: 1, background: PUTTY, margin: "16px 0 14px" }} />
+        <div style={label}>{L("Kies een datum", "Pick a date", "Elige una fecha")}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginTop: 9 }}>
+          {days.map((d, i) => {
+            const on = i === 1;
+            return (
+              <div key={d} style={{ textAlign: "center", padding: "7px 0 6px", borderRadius: 8, background: on ? EARTH : BONE, color: on ? BONE : INK, border: `1px solid ${on ? EARTH : PUTTY}` }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.06em", opacity: 0.8 }}>{d}</div>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 21, lineHeight: 1.05 }}>{16 + i}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ ...label, marginTop: 16 }}>{L("Kies een tijd", "Pick a time", "Elige una hora")}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 7, marginTop: 9 }}>
+          {slots.map((s) => {
+            const on = s === "10:00", off = taken.has(s);
+            return (
+              <div key={s} style={{ textAlign: "center", fontSize: 12, padding: "8px 0", borderRadius: 8, fontWeight: on ? 600 : 400, background: on ? INK : off ? "transparent" : BONE, color: on ? BONE : off ? "#BFB29E" : INK, border: `1px ${off ? "dashed" : "solid"} ${on ? INK : PUTTY}` }}>{s}</div>
+            );
+          })}
+        </div>
+        <div style={{ position: "absolute", left: 22, right: 22, bottom: 20, height: 46, borderRadius: 8, background: EARTH, color: BONE, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11.5, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+          {L("Boek di 17 nov · 10:00", "Book Tue 17 Nov · 10:00", "Reservar mar 17 nov · 10:00")}
+        </div>
+      </div>
+    );
+  }
+
+  if (id === "paid") {
+    const methods = [L("Pin", "Card", "Tarjeta"), L("Contant", "Cash", "Efectivo"), L("Overschrijving", "Transfer", "Transferencia"), L("Op rekening", "On account", "A cuenta")];
+    const row = (name, who, price) => (
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "9px 0", borderBottom: `1px solid ${PUTTY}` }}>
+        <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{name}</span>
+        {who && <span style={{ fontSize: 11, color: sub }}>{who}</span>}
+        <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 18, minWidth: 66, textAlign: "right" }}>{price}</span>
+      </div>
+    );
+    return (
+      <div style={{ ...card, padding: "20px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 400 }}>{L("Afrekenen", "Checkout", "Cobrar")}</div>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 500 }}>{avatar("NS", 28)}Naomi Smit</span>
+        </div>
+        <div style={{ marginTop: 8 }}>
+          {row(L("BIAB nieuwe set", "BIAB new set", "BIAB set nuevo"), "Noor", "€52,00")}
+          {row("Brow shaping", "", "€18,00")}
+        </div>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginTop: 12 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" }}>{L("Totaal", "Total", "Total")}</span>
+          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 34, lineHeight: 1 }}>€70,00</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6, fontSize: 11.5, color: EARTH }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><NavIcon name="check" size={13} color={EARTH} />{L("Commissie aan Vellu", "Commission to Vellu", "Comisión para Vellu")}</span>
+          <span style={{ fontWeight: 600 }}>€0,00</span>
+        </div>
+        <div style={{ ...label, marginTop: 16 }}>{L("Betaalwijze", "Payment method", "Forma de pago")}</div>
+        <div style={{ display: "flex", gap: 7, marginTop: 9 }}>
+          {methods.map((m, i) => (
+            <span key={m} style={{ flex: 1, textAlign: "center", fontSize: 11.5, padding: "9px 4px", borderRadius: 8, whiteSpace: "nowrap", background: i === 0 ? INK : BONE, color: i === 0 ? BONE : INK, border: `1px solid ${i === 0 ? INK : PUTTY}`, fontWeight: i === 0 ? 600 : 400 }}>{m}</span>
+          ))}
+        </div>
+        <div style={{ position: "absolute", left: 24, right: 24, bottom: 20 }}>
+          <div style={{ height: 46, borderRadius: 8, background: EARTH, color: BONE, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11.5, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" }}>{L("Afrekenen · €70,00", "Check out · €70,00", "Cobrar · €70,00")}</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 11, color: sub, marginTop: 9 }}><NavIcon name="mail" size={12} color={sub} />{L("De factuur gaat per mail naar Naomi", "The invoice is emailed to Naomi", "La factura se envía a Naomi por correo")}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (id === "keep") {
+    const acts = [
+      { icon: "send", t: L("Herinnering verstuurd", "Reminder sent", "Recordatorio enviado"), m: L("1 dag van tevoren", "1 day before", "1 día antes") },
+      { icon: "mail", t: L("Reviewverzoek verstuurd", "Review request sent", "Solicitud de reseña enviada"), m: L("na het bezoek", "after the visit", "después de la visita") },
+      { icon: "gift", t: L("Verjaardagscode verstuurd", "Birthday code sent", "Código de cumpleaños enviado"), m: L("in de verjaardagsmaand", "in the birthday month", "en el mes del cumpleaños") },
+    ];
+    return (
+      <div style={{ ...card, padding: "20px 22px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {avatar("SJ", 42)}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>Sophie Jansen</div>
+            <div style={{ fontSize: 11, color: sub, marginTop: 2 }}>{L("9 bezoeken", "9 visits", "9 visitas")} · Signature facial</div>
+          </div>
+          <span style={{ fontSize: 10.5, color: EARTH, border: `1px solid ${PUTTY}`, borderRadius: 8, padding: "6px 9px", background: BONE, whiteSpace: "nowrap" }}>{L("Volgende: di 17 nov · 14:30", "Next: Tue 17 Nov · 14:30", "Próxima: mar 17 nov · 14:30")}</span>
+        </div>
+        <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: BONE, border: `1px solid ${PUTTY}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <span style={label}>{L("Stempelkaart", "Loyalty card", "Tarjeta de fidelidad")}</span>
+            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 19 }}>7 / 10</span>
+          </div>
+          <div style={{ display: "flex", gap: 7, marginTop: 9 }}>
+            {Array.from({ length: 10 }, (_, i) => (
+              <span key={i} style={{ width: 26, height: 26, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", background: i < 7 ? EARTH : "transparent", border: i < 7 ? "none" : `1.5px dashed ${MUSHROOM}` }}>
+                {i < 7 && <NavIcon name="check" size={12} color={BONE} />}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginTop: 12, padding: "10px 14px", borderLeft: `3px solid ${MUSHROOM}`, background: `${PUTTY}55`, borderRadius: "0 8px 8px 0" }}>
+          <div style={{ fontSize: 10.5, color: sub }}>{L("Notitie · laatste bezoek", "Note · last visit", "Nota · última visita")}</div>
+          <div style={{ fontSize: 12.5, marginTop: 2 }}>{L("Gevoelige huid: milde peeling. Advies: dagelijks SPF.", "Sensitive skin: gentle peel. Advice: daily SPF.", "Piel sensible: peeling suave. Consejo: SPF a diario.")}</div>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          {acts.map((a) => (
+            <div key={a.t} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0" }}>
+              <span style={{ width: 28, height: 28, borderRadius: 8, background: `${EARTH}14`, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name={a.icon} size={13} color={EARTH} /></span>
+              <span style={{ fontSize: 12.5, fontWeight: 500, flex: 1 }}>{a.t}</span>
+              <span style={{ fontSize: 10.5, color: sub }}>{a.m}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // "run": dagagenda met twee kolommen (jij en Noor), 09:00-14:00.
+  const ROW = 50, START = 9 * 60;
+  const you = L("Jij", "You", "Tú");
+  const appts = [
+    { col: 0, s: "09:00", e: "09:45", t: L("Gel manicure", "Gel manicure", "Manicura en gel"), c: "Naomi" },
+    { col: 0, s: "10:30", e: "11:45", t: L("BIAB nieuwe set", "BIAB new set", "BIAB set nuevo"), c: "Sophie" },
+    { col: 0, s: "13:00", e: "13:45", t: L("Gel manicure", "Gel manicure", "Manicura en gel"), c: "Isabella" },
+    { col: 1, s: "09:30", e: "10:30", t: "Lash lift", c: "Emma" },
+    { col: 1, s: "11:00", e: "11:30", t: "Brow shaping", c: "Julia" },
+    { col: 1, s: "12:00", e: "13:15", t: L("BIAB nieuwe set", "BIAB new set", "BIAB set nuevo"), c: "Femke" },
+  ];
+  const mins = (hm) => { const [h, m] = hm.split(":").map(Number); return h * 60 + m; };
+  const top = (hm) => ((mins(hm) - START) / 60) * ROW;
+  return (
+    <div style={{ ...card, padding: "18px 22px" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+        <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26 }}>{L("Vandaag", "Today", "Hoy")}</span>
+        <span style={{ fontSize: 11.5, color: sub }}>{L("di 17 nov", "Tue 17 Nov", "mar 17 nov")}</span>
+        <span style={{ flex: 1 }} />
+        {[[you, EARTH], ["Noor", MUSHROOM]].map(([n, col]) => (
+          <span key={n} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, marginLeft: 12 }}><span style={{ width: 9, height: 9, borderRadius: "50%", background: col }} />{n}</span>
+        ))}
+      </div>
+      <div style={{ position: "relative", marginTop: 14, height: ROW * 6, display: "grid", gridTemplateColumns: "44px 1fr 1fr", columnGap: 8 }}>
+        {Array.from({ length: 6 }, (_, i) => (
+          <div key={i} style={{ position: "absolute", left: 0, right: 0, top: i * ROW, borderTop: `1px solid ${PUTTY}`, fontSize: 10, color: sub, paddingTop: 3 }}>{String(9 + i).padStart(2, "0")}:00</div>
+        ))}
+        {appts.map((a) => {
+          const h = Math.max(22, top(a.e) - top(a.s) - 3);
+          const col = a.col === 0 ? EARTH : MUSHROOM;
+          return (
+            <div key={a.s + a.col} style={{ position: "absolute", zIndex: 1, top: top(a.s) + 2, height: h, left: a.col === 0 ? 52 : "calc(52px + (100% - 52px) / 2 + 4px)", width: "calc((100% - 52px) / 2 - 4px)", boxSizing: "border-box", borderRadius: 8, background: a.col === 0 ? "#ECE5DA" : "#F3EBDD", borderLeft: `3px solid ${col}`, padding: "4px 8px", overflow: "hidden" }}>
+              <div style={{ fontSize: 11.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.t}</div>
+              {h > 34 && <div style={{ fontSize: 10.5, color: sub, whiteSpace: "nowrap" }}>{a.s} · {a.c}</div>}
+            </div>
+          );
+        })}
+        <div style={{ position: "absolute", zIndex: 2, left: 44, right: 0, top: top("11:50"), height: 0, borderTop: `1.5px solid ${INK}` }}>
+          <span style={{ position: "absolute", left: -5, top: -5, width: 8, height: 8, borderRadius: "50%", background: INK }} />
+        </div>
+      </div>
+      <div style={{ position: "absolute", left: 22, right: 22, bottom: 16, display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: sub }}>
+        <NavIcon name="calendar" size={12} color={sub} />{L("Ook in de agenda van je telefoon", "Also in your phone's calendar", "También en el calendario de tu móvil")}
+      </div>
+    </div>
+  );
+}
+
+function AtFeatureThemes({ lang }) {
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  const themes = [
+    { id: "book", title: L("Geboekt worden", "Get booked", "Recibe reservas"),
+      lead: L("Je eigen boekingspagina, dag en nacht open.", "Your own booking page, open day and night.", "Tu propia página de reservas, abierta día y noche."),
+      points: [
+        L("Jouw naam, logo, kleuren en foto's van je werk op vellu.cc/jouw-naam", "Your name, logo, colours and photos of your work at vellu.cc/your-name", "Tu nombre, logo, colores y fotos de tu trabajo en vellu.cc/tu-nombre"),
+        L("Klanten kiezen zelf behandeling, medewerker en tijd, in het Nederlands, Engels of Spaans", "Clients pick the treatment, staff member and time themselves, in English, Dutch or Spanish", "Tus clientes eligen tratamiento, profesional y hora, en español, inglés o neerlandés"),
+        L("Een wachtlijst voor als je vol zit", "A waiting list for when you're fully booked", "Lista de espera para cuando no quede sitio"),
+        L("Vooruitbetalen of een no-show-vergoeding, als je dat wilt", "Prepayment or a no-show fee, if you want one", "Pago por adelantado o cargo por no presentarse, si lo quieres"),
+      ] },
+    { id: "paid", title: L("Betaald worden", "Get paid", "Cobra"),
+      lead: L("0% commissie: wat je klant betaalt, is van jou.", "0% commission: what your client pays is yours.", "0% de comisión: lo que paga tu cliente es tuyo."),
+      points: [
+        L("Een vast bedrag per maand, geen percentage per boeking", "One fixed monthly price, no cut per booking", "Una cuota fija al mes, sin porcentaje por reserva"),
+        L("Afrekenen met pin, contant, overschrijving of op rekening", "Check out by card, cash, bank transfer or on account", "Cobra con tarjeta, efectivo, transferencia o a cuenta"),
+        L("De factuur gaat automatisch per mail naar je klant", "The invoice is emailed to your client automatically", "La factura se envía automáticamente por correo a tu cliente"),
+        L("Omzet en rapporten, ook als Excel voor je boekhouder", "Revenue and reports, also as Excel for your accountant", "Ingresos e informes, también en Excel para tu gestor"),
+      ] },
+    { id: "keep", title: L("Klanten terug laten komen", "Keep clients coming back", "Haz que vuelvan"),
+      lead: L("Vellu onthoudt alles en verstuurt de berichten.", "Vellu remembers everything and sends the messages.", "Vellu lo recuerda todo y envía los mensajes."),
+      points: [
+        L("Bevestiging, herinnering en follow-up gaan vanzelf per mail", "Confirmation, reminder and follow-up go out by email on their own", "Confirmación, recordatorio y seguimiento se envían solos por correo"),
+        L("Na elk bezoek een verzoek om een review", "A review request after every visit", "Una solicitud de reseña después de cada visita"),
+        L("Stempelkaart en verjaardagscodes", "Loyalty card and birthday codes", "Tarjeta de fidelidad y códigos de cumpleaños"),
+        L("Per klant notities en advies van elk bezoek", "Notes and advice from every visit, per client", "Notas y consejos de cada visita, por cliente"),
+      ] },
+    { id: "run", title: L("Je salon runnen", "Run your salon", "Gestiona tu salón"),
+      lead: L("Agenda, team en cijfers op één plek.", "Calendar, team and numbers in one place.", "Agenda, equipo y cifras en un solo lugar."),
+      points: [
+        L("Elke medewerker een eigen login, agenda en diensten", "Each staff member gets their own login, calendar and services", "Cada profesional con su propio acceso, agenda y servicios"),
+        L("Werkt als app op je telefoon, en je afspraken staan ook in je eigen agenda", "Works as an app on your phone, and your appointments show up in your own calendar too", "Funciona como app en tu móvil, y tus citas aparecen también en tu propio calendario"),
+        L("Klanten en afspraken overzetten uit je oude systeem", "Bring your clients and appointments over from your old system", "Pasa tus clientes y citas desde tu sistema anterior"),
+        L("Kassa, voorraad en kortingscodes", "Till, stock and discount codes", "Caja, inventario y códigos de descuento"),
+      ] },
+  ];
+  const [active, setActive] = useState(0);
+  const [stageRef, scale] = useFitScale(TH_W);
+  const tabRefs = useRef([]);
+  const onKey = (e, i) => {
+    const d = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!d) return;
+    e.preventDefault();
+    const n = (i + d + themes.length) % themes.length;
+    setActive(n);
+    tabRefs.current[n]?.focus();
+  };
+  return (
+    <div className="at-th" data-feature-themes>
+      <div className="at-th-tabs" role="tablist" aria-label={L("Wat Vellu doet", "What Vellu does", "Qué hace Vellu")}>
+        {themes.map((th, i) => (
+          <button key={th.id} type="button" role="tab" id={`at-th-tab-${th.id}`} aria-selected={i === active} aria-controls={`at-th-panel-${th.id}`}
+            tabIndex={i === active ? 0 : -1} ref={(el) => { tabRefs.current[i] = el; }}
+            className={`at-th-tab${i === active ? " on" : ""}`} onClick={() => setActive(i)} onKeyDown={(e) => onKey(e, i)}>
+            <span className="at-th-num">{String(i + 1).padStart(2, "0")}</span>
+            <span className="at-th-tabtext">
+              <span className="at-th-title">{th.title}</span>
+              <span className="at-th-lead">{th.lead}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="at-th-stage" ref={stageRef}>
+        <div style={{ width: TH_W * scale, height: TH_H * scale, margin: "0 auto", position: "relative" }}>
+          <div style={{ position: "absolute", left: 0, top: 0, width: TH_W, height: TH_H, transform: `scale(${scale})`, transformOrigin: "0 0" }}>
+            {themes.map((th, i) => (
+              <div key={th.id} className={`at-th-visual${i === active ? " on" : ""}`} aria-hidden="true">
+                <AtThemeVisual id={th.id} lang={lang} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="at-th-detail">
+        {themes.map((th, i) => (
+          <div key={th.id} role="tabpanel" id={`at-th-panel-${th.id}`} aria-labelledby={`at-th-tab-${th.id}`} hidden={i !== active} className="at-th-panel">
+            <div className="at-th-panel-lead">{th.lead}</div>
+            <ul className="at-th-points">
+              {th.points.map((p) => (
+                <li key={p}><span className="at-th-check" aria-hidden="true"><NavIcon name="check" size={12} color={EARTH} /></span>{p}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AtHeroPhone({ lang, ready }) {
   const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
   const services = [
@@ -535,17 +835,6 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     { n: "2", title: t.step2, desc: t.step2d },
     { n: "3", title: t.step3, desc: t.step3d },
   ];
-  const feats = [
-    { icon: "link", nl: ["Eigen boekingspagina","Jouw merk, jouw kleuren, jouw link — vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij."], en: ["Your own booking page", "Your brand, your colors, your link — vellu.cc/your-name. Clients book directly with you, no middleman."], es: ["Tu propia página de reservas", "Tu marca, tus colores, tu enlace — vellu.cc/tu-nombre. Los clientes reservan directamente contigo, sin intermediarios."] },
-    { icon: "money", nl: ["0% commissie","Vast maandtarief. Elke cent van elke boeking blijft van jou."], en: ["0% commission", "Flat monthly fee. Every cent of every booking stays yours."], es: ["0% de comisión", "Tarifa mensual fija. Cada centavo de cada reserva es tuyo."] },
-    { icon: "team", nl: ["Team accounts","Elke medewerker een eigen login, agenda en diensten."], en: ["Team accounts", "Each staff member gets their own login, schedule and services."], es: ["Cuentas de equipo", "Cada miembro del equipo tiene su propio acceso, agenda y servicios."] },
-    { icon: "mail", nl: ["Automatische e-mails","Bevestigingen, herinneringen, follow-ups — en de factuur gaat automatisch mee bij het afrekenen."], en: ["Automatic emails", "Confirmations, reminders, follow-ups — and the invoice is emailed automatically at checkout."], es: ["Correos automáticos", "Confirmaciones, recordatorios, seguimientos — y la factura se envía automáticamente al cobrar."] },
-    { icon: "star2", nl: ["Reviews","Automatisch reviews verzamelen na elk bezoek."], en: ["Reviews", "Automatically collect reviews after every visit."], es: ["Reseñas", "Recoge reseñas automáticamente tras cada visita."] },
-    { icon: "palette", nl: ["Eigen branding","Jouw logo, kleuren en stijl — tot op de bevestigingsmail."], en: ["Custom branding", "Your logo, colors and style — down to the confirmation email."], es: ["Tu propia marca", "Tu logo, colores y estilo — hasta en el correo de confirmación."] },
-    { icon: "image", nl: ["Portfolio","Foto's per behandeling tonen."], en: ["Portfolio", "Show photos per treatment."], es: ["Portafolio", "Muestra fotos por tratamiento."] },
-    { icon: "tag", nl: ["Kortingscodes","Maak en deel korting met je klanten."], en: ["Discount codes", "Create and share discounts with clients."], es: ["Códigos de descuento", "Crea y comparte descuentos con tus clientes."] },
-  ];
-  const featOf = (f) => (lang === "nl" ? f.nl : lang === "es" ? f.es : f.en);
 
   // Zes vragen i.p.v. tien (Faisal 15-09: "te veel vragen, voeg samen"):
   // wat+voor wie, kosten+commissie+verschil met platformen, proberen, team,
@@ -679,15 +968,39 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           /* Functiekaarten (Faisal 15-09: "de tekst zweeft los, geef ze boxen
              met een zwevend effect"): bone-kaarten op de putty-band met een
              zachte, brede slagschaduw en een lift bij hover. */
-          .at-feat-grid { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: stretch; }
-          @media (min-width: 600px) { .at-feat-grid { grid-template-columns: 1fr 1fr; gap: 16px; } }
-          @media (min-width: 1000px) { .at-feat-grid { grid-template-columns: repeat(4, 1fr); gap: 18px; } }
-          .at-feat-card { height: 100%; box-sizing: border-box; background: ${P.bgCard}; border: 1px solid ${EARTH}26; border-radius: 16px; padding: 22px 20px 24px; box-shadow: 0 22px 40px -26px rgba(69,58,43,0.55), 0 2px 4px rgba(69,58,43,0.05); transition: transform 0.28s ease, box-shadow 0.28s ease; }
-          .at-feat-card:hover { transform: translateY(-5px); box-shadow: 0 34px 54px -26px rgba(69,58,43,0.6), 0 2px 4px rgba(69,58,43,0.05); }
-          .at-feat-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: ${EARTH}1f; color: ${EARTH}; font-size: 12px; margin-bottom: 16px; }
-          .at-feat-title { font-size: 14px; font-weight: 600; color: ${INK}; margin-bottom: 6px; letter-spacing: 0.01em; }
-          .at-feat-desc { font-size: 12.5px; color: #5f5240; line-height: 1.65; }
-          @media (prefers-reduced-motion: reduce) { .at-feat-card, .at-feat-card:hover { transform: none; } }
+          /* Vier thema's (AtFeatureThemes). Desktop: knoppen linksboven, punten
+             linksonder, beeld rechts over beide rijen. Telefoon: knoppen 2x2,
+             dan beeld, dan punten. */
+          .at-th { display: grid; gap: 22px; grid-template-areas: "tabs" "stage" "detail"; }
+          @media (min-width: 900px) { .at-th { grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); grid-template-areas: "tabs stage" "detail stage"; column-gap: clamp(36px, 5vw, 72px); row-gap: 18px; align-items: start; } }
+          .at-th-tabs { grid-area: tabs; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+          @media (min-width: 900px) { .at-th-tabs { grid-template-columns: 1fr; gap: 6px; } }
+          .at-th-tab { display: flex; align-items: baseline; gap: 10px; text-align: left; padding: 12px 12px; border-radius: 8px; border: 1px solid ${EARTH}26; background: transparent; cursor: pointer; font-family: 'Jost', sans-serif; color: ${INK}; transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease; }
+          .at-th-tab:hover { background: ${BONE}80; }
+          .at-th-tab.on { background: ${BONE}; border-color: ${EARTH}66; box-shadow: 0 18px 32px -24px rgba(69,58,43,0.55); }
+          .at-th-tab:focus-visible { outline: 2px solid ${EARTH}; outline-offset: 2px; }
+          .at-th-num { font-family: 'Cormorant Garamond', serif; font-size: 17px; color: ${MUSHROOM}; flex-shrink: 0; transition: color 0.25s ease; }
+          .at-th-tab.on .at-th-num { color: ${EARTH}; }
+          .at-th-tabtext { display: flex; flex-direction: column; min-width: 0; }
+          .at-th-title { font-family: 'Cormorant Garamond', serif; font-size: 18px; line-height: 1.15; color: ${INK}; }
+          .at-th-lead { display: none; }
+          @media (min-width: 900px) {
+            .at-th-tab { padding: 16px 18px; gap: 16px; border-color: transparent; }
+            .at-th-num { font-size: 22px; }
+            .at-th-title { font-size: 25px; }
+            .at-th-lead { display: block; font-size: 13px; color: #6b5d4a; margin-top: 4px; line-height: 1.5; }
+          }
+          .at-th-stage { grid-area: stage; min-width: 0; }
+          @media (min-width: 900px) { .at-th-stage { align-self: center; } }
+          .at-th-visual { position: absolute; inset: 0; opacity: 0; transform: translateY(10px); visibility: hidden; transition: opacity 0.45s ease, transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0.45s; }
+          .at-th-visual.on { opacity: 1; transform: none; visibility: visible; transition: opacity 0.45s ease, transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s; }
+          .at-th-detail { grid-area: detail; }
+          .at-th-panel-lead { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 21px; color: ${EARTH}; margin-bottom: 10px; }
+          @media (min-width: 900px) { .at-th-panel-lead { display: none; } .at-th-detail { padding-left: 18px; } }
+          .at-th-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+          .at-th-points li { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.55; color: #4f4333; }
+          .at-th-check { width: 20px; height: 20px; border-radius: 50%; background: ${EARTH}1f; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+          @media (prefers-reduced-motion: reduce) { .at-th-visual, .at-th-visual.on { transition: none; transform: none; } }
           /* Citaten van salons (Beoordeel Vellu, 16-09): dezelfde zwevende
              bone-kaarten, gecentreerd, één tot drie naast elkaar. */
           .at-quote-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; max-width: 900px; margin: 0 auto; }
@@ -871,9 +1184,9 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               </HeroEnter>
               <HeroEnter ready={heroReady} delay={1080}>
                 <div data-hero-usedby style={{ marginTop: 16, fontSize: 11, color: EARTH, letterSpacing: "0.05em", textAlign: "center" }}>
-                  {lang === "nl" ? "Gebruikt door salons in Nederland en het Caribisch gebied"
-                    : lang === "es" ? "Utilizado por salones en los Países Bajos y el Caribe"
-                    : "Used by salons in the Netherlands and the Caribbean"}
+                  {lang === "nl" ? "Gebruikt door verschillende soorten beautyprofessionals"
+                    : lang === "es" ? "Usado por distintos tipos de profesionales de la belleza"
+                    : "Used by different types of beauty professionals"}
                 </div>
               </HeroEnter>
               <HeroEnter ready={heroReady} delay={1160}>
@@ -1019,27 +1332,15 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           <SalonRatingQuotes lang={lang} quotes={ratings.quotes} />
         </div>
 
-        {/* ── 04 · ALLES WAT JE NODIG HEBT — putty-band, tweekoloms checklijst.
+        {/* ── 04 · ALLES WAT JE NODIG HEBT — putty-band, vier thema's met app-beeld (AtFeatureThemes).
               Putty is licht genoeg voor espresso-tekst er direct op. Hierna
               lopen de banden door: mushroom (prijzen) → earth (FAQ) → espresso. ── */}
         <div style={{ background: PUTTY, position: "relative", zIndex: 10, marginTop: "clamp(44px, 7vw, 76px)" }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}` }}>
             <AtHead title={t.everythingNeeded} tone="putty" />
-            <div className="at-feat-grid">
-              {feats.map((f, i) => {
-                const [title, desc] = featOf(f);
-                return (
-                  <Reveal key={i} delay={(i % 4) * 70 + Math.floor(i / 4) * 90}>
-                    <div className="at-feat-card vl-glow" data-feat-card onMouseMove={glowMove}>
-                      {/* Passend icoon per functie (Faisal 15-09) uit de NavIcon-set. */}
-                      <span aria-hidden="true" className="at-feat-icon"><NavIcon name={f.icon} size={16} color={EARTH} /></span>
-                      <div className="at-feat-title">{title}</div>
-                      <div className="at-feat-desc">{desc}</div>
-                    </div>
-                  </Reveal>
-                );
-              })}
-            </div>
+            <Reveal delay={80}>
+              <AtFeatureThemes lang={lang} />
+            </Reveal>
           </div>
         </div>
 
