@@ -1449,7 +1449,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               Professional espresso. ── */}
         <div style={{ background: MUSHROOM, position: "relative", zIndex: 10 }}>
         <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(46px, 7vw, 76px) ${pad}`, position: "relative" }}>
-          <AtHead title={t.simplePricing} accent={lang === "nl" ? "eerlijke prijzen" : lang === "es" ? "honestos" : "honest pricing"} tone="mushroom" />
+          <AtHead title={t.simplePricing} accent={lang === "nl" ? "maandprijzen" : lang === "es" ? "mensuales" : "monthly pricing"} tone="mushroom" />
           <Reveal delay={90}>
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
               <div role="radiogroup" aria-label={t.simplePricing} style={{ display: "inline-flex", background: P.bgCard, border: `1px solid ${PUTTY}`, borderRadius: R, padding: 4 }}>
