@@ -249,7 +249,11 @@ function AtPlanCompare({ lang, yearly, onStart, startLabel }) {
           ))}
               {onStart && (
                 <div style={{ padding: "20px clamp(14px, 3vw, 26px) 24px", borderTop: `1px solid ${PUTTY}`, display: "flex", justifyContent: "center" }}>
-                  <button type="button" className="btn-primary" data-plan-compare-start onClick={() => { closeModal(); onStart(); }} style={{ width: "auto", padding: "15px 34px", fontSize: 11 }}>
+                  {/* Eigen stijl i.p.v. .btn-primary: het venster hangt via een
+                      portal buiten de Atelier-huid en werd dan app-goud
+                      (Faisal 11-11); nu espresso zoals de andere knoppen. */}
+                  <button type="button" data-plan-compare-start onClick={() => { closeModal(); onStart(); }}
+                    style={{ padding: "16px 36px", borderRadius: AT_RADIUS, border: "none", background: INK, color: BONE, cursor: "pointer", fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", boxShadow: "0 16px 30px -16px rgba(40,30,20,0.6)" }}>
                     {startLabel}
                   </button>
                 </div>
