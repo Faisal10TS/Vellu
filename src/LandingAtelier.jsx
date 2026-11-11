@@ -114,7 +114,7 @@ function AtMobileBar({ lang, onStart }) {
 // hieronder bestaat echt in de app; Google Agenda-koppeling staat uit, dus
 // "agenda in je telefoon" (de agenda-feed) en niet "Google Agenda".
 const TH_W = 520, TH_H = 390;
-const TH_SPIN = 7000; // ms per thema als de vier knoppen vanzelf doordraaien
+const TH_SPIN = 5000; // ms per thema als de vier knoppen vanzelf doordraaien (Faisal 11-11: 5 s)
 
 function useFitScale(designW, max = 1.1) {
   const ref = useRef(null);
