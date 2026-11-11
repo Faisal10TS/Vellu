@@ -952,10 +952,13 @@ function StickyStartPill({ onClick, label, bg = ACCENT, fg = "#fff", radius = 10
       data-sticky-start={visible ? "visible" : "hidden"}
       style={{
         position: "fixed", right: 20, bottom: 20, zIndex: 50,
-        padding: "12px 22px", borderRadius: radius, border: "none",
+        // Zelfde knopstijl als de andere knoppen op de homepage (opruimronde
+        // 11-11-2026): hoofdletters met letterspatiëring i.p.v. een eigen
+        // vette zinsletter.
+        padding: "15px 24px", borderRadius: radius, border: "none",
         background: bg, color: fg,
-        fontFamily: "'Jost',sans-serif", fontSize: 13, fontWeight: 600,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+        fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase",
+        boxShadow: "0 16px 30px -14px rgba(40,30,20,0.55)",
         cursor: "pointer",
         opacity: visible ? 1 : 0,
         transform: visible ? "translateY(0)" : "translateY(20px)",

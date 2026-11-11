@@ -1421,6 +1421,12 @@ function CookieConsent({ lang }) {
   // Boek-balk van de salonpagina.
   const path = location.pathname.replace(/\/+$/, "") || "/";
   const eigen = path === "/" || ["/privacy", "/terms", "/voorwaarden", "/contact", "/dpa", "/admin"].includes(path) || path.startsWith("/integrations/");
+  // Geen banner meer op Vellu's eigen pagina's (11-11-2026, opruimronde
+  // homepage): daar staan alleen functionele cookies/opslag (taal, thema,
+  // inlog), geen analytics of advertenties, en daarvoor is geen toestemming
+  // nodig; de privacyverklaring (link in de footer) informeert. Op de pagina
+  // van een salon blijft hij: daar staat o.a. een Google-kaart.
+  if (eigen) return null;
   const s = eigen
     ? { bg: AT.BONE, border: AT.PUTTY, text: AT.ESPRESSO, sub: AT.EARTH, btnBg: AT.ESPRESSO, btnInk: AT.BONE, shadow: "0 22px 40px -26px rgba(69,58,43,0.6), 0 2px 4px rgba(69,58,43,0.08)" }
     // c.bg en niet c.bgCard: die kaarttint is doorschijnend (3%) en de banner
