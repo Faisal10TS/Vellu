@@ -55,6 +55,56 @@ function mapsQueryOf(address, city, countryCode) {
   return q;
 }
 
+// Google-kaart pas na een klik (11-11-2026). De ingesloten kaart deed bij
+// het laden ~35 verzoeken naar Google en gaf daarmee het IP-adres en de
+// browsergegevens van elke bezoeker door, ook van wie de kaart niet nodig had.
+// Nu eerst een rustige plaatshouder met "Kaart tonen"; na één klik laden alle
+// kaarten in deze sessie meteen (sessionStorage), zodat een salon met meerdere
+// locaties niet om drie klikken vraagt. De link "Open in Maps" ernaast blijft.
+const MAPS_OK_KEY = "vellu_maps_ok";
+function ClickToMap({ query, title, height, lang, c, theme }) {
+  const [on, setOn] = useState(() => { try { return sessionStorage.getItem(MAPS_OK_KEY) === "1"; } catch { return false; } });
+  useEffect(() => {
+    if (on) return;
+    const onOk = () => setOn(true);
+    window.addEventListener("vellu-maps-ok", onOk);
+    return () => window.removeEventListener("vellu-maps-ok", onOk);
+  }, [on]);
+  const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
+  if (on) {
+    return (
+      <iframe
+        title={title}
+        src={`https://maps.google.com/maps?q=${encodeURIComponent(query)}&t=m&z=16&hl=${lang}&output=embed`}
+        width="100%"
+        height={height}
+        style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.15) contrast(1.05)" : "none" }}
+        referrerPolicy="no-referrer-when-downgrade"
+      />
+    );
+  }
+  const show = () => {
+    try { sessionStorage.setItem(MAPS_OK_KEY, "1"); } catch { /* privémodus: alleen deze kaart */ }
+    setOn(true);
+    window.dispatchEvent(new Event("vellu-maps-ok"));
+  };
+  return (
+    <div data-map-placeholder style={{ height, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: "0 16px", textAlign: "center",
+      background: `repeating-linear-gradient(45deg, ${c.inputBg} 0 12px, ${c.bgCard} 12px 24px)` }}>
+      <span style={{ width: 40, height: 40, borderRadius: "50%", background: c.bg, border: `1px solid ${c.border}`, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+        <NavIcon name="mappin" size={18} color={c.text} />
+      </span>
+      <button type="button" data-map-show onClick={show} className="btn-ghost"
+        style={{ width: "auto", padding: "10px 18px", fontSize: 12, background: c.bg }}>
+        {L("Kaart tonen", "Show map", "Mostrar mapa")}
+      </button>
+      <span style={{ fontSize: 10.5, color: c.textMuted, lineHeight: 1.4 }}>
+        {L("Laadt Google Maps", "Loads Google Maps", "Carga Google Maps")}
+      </span>
+    </div>
+  );
+}
+
 // Teamfoto met vangnet (Faisal 15-09, Beauty By Eydy): een avatar_url die
 // naar een verdwenen bestand wijst liet de browser een kapot plaatje met de
 // alt-tekst ernaast tekenen. Laadt de foto niet, dan komt hier hetzelfde
@@ -3699,15 +3749,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                         {loc.phone && <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}><NavIcon name="phone" size={10} color={c.textMuted} /> {loc.phone}</div>}
                         {locQuery && (
                           <div style={{ marginTop: 12, borderRadius: 10, overflow: "hidden", border: `1px solid ${c.border}`, position: "relative" }}>
-                            <iframe
-                              title={`${loc.name} — map`}
-                              src={`https://maps.google.com/maps?q=${encodeURIComponent(locQuery)}&t=m&z=16&hl=${lang}&output=embed`}
-                              width="100%"
-                              height={isMobile ? 200 : ((initialSalon.locations || []).length === 1 ? 280 : 220)}
-                              style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.15) contrast(1.05)" : "none" }}
-                              loading="lazy"
-                              referrerPolicy="no-referrer-when-downgrade"
-                            />
+                            <ClickToMap query={locQuery} title={`${loc.name} — map`} lang={lang} c={c} theme={theme}
+                              height={isMobile ? 200 : ((initialSalon.locations || []).length === 1 ? 280 : 220)} />
                             {locMapsHref && (
                               <a href={locMapsHref} target="_blank" rel="noopener noreferrer"
                                 style={{
@@ -3743,15 +3786,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       </div>
                       {mainQuery && (
                         <div style={{ marginTop: 12, borderRadius: 10, overflow: "hidden", border: `1px solid ${c.border}`, position: "relative" }}>
-                          <iframe
-                            title={`${initialSalon.name} — map`}
-                            src={`https://maps.google.com/maps?q=${encodeURIComponent(mainQuery)}&t=m&z=16&hl=${lang}&output=embed`}
-                            width="100%"
-                            height={isMobile ? 200 : 280}
-                            style={{ border: 0, display: "block", filter: theme === "dark" ? "grayscale(0.15) contrast(1.05)" : "none" }}
-                            loading="lazy"
-                            referrerPolicy="no-referrer-when-downgrade"
-                          />
+                          <ClickToMap query={mainQuery} title={`${initialSalon.name} — map`} lang={lang} c={c} theme={theme}
+                            height={isMobile ? 200 : 280} />
                           {mapsHref && (
                             <a href={mapsHref} target="_blank" rel="noopener noreferrer"
                               style={{
