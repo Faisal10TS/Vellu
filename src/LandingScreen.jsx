@@ -1804,8 +1804,20 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         <div style={{ width: "100%", maxWidth: 400, position: "relative", zIndex: 10, paddingTop: "calc(72px + env(safe-area-inset-top, 0px))", paddingBottom: 24 }} className="fade-up">
           <div style={{ textAlign: "center", marginBottom: 36 }}>
             <div style={{ marginBottom: 12 }}><NavIcon name="crown" size={36} color={AT.EARTH} /></div>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>{t.ownerLogin}</div>
-            <div style={{ fontSize: 13, color: c.textLabel, marginTop: 8, letterSpacing: "0.02em" }}>{t.ownerSub}</div>
+            {/* Op het tabblad Registreren (ook via "Probeer 14 dagen gratis")
+                stond hier "Eigenaar Login – Inloggen als ondernemer": wie net op
+                de proefknop tikte dacht dat ze verkeerd zat (kopersblik 12-11).
+                Een uitgenodigd teamlid houdt de gewone kop. */}
+            <div data-auth-title style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>
+              {mode === "signup" && !staffInvite
+                ? (lang === "nl" ? "Start je gratis proefperiode" : lang === "es" ? "Empieza tu prueba gratis" : "Start your free trial")
+                : t.ownerLogin}
+            </div>
+            <div style={{ fontSize: 13, color: c.textLabel, marginTop: 8, letterSpacing: "0.02em" }}>
+              {mode === "signup" && !staffInvite
+                ? (lang === "nl" ? "Je eigen boekingspagina, live binnen 10 minuten." : lang === "es" ? "Tu propia página de reservas, lista en 10 minutos." : "Your own booking page, live in 10 minutes.")
+                : t.ownerSub}
+            </div>
           </div>
 
           <div style={{ 
@@ -1920,6 +1932,13 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                       </div>
                     ))}
                   </div>
+                  {/* Een keuze die een nieuwe salon nog niet kan beoordelen: zeg
+                      welke veilig is, en dat hij later kan (Instellingen → Team). */}
+                  <div data-account-type-hint style={{ fontSize: 11, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>
+                    {lang === "nl" ? `Twijfel je? Kies ${t.jointAccount}. Later te wijzigen in Instellingen.`
+                      : lang === "es" ? `¿Tienes dudas? Elige ${t.jointAccount}. Puedes cambiarlo después en Ajustes.`
+                      : `Not sure? Pick ${t.jointAccount}. You can change it later in Settings.`}
+                  </div>
                 </div>
               </>}
               <input className="input-field" placeholder={t.emailField} type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
@@ -1952,6 +1971,16 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                 oude lichtgroen was er nauwelijks te lezen. */}
             {resetSent && <div style={{ fontSize: 12, color: "#4f6b3a", marginBottom: 16, textAlign: "center" }}>{t.resetSent}</div>}
             <button className="btn-primary" onClick={handle} disabled={loading}>{loading ? "..." : (mode === "signin" ? t.login : t.createAccount)}</button>
+            {/* Wat er na het aanmaken gebeurt, op het moment van beslissen. Via een
+                uitnodiging kan de proef langer zijn (start-trial: tot 30 dagen),
+                dan zonder getal. Bewust geen regel over betaalgegevens (Faisal 12-11). */}
+            {mode === "signup" && !staffInvite && (
+              <div data-trial-note style={{ fontSize: 11, color: c.textMuted, marginTop: 10, textAlign: "center", lineHeight: 1.5 }}>
+                {effRef
+                  ? (lang === "nl" ? "Gratis proberen · daarna kies je zelf of je doorgaat" : lang === "es" ? "Pruébalo gratis · después decides si continúas" : "Try it free · then you decide whether to continue")
+                  : (lang === "nl" ? "14 dagen gratis · daarna kies je zelf of je doorgaat" : lang === "es" ? "14 días gratis · después decides si continúas" : "14 days free · then you decide whether to continue")}
+              </div>
+            )}
             {mode === "signin" && (
               <button style={{ display: "block", width: "100%", marginTop: 12, background: "none", border: "none", color: c.textMuted, fontSize: 11, cursor: "pointer", fontFamily: "'Jost',sans-serif" }}
                 onClick={handleReset}>
