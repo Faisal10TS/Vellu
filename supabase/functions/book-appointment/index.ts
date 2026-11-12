@@ -1063,16 +1063,21 @@ serve(async (req) => {
   if (botstMet(existingAppts || [])) return err(409, "slot_conflict", origin);
 
   // ---------- 11. Upsert client ----------
+  // Klantrijen zijn per salon (clients.owner_id, 12-11-2026): alleen de rij van
+  // DEZE salon zoeken en een nieuwe rij aan deze salon hangen. Een andere salon
+  // met hetzelfde adres houdt haar eigen rij en merkt van deze boeking niets.
   let clientId: string | null = null;
-  const { data: existingClient } = await supabase
+  const findClient = () => supabase
     .from("clients")
     .select("id, first_name, last_name, phone, allergies, birthday")
-    .eq("email", email)
+    .eq("owner_id", salon.id)
+    .eq("email", email) // alle adressen staan in kleine letters (hier en in client_for_salon)
+    .limit(1)
     .maybeSingle();
+  let { data: existingClient } = await findClient();
   if (existingClient) {
     clientId = existingClient.id;
-    // De clients-rij is ÉÉN rij per e-mailadres, gedeeld door alle salons, en
-    // deze boeking is anoniem: niets bewijst dat de boeker dat adres bezit. Dus
+    // Deze boeking is anoniem: niets bewijst dat de boeker dat adres bezit. Dus
     // alleen LEGE velden aanvullen, nooit een bekende naam, telefoon, allergie of
     // verjaardag overschrijven (of wissen met een leeg veld). Wat de klant nu
     // invulde staat gewoon op de afspraak zelf (client_phone, client_allergies).
@@ -1086,6 +1091,7 @@ serve(async (req) => {
     await supabase.from("clients").update(aanvulling).eq("id", clientId);
   } else {
     const { data: newClient, error: nErr } = await supabase.from("clients").insert({
+      owner_id: salon.id,
       email: email,
       first_name: firstName,
       last_name: lastName,
@@ -1094,8 +1100,17 @@ serve(async (req) => {
       birthday: birthday,
       last_visit: new Date().toISOString(),
     }).select("id").single();
-    if (nErr || !newClient) return err(500, "client_create_failed", origin);
-    clientId = newClient.id;
+    if (newClient) {
+      clientId = newClient.id;
+    } else if (nErr?.code === "23505") {
+      // Twee boekingen tegelijk met hetzelfde adres: de andere maakte de rij net
+      // aan (unieke index owner_id + e-mail). Die rij gebruiken.
+      ({ data: existingClient } = await findClient());
+      if (!existingClient) return err(500, "client_create_failed", origin);
+      clientId = existingClient.id;
+    } else {
+      return err(500, "client_create_failed", origin);
+    }
   }
 
   // ---------- 12. Build combined service name ----------

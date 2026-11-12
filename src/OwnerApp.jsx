@@ -3946,7 +3946,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   const [importing, setImporting] = useState(false);
   // Edit/delete flow on an individual client.
   const [editing, setEditing] = useState(null); // the client currently being edited
-  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", notes: "", birthday: "", isBusiness: false, contactName: "" });
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", notes: "", birthday: "", birthdayOff: false, isBusiness: false, contactName: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // Merge flow — pick a source client, then pick a target survivor.
@@ -4018,7 +4018,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           .order("id")),
         fetchAllRows(() => supabase
           .from("manual_clients")
-          .select("id, name, email, phone, notes, hidden, birthday, loyalty_opt_in, loyalty_staff_off, loyalty_since, is_business, contact_name, created_at")
+          .select("id, name, email, phone, notes, hidden, birthday, birthday_off, loyalty_opt_in, loyalty_staff_off, loyalty_since, is_business, contact_name, created_at")
           .eq("owner_id", ownerId)
           .order("id")),
         supabase
@@ -4148,6 +4148,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           if (m.phone) existing.phone = m.phone;
           if (m.notes) existing.notes = m.notes;
           if (m.birthday) existing.birthday = m.birthday;
+          // Verjaardag uit: één rij met het vinkje is genoeg (zoals de trigger).
+          existing.birthdayOff = !!existing.birthdayOff || !!m.birthday_off;
           existing.manualId = m.id;
           existing.manualIds = [...(existing.manualIds || []), m.id];
           // Verborgen alleen als ÁLLE rijen achter de kaart verborgen zijn —
@@ -4163,7 +4165,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
           existing.isBusiness = !!m.is_business;
           existing.contactName = m.contact_name || "";
         } else {
-          const card = { key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, manualId: m.id, manualIds: [m.id], manualNameKey: nk, clientId: null, hidden: !!m.hidden, loyaltyOptIn: !!m.loyalty_opt_in, loyaltyStaffOff: staffOff, loyaltySince: m.loyalty_since || null, isBusiness: !!m.is_business, contactName: m.contact_name || "", outstanding: 0, openItems: [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
+          const card = { key: `manual:${m.id}`, email, name: m.name || email || "—", phone: m.phone || "", notes: m.notes || "", birthday: m.birthday || null, birthdayOff: !!m.birthday_off, manualId: m.id, manualIds: [m.id], manualNameKey: nk, clientId: null, hidden: !!m.hidden, loyaltyOptIn: !!m.loyalty_opt_in, loyaltyStaffOff: staffOff, loyaltySince: m.loyalty_since || null, isBusiness: !!m.is_business, contactName: m.contact_name || "", outstanding: 0, openItems: [], appts: [], totalSpent: 0, visitCount: 0, lastVisit: null, next: null };
           extra.push(card);
           // Een volgende rij met hetzelfde adres én dezelfde naam komt op deze
           // kaart; een andere naam op hetzelfde adres krijgt een eigen kaart.
@@ -4269,6 +4271,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       phone: cl.phone || "",
       notes: cl.notes || "",
       birthday: cl.birthday || "",
+      birthdayOff: !!cl.birthdayOff,
       isBusiness: !!cl.isBusiness,
       contactName: cl.contactName || "",
     });
@@ -4326,6 +4329,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       notes: editForm.notes.trim() || null,
       // Empty string → null so the DB doesn't try to parse "" as a date.
       birthday: editForm.birthday && /^\d{4}-\d{2}-\d{2}$/.test(editForm.birthday) ? editForm.birthday : null,
+      // Geen verjaardagsbericht voor deze klant: ook niet met een datum die de
+      // klant zelf bij het boeken invulde (clients.birthday).
+      birthday_off: !!editForm.birthdayOff,
       is_business: !!editForm.isBusiness,
       contact_name: editForm.isBusiness ? (editForm.contactName.trim() || null) : null,
     };
@@ -4564,6 +4570,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       // samenvoegen hangen haar afspraken aan de doelkaart en verdween die
       // datum anders (geen felicitatie meer). Opslag in de salonrij.
       if (source.birthday && !target.birthday) patch.birthday = source.birthday;
+      // Verjaardag uit blijft uit.
+      if (source.birthdayOff && !target.birthdayOff) patch.birthday_off = true;
       // Stempelkaart-vinkje gaat mee: wie meedeed, blijft meedoen.
       if (source.loyaltyOptIn && !target.loyaltyOptIn) patch.loyalty_opt_in = true;
       // Per teamlid uitgezette stylisten: samenvoegen (uit blijft uit).
@@ -5164,6 +5172,11 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                     const d = new Date(`${selected.birthday}T00:00:00`);
                     return isNaN(d) ? selected.birthday : d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
                   })()}
+                  {selected.birthdayOff && (
+                    <span data-client-birthday-off-note style={{ fontSize: 11, color: c.textMuted }}>
+                      · {lang === "nl" ? "geen verjaardagsbericht" : lang === "es" ? "sin felicitación" : "no birthday message"}
+                    </span>
+                  )}
                 </div>
               )}
               {selected.notes && (
@@ -5859,18 +5872,29 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                       : "For the birthday campaign — this client gets their birthday wish and discount code on that day."}
                   </div>
                   {/* Een verjaardag die de klant zelf bij het boeken invulde
-                      (clients.birthday) kan de salon niet wissen: die rij is van
-                      alle salons samen en UPDATE erop is dicht. Leeg opslaan wist
-                      alleen de eigen datum; daarna staat de boekingsdatum weer op
-                      de kaart en telt die voor de verjaardagsmail. Zeg dat hier,
-                      anders lijkt het opslaan mislukt. */}
-                  {editing.bookingBirthday && !editForm.birthday && (
+                      (clients.birthday) kan de salon niet wissen: die rij vult
+                      de boeking, niet de salon. Leeg opslaan wist alleen de
+                      eigen datum; daarna staat de boekingsdatum weer op de
+                      kaart. Wie geen felicitatie wil sturen, zet het vinkje
+                      hieronder aan (manual_clients.birthday_off). */}
+                  {editing.bookingBirthday && !editForm.birthday && !editForm.birthdayOff && (
                     <div data-client-booking-birthday style={{ fontSize: 10, color: c.warning, marginTop: 4, lineHeight: 1.4 }}>
-                      {lang === "nl" ? `Deze klant vulde bij het boeken zelf een verjaardag in (${fmtDate(editing.bookingBirthday)}). Die kun je hier wel aanpassen, maar niet wissen: na opslaan staat die datum weer op de kaart en geldt hij voor de verjaardagsactie.`
-                        : lang === "es" ? `Este cliente indicó su cumpleaños al reservar (${fmtDate(editing.bookingBirthday)}). Aquí puedes cambiarlo, pero no borrarlo: al guardar, esa fecha vuelve a la ficha y se usa para la acción de cumpleaños.`
-                        : `This client entered their own birthday when booking (${fmtDate(editing.bookingBirthday)}). You can change it here, but not remove it: after saving, that date is back on the card and is used for the birthday campaign.`}
+                      {lang === "nl" ? `Deze klant vulde bij het boeken zelf een verjaardag in (${fmtDate(editing.bookingBirthday)}). Die kun je hier wel aanpassen, maar niet wissen: na opslaan staat die datum weer op de kaart. Geen felicitatie sturen? Zet dan het vinkje hieronder aan.`
+                        : lang === "es" ? `Este cliente indicó su cumpleaños al reservar (${fmtDate(editing.bookingBirthday)}). Aquí puedes cambiarlo, pero no borrarlo: al guardar, esa fecha vuelve a la ficha. ¿No quieres enviarle felicitación? Marca la casilla de abajo.`
+                        : `This client entered their own birthday when booking (${fmtDate(editing.bookingBirthday)}). You can change it here, but not remove it: after saving, that date is back on the card. Don't want to send a birthday wish? Tick the box below.`}
                     </div>
                   )}
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12, color: c.text, cursor: "pointer", marginTop: 10 }}>
+                    <input type="checkbox" data-client-birthday-off checked={!!editForm.birthdayOff} onChange={(e) => setEditForm((f) => ({ ...f, birthdayOff: e.target.checked }))} style={{ accentColor: accent, width: 15, height: 15, flexShrink: 0, marginTop: 1 }} />
+                    <span>
+                      {lang === "nl" ? "Geen verjaardagsbericht naar deze klant" : lang === "es" ? "No enviar felicitación de cumpleaños a este cliente" : "No birthday message for this client"}
+                      <span style={{ display: "block", fontSize: 10, color: c.textMuted, marginTop: 2, lineHeight: 1.4 }}>
+                        {lang === "nl" ? "Geen felicitatie en geen kortingscode, en ze staat niet bij de jarigen van vandaag. Ook als de klant haar verjaardag zelf bij het boeken invulde."
+                          : lang === "es" ? "Sin felicitación ni código de descuento, y no aparece entre los cumpleaños de hoy. También si el cliente indicó su cumpleaños al reservar."
+                          : "No birthday wish or discount code, and they are not listed among today's birthdays. Also when the client entered their birthday when booking."}
+                      </span>
+                    </span>
+                  </label>
                 </div>
               )}
             </div>
@@ -6356,14 +6380,20 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     let dood = false;
     (async () => {
       const md = fmt(salonNow(salonData.country_code)).slice(5);
-      const [{ data: manual }, { data: booked }] = await Promise.all([
+      const [{ data: manual }, { data: booked }, { data: off }] = await Promise.all([
         fetchAllRows(() => supabase.from("manual_clients").select("name, email, birthday").eq("owner_id", salonData.owner_id).eq("hidden", false).not("birthday", "is", null).order("id")),
-        fetchAllRows(() => supabase.from("clients").select("first_name, last_name, email, birthday").not("birthday", "is", null).order("id")),
+        fetchAllRows(() => supabase.from("clients").select("first_name, last_name, email, birthday").eq("owner_id", salonData.owner_id).not("birthday", "is", null).order("id")),
+        // "Geen verjaardagsbericht" op de klantkaart: ook niet bij de jarigen.
+        fetchAllRows(() => supabase.from("manual_clients").select("email").eq("owner_id", salonData.owner_id).eq("birthday_off", true).not("email", "is", null).order("id")),
       ]);
       if (dood) return;
+      const uit = new Set((off || []).map(r => String(r.email || "").trim().toLowerCase()).filter(Boolean));
+      // Zelfde regel als send-birthday-emails: een eigen verjaardag in de
+      // klantenlijst wint van de datum uit een boeking.
+      const eigen = new Set((manual || []).map(m => String(m.email || "").trim().toLowerCase()).filter(Boolean));
       const namen = new Map();
-      for (const m of manual || []) if (String(m.birthday || "").slice(5) === md) namen.set(String(m.email || m.name).toLowerCase(), m.name || m.email);
-      for (const b of booked || []) if (String(b.birthday || "").slice(5) === md) { const k = String(b.email || "").toLowerCase(); if (!namen.has(k)) namen.set(k, [b.first_name, b.last_name].filter(Boolean).join(" ") || b.email); }
+      for (const m of manual || []) { const k = String(m.email || m.name).trim().toLowerCase(); if (String(m.birthday || "").slice(5) === md && !uit.has(k)) namen.set(k, m.name || m.email); }
+      for (const b of booked || []) if (String(b.birthday || "").slice(5) === md) { const k = String(b.email || "").trim().toLowerCase(); if (!namen.has(k) && !eigen.has(k) && !uit.has(k)) namen.set(k, [b.first_name, b.last_name].filter(Boolean).join(" ") || b.email); }
       setBdayToday([...namen.values()]);
     })();
     return () => { dood = true; };

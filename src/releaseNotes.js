@@ -14,6 +14,32 @@
 
 export const RELEASES = [
   {
+    // 12-11 (vijfde): verjaardag per klant uit (O2-10, manual_clients.birthday_off),
+    // klantrijen per salon (clients.owner_id) en medewerkers wijzigen afspraken
+    // via de server (staff_update_appointment / staff_create_appointment).
+    id: "2026-11-12e",
+    date: "2026-11-12",
+    title: { nl: "Verjaardag per klant uitzetten", en: "Turn off birthdays per client", es: "Desactivar cumpleaños por cliente" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Op de klantkaart kun je nu \"Geen verjaardagsbericht\" aanzetten: die klant krijgt dan geen felicitatie en geen kortingscode, ook als ze haar verjaardag zelf bij het boeken invulde.",
+          en: "You can now tick \"No birthday message\" on a client card: that client then gets no birthday wish or discount code, even if they entered their birthday when booking.",
+          es: "Ahora puedes marcar \"No enviar felicitación\" en la ficha del cliente: ese cliente no recibe felicitación ni código de descuento, aunque haya indicado su cumpleaños al reservar.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Klantgegevens uit boekingen zijn nu per salon afgeschermd: wat een klant bij jou invult, ziet geen andere salon, ook niet als ze daar met hetzelfde e-mailadres boekt.",
+          en: "Client details from bookings are now kept per salon: what a client enters with you is not visible to any other salon, even if they book there with the same email.",
+          es: "Los datos de clientes de las reservas ahora se guardan por salón: lo que un cliente indica contigo no lo ve ningún otro salón, aunque reserve allí con el mismo correo.",
+        },
+      },
+    ],
+  },
+  {
     // 12-11 (vierde): audit punten 1 en 7. Dubbele klantkaarten (trigger
     // manual_clients_no_duplicate) en boekingsbeleid in het Spaans
     // (booking_policy_es). Punt 9 (Google-zin uit het verzetvenster) bewust

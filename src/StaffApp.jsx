@@ -600,43 +600,32 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     try { return new Date(iso).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: tzFor(salonProfile.country_code) }); }
     catch { return String(iso || ""); }
   };
-  // Scope all mutations to this salon's owner_id — defense-in-depth on top of
-  // the RLS policy that already enforces staff can only update their employer's
-  // appointments. Without the .eq("owner_id", ...) a compromised client-side
-  // could attempt to flip appointments belonging to other salons.
+  // Alle wijzigingen aan afspraken lopen via de server (staff_update_appointment
+  // en de andere staff_-functies). Die controleren of deze medewerker de
+  // afspraak mag behandelen, laten alleen bepaalde velden toe (bedragen alleen
+  // met zichtbare omzet) en geven de afspraak terug zoals zij hem mag zien:
+  // dezelfde regels als staff_list_appointments. Rechtstreeks schrijven in
+  // appointments kan een medewerker niet meer; daarvoor moest ze haar eigen
+  // afspraken ook rechtstreeks kunnen lezen, prijzen inbegrepen.
+  const staffUpdate = async (id, patch) => {
+    const { data, error } = await supabase.rpc("staff_update_appointment", { p_id: id, p_patch: patch });
+    if (error || !data) return { row: null, error: error || { message: "no_row" } };
+    return { row: data, error: null };
+  };
   // Voltooien mét betaalwijze (zelfde als de eigenaars-app): cash/pin/
   // overschrijving = nu betaald; method null = later via factuur.
   const markComplete = async (id, method = null) => {
     if (processingApptId) return;
     setProcessingApptId(id);
     try {
-      // Betaald via de kiezer = het hele bedrag is binnen (amount_paid mee,
-      // zodat een latere prijswijziging het verschil kan tonen).
-      const apptRow = appointments.find(x => x.id === id);
-      // "Later / factuur" (method null): "on-arrival" van de boekingspagina
-      // expliciet naar null, anders blijft de post onzichtbaar als open post en
-      // krijgt de factuur geen betaalblok (zie OwnerApp.markComplete).
-      let patch;
-      // Restbetaling van een deels vooruitbetaalde afspraak: ook met zichtbare
-      // omzet via de RPC. Die laat 'prepaid' staan en boekt alleen het restant
-      // als client_payments-rij in de gekozen wijze, zodat het kasboek niet de
-      // hele prijs als contant telt (zoals de eigenaars-app het restant boekt).
-      const prepaidRest = showMoney && !!method && apptRow?.payment_method === "prepaid" && isPartlyPaid(apptRow);
-      if (!showMoney || prepaidRest) {
-        // Omzet verborgen: de prijs kent deze medewerker niet (de RPC stript
-        // hem), dus "amount_paid = prijs" moet de database zelf zetten. Nooit
-        // client-side een bedrag schrijven: dat werd 0 (audit S1-06).
-        const { data: res, error } = await supabase.rpc("staff_complete_appointment", { p_id: id, p_method: method });
-        if (error || !res) { toast.show(lang === "nl" ? "Fout bij voltooien" : lang === "es" ? "Error al completar" : "Error completing", "error"); return; }
-        patch = { status: res.status || "completed", payment_method: res.payment_method ?? null, paid_at: res.paid_at ?? null,
-          ...(method ? (showMoney ? { amount_paid: parseFloat(apptRow?.service_price || 0) || 0 } : { pay_state: "paid" }) : {}) };
-      } else {
-        patch = { status: "completed", ...(method
-          ? { payment_method: method, paid_at: new Date().toISOString(), amount_paid: parseFloat(apptRow?.service_price || 0) || 0 }
-          : (apptRow?.payment_method === "on-arrival" ? { payment_method: null } : {})) };
-        const { error } = await supabase.from("appointments").update(patch).eq("id", id).eq("owner_id", salonProfile.id);
-        if (error) { toast.show(lang === "nl" ? "Fout bij voltooien" : lang === "es" ? "Error al completar" : "Error completing", "error"); return; }
-      }
+      // Altijd via staff_complete_appointment: de database zet amount_paid op
+      // de echte prijs (nooit client-side een bedrag, audit S1-06), zet
+      // "on-arrival" bij "later / factuur" op null, boekt bij een deels
+      // vooruitbetaalde afspraak alleen het restant als client_payments-rij,
+      // en laat een al volledig betaalde afspraak haar betaalwijze houden.
+      const { data: res, error } = await supabase.rpc("staff_complete_appointment", { p_id: id, p_method: method });
+      if (error || !res) { toast.show(lang === "nl" ? "Fout bij voltooien" : lang === "es" ? "Error al completar" : "Error completing", "error"); return; }
+      const patch = res;
       setAppointments(a => a.map(x => x.id === id ? {...x, ...patch} : x));
       setCompleteFor(null);
       toast.show((lang === "nl" ? "Afspraak voltooid" : lang === "es" ? "Cita completada" : "Appointment completed") + (method ? ` · ${payMethodLabel(method)}` : ""));
@@ -663,32 +652,17 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     if (processingApptId) return;
     setProcessingApptId(a.id);
     try {
-      const price = parseFloat(a.service_price || 0) || 0;
       // Eerste betaling: reservering → bevestigd. Restbetaling (behandeling werd
       // duurder na de vooruitbetaling): alleen het bedrag bijwerken.
       const first = a.status === "pending_payment";
-      let patch;
-      if (!showMoney) {
-        // Omzet verborgen: de database zet amount_paid op de echte prijs; hier
-        // stond anders 0 (de gestripte prijs) en zag de eigenaar de
-        // vooruitbetaling als onbetaald (audit S1-06).
-        const { data: res, error } = await supabase.rpc("staff_mark_prepaid", { p_id: a.id });
-        if (error || !res) {
-          toast.show(lang === "nl" ? "Kon de betaling niet vastleggen; ververs de pagina" : lang === "es" ? "No se pudo registrar el pago; recarga la página" : "Could not record the payment; refresh the page", "error");
-          return;
-        }
-        patch = { status: res.status || a.status, payment_method: res.payment_method ?? a.payment_method ?? null, paid_at: res.paid_at ?? null, pay_state: "paid" };
-      } else {
-        patch = first
-          ? { status: "confirmed", payment_method: "prepaid", paid_at: new Date().toISOString(), amount_paid: price }
-          : { paid_at: new Date().toISOString(), amount_paid: price };
-        let q = supabase.from("appointments").update(patch).eq("id", a.id).eq("owner_id", salonProfile.id);
-        if (first) q = q.eq("status", "pending_payment");
-        const { data: hit, error } = await q.select("id");
-        if (error || !hit || hit.length === 0) {
-          toast.show(lang === "nl" ? "Kon de betaling niet vastleggen; ververs de pagina" : lang === "es" ? "No se pudo registrar el pago; recarga la página" : "Could not record the payment; refresh the page", "error");
-          return;
-        }
+      // Altijd via de database: die zet amount_paid op de echte prijs (met
+      // verborgen omzet kent deze app die niet, audit S1-06) en claimt op de
+      // status, zodat een vervallen of geannuleerde reservering niet stilletjes
+      // terugkomt (dan een fout en "ververs de pagina").
+      const { data: patch, error } = await supabase.rpc("staff_mark_prepaid", { p_id: a.id });
+      if (error || !patch) {
+        toast.show(lang === "nl" ? "Kon de betaling niet vastleggen; ververs de pagina" : lang === "es" ? "No se pudo registrar el pago; recarga la página" : "Could not record the payment; refresh the page", "error");
+        return;
       }
       setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...patch } : x));
       toast.show(first
@@ -740,10 +714,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     if (Math.abs(newPrice - oldPrice) < 0.005) { setPriceFor(null); return; }
     setProcessingApptId(a.id);
     try {
-      const patch = { service_price: newPrice, ...paymentPatchForPrice(a, newPrice) };
-      const { error } = await supabase.from("appointments").update(patch).eq("id", a.id).eq("owner_id", salonProfile.id);
+      const { row, error } = await staffUpdate(a.id, { service_price: newPrice, ...paymentPatchForPrice(a, newPrice) });
       if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
-      setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...patch } : x));
+      setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...row } : x));
       setPriceFor(null);
       toast.show(lang === "nl" ? `Prijs aangepast naar ${fmtAmt(cur, newPrice)}` : lang === "es" ? `Precio ajustado a ${fmtAmt(cur, newPrice)}` : `Price changed to ${fmtAmt(cur, newPrice)}`);
       if (mayMailClient(a) && a.status !== "cancelled" && a.status !== "no_show") {
@@ -783,10 +756,9 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     setProcessingApptId(a.id);
     try {
       const paidBefore = paidAmountOf(a);
-      const patch = { amount_paid: price, paid_at: a.paid_at || new Date().toISOString() };
-      const { error } = await supabase.from("appointments").update(patch).eq("id", a.id).eq("owner_id", salonProfile.id);
+      const { row, error } = await staffUpdate(a.id, { amount_paid: price, paid_at: a.paid_at || new Date().toISOString() });
       if (error) { toast.show(lang === "nl" ? "Kon de terugbetaling niet vastleggen" : lang === "es" ? "No se pudo registrar la devolución" : "Could not record the refund", "error"); return; }
-      setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...patch } : x));
+      setAppointments(list => list.map(x => x.id === a.id ? { ...x, ...row } : x));
       toast.show(lang === "nl" ? `Terugbetaling van ${fmtAmt(cur, refund)} vastgelegd` : lang === "es" ? `Devolución de ${fmtAmt(cur, refund)} registrada` : `Refund of ${fmtAmt(cur, refund)} recorded`);
       if (mayMailClient(a)) {
         sendEmails("refund_sent", {
@@ -805,14 +777,14 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // volgende bezoek, of de klant het gedaan heeft (advice_followed op de VORIGE rij).
   const saveAdvice = async (id, text) => {
     const clean = String(text || "").trim().slice(0, 600) || null;
-    const { error } = await supabase.from("appointments").update({ visit_advice: clean }).eq("id", id).eq("owner_id", salonProfile.id);
+    const { error } = await staffUpdate(id, { visit_advice: clean });
     if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
     setAppointments(list => list.map(x => x.id === id ? { ...x, visit_advice: clean } : x));
     setAdviceEdit(null);
     toast.show(clean ? (lang === "nl" ? "Notitie opgeslagen" : lang === "es" ? "Nota guardada" : "Note saved") : (lang === "nl" ? "Notitie verwijderd" : lang === "es" ? "Nota eliminada" : "Note removed"));
   };
   const setAdviceFollowed = async (id, val) => {
-    const { error } = await supabase.from("appointments").update({ advice_followed: val }).eq("id", id).eq("owner_id", salonProfile.id);
+    const { error } = await staffUpdate(id, { advice_followed: val });
     if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
     setAppointments(list => list.map(x => x.id === id ? { ...x, advice_followed: val } : x));
   };
@@ -824,12 +796,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       // klant gebeurt server-side via een database-trigger op statuswissel naar
       // no_show. Client-side meetellen zou dubbel tellen — en zou de teller
       // missen zodra de status ergens anders (eigenaar, edge-functie) wijzigt.
-      // .select() geeft de rij ná de triggers terug, mét het vastgelegde
+      // De server geeft de rij ná de triggers terug, mét het vastgelegde
       // no_show_fee (no-show-vergoeding), anders stond het pas na herladen op de kaart.
-      const { data: fresh, error } = await supabase.from("appointments").update({ status: "no_show" }).eq("id", id).eq("owner_id", salonProfile.id).select(showMoney ? "no_show_fee" : "id");
+      const { row: fresh, error } = await staffUpdate(id, { status: "no_show" });
       if (error) { toast.show(lang === "nl" ? "Fout bij markeren" : lang === "es" ? "Error al marcar como no presentado" : "Error marking no-show", "error"); return; }
-      // Omzet verborgen: ook de vergoeding is een bedrag, dus niet in de state.
-      const noShowFee = showMoney && Array.isArray(fresh) && fresh[0] ? fresh[0].no_show_fee : null;
+      // Omzet verborgen: ook de vergoeding is een bedrag (de server laat hem dan weg).
+      const noShowFee = showMoney ? (fresh?.no_show_fee ?? null) : null;
       setAppointments(a => a.map(x => x.id === id ? {...x, status: "no_show", no_show_fee: noShowFee} : x));
     } finally { setProcessingApptId(null); }
   };
@@ -1027,9 +999,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         // index (owner_id, invoice_number) weigert een nummer dat de salon al
         // gebruikte; vroeger gebeurde dat pas NA de mail, zodat de klant een
         // factuur kreeg die in Vellu niet bestond (audit S1-11).
-        const { error: resErr } = await supabase.from("appointments")
-          .update({ invoice_number: invoiceNumber })
-          .eq("id", id).eq("owner_id", salonProfile.id);
+        const { error: resErr } = await staffUpdate(id, { invoice_number: invoiceNumber });
         // De teller is al opgehoogd door de RPC; alleen de lokale kopie bijtrekken
         // zodat het scherm het volgende nummer klopt toont.
         setInvoiceForm(f => ({ ...f, next_invoice_number: rpcNum + 1 }));
@@ -1107,9 +1077,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         toast.show(L3("Factuur niet verstuurd — probeer het opnieuw", "Invoice not sent — please try again", "Factura no enviada — inténtalo de nuevo"), "error");
         return;
       }
-      const { error: sentErr } = await supabase.from("appointments")
-        .update({ invoice_sent: true, invoice_number: invoiceNumber })
-        .eq("id", id).eq("owner_id", salonProfile.id);
+      const { error: sentErr } = await staffUpdate(id, { invoice_sent: true, invoice_number: invoiceNumber });
       if (sentErr) {
         console.error("factuurstatus opslaan mislukt:", sentErr);
         toast.show(L3("De factuur is gemaild, maar de status kon niet worden opgeslagen. Ververs de pagina.", "The invoice was emailed, but its status could not be saved. Refresh the page.", "La factura se envió por correo, pero no se pudo guardar el estado. Recarga la página."), "error");
@@ -1194,7 +1162,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     if (!await showConfirm(msg, { tone: "danger", confirmText: L3("Afspraak annuleren", "Cancel appointment", "Cancelar cita"), cancelText: L3("Terug", "Back", "Volver") })) return;
     setProcessingApptId(id);
     try {
-      const { error } = await supabase.from("appointments").update({ status: "cancelled" }).eq("id", id).eq("owner_id", salonProfile.id);
+      const { error } = await staffUpdate(id, { status: "cancelled" });
       if (error) { toast.show(lang === "nl" ? "Annuleren mislukt" : lang === "es" ? "No se pudo cancelar" : "Cancel failed", "error"); return; }
       setAppointments(list => list.map(x => x.id === id ? {...x, status: "cancelled"} : x));
       // Bericht in de taal van de KLANT; de salon zegt af, niet de klant.
@@ -3725,29 +3693,19 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       setAddApptLoading(false); return;
                     }
                     const nameTrim = addApptForm.client_name.trim();
-                    // Via get_or_create_client RPC — clients van andere salons
-                    // zijn door RLS niet leesbaar; de RPC dedupliceert op het
-                    // globale unieke e-mailadres en geeft alleen de id terug.
-                    let clientId = null;
                     const nameParts = nameTrim.split(" ");
-                    const { data: rpcId } = await supabase.rpc("get_or_create_client", {
-                      p_email: email,
-                      p_first: nameParts[0] || nameTrim,
-                      p_last: nameParts.slice(1).join(" ") || "",
-                      p_phone: addApptForm.client_phone || null,
-                      p_birthday: (addApptForm.client_birthday || "").trim() || null,
-                    });
-                    if (rpcId) clientId = rpcId;
-                    const apptData = {
-                      owner_id: salonProfile.id, service_id: svc?.id, client_id: clientId,
+                    // Via de server (staff_create_appointment): altijd op haar
+                    // eigen naam, en de klantrij van DEZE salon zoekt of maakt de
+                    // server zelf. Terug komt de afspraak zoals zij hem mag zien.
+                    const { data: appt, error: apptError } = await supabase.rpc("staff_create_appointment", { p_appt: {
+                      owner_id: salonProfile.id, service_id: svc?.id || null,
                       service_name: svcLabel, service_price: price, service_duration: duration,
                       date: addApptForm.date, time: addApptForm.time,
-                      client_name: addApptForm.client_name, client_email: email, client_phone: addApptForm.client_phone || null,
-                      payment_method: "on-arrival", status: "confirmed", invoice_sent: false,
-                      staff_id: staffMember.id, staff_name: myStaff.name,
+                      client_name: nameTrim, client_email: email, client_phone: addApptForm.client_phone || null,
+                      client_first: nameParts[0] || nameTrim, client_last: nameParts.slice(1).join(" ") || "",
+                      client_birthday: (addApptForm.client_birthday || "").trim() || null,
                       lang: apptLang,
-                    };
-                    const { data: appt, error: apptError } = await supabase.from("appointments").insert(apptData).select("*").single();
+                    } });
                     if (apptError || !appt) {
                       toast.show(lang === "nl" ? "Fout bij het toevoegen van afspraak" : lang === "es" ? "Error al añadir la cita" : "Error adding appointment", "error");
                       setAddApptLoading(false);

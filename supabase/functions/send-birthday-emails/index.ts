@@ -11,6 +11,8 @@
 //   3. We haven't already logged a send for (owner, client_email, today) —
 //      the birthday_email_log UNIQUE constraint enforces this even if the
 //      cron overlaps itself.
+//   4. De salon heeft "Geen verjaardagsbericht" niet aangezet op de klantkaart
+//      (manual_clients.birthday_off), ook niet voor een datum uit een boeking.
 //
 // Discount code format:
 //   {prefix or "BDAY"}-{pct}-{5 willekeurige tekens}, bijv. BDAY-15-K7QM4.
@@ -462,13 +464,25 @@ serve(async (req) => {
       .eq("owner_id", salon.id)
       .not("client_email", "is", null)
       .order("id"));
-    if (manErr || apptErr) {
-      // Een halve lijst zou jarigen stil overslaan: tel het als fout en ga
-      // door met de volgende salon.
-      console.error("Load birthday contacts failed:", salon.id, manErr?.message || apptErr?.message);
+    // Klanten met "Geen verjaardagsbericht" (O2-10): geen mail, geen code en
+    // niet in de melding aan de eigenaar, welke datum er ook staat.
+    const { data: offRows, error: offErr } = await fetchAll(() => supabase
+      .from("manual_clients")
+      .select("id, email")
+      .eq("owner_id", salon.id)
+      .eq("birthday_off", true)
+      .not("email", "is", null)
+      .order("id"));
+    if (manErr || apptErr || offErr) {
+      // Een halve lijst zou jarigen stil overslaan (of een uitgezette klant
+      // tóch mailen): tel het als fout en ga door met de volgende salon.
+      console.error("Load birthday contacts failed:", salon.id, manErr?.message || apptErr?.message || offErr?.message);
       totalErrors++;
       continue;
     }
+    const offEmails = new Set(
+      (offRows || []).map((r: any) => String(r.email || "").trim().toLowerCase()).filter(Boolean),
+    );
 
     // Taal van de klant: die van haar laatste afspraak bij deze salon die een
     // taal heeft (E2-06).
@@ -496,7 +510,7 @@ serve(async (req) => {
     const takeIfBdayToday = (email: string, name: string, birthday: string | null | undefined) => {
       if (!email || !birthday) return;
       const em = email.trim().toLowerCase();
-      if (!em) return;
+      if (!em || offEmails.has(em)) return;
       const bstr = String(birthday);
       if (bstr.length < 10) return;
       const bmm = bstr.slice(5, 7);
