@@ -55,7 +55,7 @@ async function loadSalon(slug) {
   try {
     // Gedeactiveerde salon (23-10-2026): deactivated=eq.false, dus geen rij en
     // daarmee het gewone Vellu-voorbeeld, net als bij een onbekende salon.
-    const url = `${SUPABASE_URL}/rest/v1/public_salons?select=business_name,city,country_code,cover_image_url,logo_url&slug=eq.${encodeURIComponent(slug)}&deactivated=eq.false&limit=1`;
+    const url = `${SUPABASE_URL}/rest/v1/public_salons?select=business_name,city,country_code,cover_image_url,logo_url,is_demo&slug=eq.${encodeURIComponent(slug)}&deactivated=eq.false&limit=1`;
     const r = await fetch(url, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } });
     if (!r.ok) return null;
     const rows = await r.json();
@@ -74,7 +74,7 @@ function metaFor(salon, slug) {
     ? `Reserva una cita en ${name}${city ? ` en ${city}` : ''}. Reserva online, sin comisiones.`
     : `Book an appointment at ${name}${city ? ` in ${city}` : ''}. Book online, no commission.`;
   const img = [salon.cover_image_url, salon.logo_url].find((u) => typeof u === 'string' && /^https:\/\//.test(u)) || '';
-  return { title: `${name} | Vellu`, description, url: `https://www.vellu.cc/${slug}`, image: img, lang };
+  return { title: `${name} | Vellu`, description, url: `https://www.vellu.cc/${slug}`, image: img, lang, demo: salon.is_demo === true };
 }
 
 // og:locale volgt de taal van de beschrijving; de andere twee talen van de
@@ -106,6 +106,10 @@ function inject(html, m) {
   out = out.replace(/\s*<meta\s+property="og:locale:alternate"[^>]*>/gi, '');
   out = setTag(out, /<meta\s+property="og:locale"[^>]*>/i, localeTags(m.lang).join('\n    '));
   out = out.replace(/<html\s+lang="[^"]*"/i, () => `<html lang="${m.lang}"`);
+  // Demosalon (Bloom Studio, 12-11-2026): verzonnen reviews, dus de
+  // zoekmachines krijgen noindex al in de ruwe HTML (de app zet het daarna
+  // ook). Linkvoorbeelden in WhatsApp e.d. blijven gewoon werken.
+  if (m.demo) out = setTag(out, /<meta\s+name="robots"[^>]*>/i, '<meta name="robots" content="noindex" />');
   if (m.image) {
     out = setTag(out, /<meta\s+property="og:image"\s[^>]*>/i, `<meta property="og:image" content="${esc(m.image)}" />`);
     out = setTag(out, /<meta\s+name="twitter:image"[^>]*>/i, `<meta name="twitter:image" content="${esc(m.image)}" />`);
@@ -129,7 +133,7 @@ function minimal(m) {
 <title>${esc(t)}</title>
 <meta name="description" content="${esc(d)}">
 <link rel="canonical" href="${esc(u)}">
-<meta property="og:type" content="website">
+${m && m.demo ? '<meta name="robots" content="noindex">\n' : ''}<meta property="og:type" content="website">
 <meta property="og:site_name" content="Vellu">
 ${localeTags(lang).join('\n')}
 <meta property="og:url" content="${esc(u)}">

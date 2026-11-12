@@ -3309,7 +3309,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
       priceRange,
     }));
   })();
+  const salonLdOn = !initialSalon.is_demo;
   useEffect(() => {
+    // Demosalon (Bloom): verzonnen reviews horen niet als echte salon in Google.
+    if (!salonLdOn) return;
     let el = document.getElementById("vl-salon-ld");
     if (!el) {
       el = document.createElement("script");
@@ -3319,7 +3322,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     }
     el.textContent = salonLd;
     return () => { el.remove(); };
-  }, [salonLd]);
+  }, [salonLd, salonLdOn]);
   const ratingBreakdown = [5, 4, 3, 2, 1].map(r => ({
     stars: r,
     count: (initialSalon.reviews || []).filter(rv => rv.rating === r).length,

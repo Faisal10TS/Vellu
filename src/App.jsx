@@ -898,6 +898,9 @@ function SalonRoute({ lang, setLang }) {
         name: (data.business_name || data.owner_name || "Studio").trim() || "Studio",
         ...(() => { const p = splitPlace(data.city, data.address); return { city: p.city || "Nederland", address: p.address }; })(),
         country_code: data.country_code || "NL",
+        // Demosalon (Bloom Studio): verzonnen reviews, dus niet in Google
+        // (noindex hieronder, geen JSON-LD in ClientApp, noindex in api/og.js).
+        is_demo: data.is_demo === true,
         accent: data.accent_color || "#c9a96e",
         // NOTE: the owner's login email is deliberately NOT exposed here. The
         // public page only ever shows `salon_email` (a separate, owner-chosen
@@ -1009,6 +1012,18 @@ function SalonRoute({ lang, setLang }) {
     // oude of anders geschreven link werd geopend.
     url: `https://www.vellu.cc/${salon?.slug || slug}`
   });
+  // Demosalon: noindex, zelfde patroon als NotFoundView. Bloom Studio staat
+  // al niet in de sitemap, maar is via links op de homepage wel te vinden.
+  const isDemo = !!salon?.is_demo;
+  useEffect(() => {
+    if (!isDemo) return;
+    let el = document.querySelector('meta[name="robots"]');
+    const prev = el ? el.getAttribute("content") : null;
+    const created = !el;
+    if (created) { el = document.createElement("meta"); el.setAttribute("name", "robots"); document.head.appendChild(el); }
+    el.setAttribute("content", "noindex");
+    return () => { if (created) el.remove(); else el.setAttribute("content", prev || "index, follow"); };
+  }, [isDemo]);
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: c.bg, color: c.textLabel, fontFamily: "'Jost',sans-serif", fontSize: 13, letterSpacing: "0.08em" }}>
