@@ -2051,95 +2051,138 @@ function QtyStepper({ value, onChange, max = 10, accent, c }) {
   );
 }
 
-// Owner-facing proofreader. One click sends the salon's service names to the
-// check-translations edge function (Claude) and lists genuine typos and
-// translations (NL / EN / ES) that don't match, with a suggested fix. Nothing changes until the owner clicks
-// Apply; beauty jargon (wispy, PMU, foreign fill…) is never flagged.
+// Owner-facing proofreader. One click sends the salon's catalogue (service
+// names and descriptions, variants, extras) to the check-translations edge
+// function (Claude) and lists genuine typos and translations (NL / EN / ES)
+// that don't match, with a suggested fix. Nothing changes until the owner
+// clicks Apply; beauty jargon (wispy, PMU, foreign fill…) is never flagged.
 function TranslationChecker({ lang, accent, onApply }) {
   const { colors: c } = useTheme();
   const toast = useToast();
   const [state, setState] = useState("idle"); // idle | loading | done
   const [issues, setIssues] = useState([]);
+  const [partial, setPartial] = useState(false);
   const [busy, setBusy] = useState("");
+  const L = (nl, es, en) => (lang === "nl" ? nl : lang === "es" ? es : en);
 
   const run = async () => {
     setState("loading");
     try {
-      const { data, error } = await supabase.functions.invoke("check-translations", { body: { lang } });
+      // scope "all": ook omschrijvingen, varianten en extra's (zonder scope
+      // antwoordt de functie alleen met dienstnamen, voor oudere app-versies).
+      const { data, error } = await supabase.functions.invoke("check-translations", { body: { lang, scope: "all" } });
       if (error || !data || data.error) {
-        toast.show(lang === "nl" ? "Controle mislukt, probeer het opnieuw." : lang === "es" ? "La verificación falló, inténtalo de nuevo." : "Check failed, please try again.", "error");
+        toast.show(L("Controle mislukt, probeer het opnieuw.", "La verificación falló, inténtalo de nuevo.", "Check failed, please try again."), "error");
         setState("idle");
         return;
       }
       setIssues(Array.isArray(data.issues) ? data.issues : []);
+      setPartial(!!data.partial);
       setState("done");
     } catch {
-      toast.show(lang === "nl" ? "Controle mislukt, probeer het opnieuw." : lang === "es" ? "La verificación falló, inténtalo de nuevo." : "Check failed, please try again.", "error");
+      toast.show(L("Controle mislukt, probeer het opnieuw.", "La verificación falló, inténtalo de nuevo.", "Check failed, please try again."), "error");
       setState("idle");
     }
   };
 
+  const keyOf = (i) => i.key || i.id + i.field;
   const applyOne = async (issue) => {
-    const key = issue.id + issue.field;
+    const key = keyOf(issue);
     setBusy(key);
     const ok = await onApply(issue);
     setBusy("");
     if (ok) {
-      setIssues(prev => prev.filter(i => !(i.id === issue.id && i.field === issue.field)));
-      toast.show(lang === "nl" ? "Aangepast" : lang === "es" ? "Actualizado" : "Updated");
+      setIssues(prev => prev.filter(i => keyOf(i) !== key));
+      toast.show(L("Aangepast", "Actualizado", "Updated"));
     } else {
-      toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error");
+      toast.show(L("Opslaan mislukt", "Error al guardar", "Save failed"), "error");
     }
   };
 
-  const ignoreOne = (issue) => setIssues(prev => prev.filter(i => !(i.id === issue.id && i.field === issue.field)));
-  const langLabel = (f) => f === "name_nl" ? (lang === "nl" ? "Nederlands" : lang === "es" ? "Neerlandés" : "Dutch")
-    : f === "name_es" ? (lang === "nl" ? "Spaans" : lang === "es" ? "Español" : "Spanish")
-    : (lang === "nl" ? "Engels" : lang === "es" ? "Inglés" : "English");
+  const ignoreOne = (issue) => setIssues(prev => prev.filter(i => keyOf(i) !== keyOf(issue)));
+  const langLabel = (f) => {
+    const lg = String(f || "").slice(-2);
+    return lg === "nl" ? L("Nederlands", "Neerlandés", "Dutch") : lg === "es" ? L("Spaans", "Español", "Spanish") : L("Engels", "Inglés", "English");
+  };
+  const isDesc = (f) => String(f || "").startsWith("description_");
+  const kindLabel = (i) => isDesc(i.field) ? L("Omschrijving", "Descripción", "Description") : L("Naam", "Nombre", "Name");
+  // Vergelijkingstaal als een oude functie geen otherField meestuurt: EN bij NL/ES, NL bij EN.
+  const otherLabel = (i) => langLabel(i.otherField || (String(i.field).endsWith("_en") ? "nl" : "en"));
+  const arrow = (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
 
   return (
     <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: 16, marginBottom: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>{lang === "nl" ? "Vertalingen controleren" : lang === "es" ? "Revisar traducciones" : "Check translations"}</div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{L("Vertalingen controleren", "Revisar traducciones", "Check translations")}</div>
           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.5, maxWidth: 420 }}>
-            {lang === "nl" ? "Laat AI je dienstnamen in het Nederlands, Engels en Spaans nakijken op typefouten en verkeerde vertalingen. Vakjargon (wispy, PMU…) blijft ongemoeid." : lang === "es" ? "Deja que la IA revise los nombres de tus servicios en neerlandés, inglés y español en busca de erratas y traducciones incorrectas. Los términos del sector (wispy, PMU…) se dejan tal cual." : "Let AI proofread your service names in Dutch, English and Spanish for typos and wrong translations. Industry terms (wispy, PMU…) are left alone."}
+            {L("Laat AI je dienstnamen, omschrijvingen, varianten en extra's in het Nederlands, Engels en Spaans nakijken op typefouten en verkeerde vertalingen. Vakjargon (wispy, PMU…) blijft ongemoeid.",
+              "Deja que la IA revise los nombres, descripciones, variantes y extras de tus servicios en neerlandés, inglés y español en busca de erratas y traducciones incorrectas. Los términos del sector (wispy, PMU…) se dejan tal cual.",
+              "Let AI proofread your service names, descriptions, variants and extras in Dutch, English and Spanish for typos and wrong translations. Industry terms (wispy, PMU…) are left alone.")}
           </div>
         </div>
         <button className="btn-ghost" style={{ padding: "9px 16px", color: accent, borderColor: `${accent}55`, whiteSpace: "nowrap" }} disabled={state === "loading"} onClick={run}>
-          {state === "loading" ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Revisando…" : "Checking…") : (lang === "nl" ? "Controleer nu" : lang === "es" ? "Revisar ahora" : "Check now")}
+          {state === "loading" ? L("Bezig…", "Revisando…", "Checking…") : L("Controleer nu", "Revisar ahora", "Check now")}
         </button>
       </div>
 
-      {state === "done" && issues.length === 0 && (
+      {state === "done" && issues.length === 0 && !partial && (
         <div style={{ marginTop: 14, fontSize: 12, color: c.success, background: `${c.success}14`, border: `1px solid ${c.success}33`, borderRadius: 10, padding: "10px 12px" }}>
-          {lang === "nl" ? "Geen problemen gevonden — je namen zien er goed uit." : lang === "es" ? "No se encontraron problemas — tus nombres se ven bien." : "No issues found — your names look good."}
+          {L("Geen problemen gevonden — je teksten zien er goed uit.", "No se encontraron problemas — tus textos se ven bien.", "No issues found — your texts look good.")}
+        </div>
+      )}
+
+      {state === "done" && partial && (
+        <div style={{ marginTop: 14, fontSize: 12, color: c.textMuted, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 12px" }}>
+          {L("Een deel kon niet worden gecontroleerd. Probeer het straks opnieuw voor de rest.", "Una parte no se pudo revisar. Vuelve a intentarlo más tarde para el resto.", "Part of your catalogue could not be checked. Try again later for the rest.")}
         </div>
       )}
 
       {issues.length > 0 && (
         <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-          {issues.map(issue => (
-            <div key={issue.id + issue.field} style={{ border: `1px solid ${c.border}`, borderRadius: 12, padding: "12px 14px", background: c.bg }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>{langLabel(issue.field)}{issue.other ? ` · ${lang === "nl" ? "andere taal" : lang === "es" ? "otro" : "other"}: “${issue.other}”` : ""}</div>
-                <div style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>{issue.reason}</div>
+          {issues.map(issue => {
+            const key = keyOf(issue);
+            const desc = isDesc(issue.field);
+            return (
+              <div key={key} style={{ border: `1px solid ${c.border}`, borderRadius: 12, padding: "12px 14px", background: c.bg }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel }}>
+                    {issue.label ? `${issue.label} · ` : ""}{kindLabel(issue)} · {langLabel(issue.field)}
+                  </div>
+                  <div style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>{issue.reason}</div>
+                </div>
+                {desc ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                    <div style={{ fontSize: 13, lineHeight: 1.5, color: c.danger, textDecoration: "line-through", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{issue.current || "—"}</div>
+                    <div style={{ fontSize: 13, lineHeight: 1.5, color: c.success, fontWeight: 600, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{issue.suggestion}</div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 14, color: c.danger, textDecoration: "line-through" }}>{issue.current || "—"}</span>
+                    <span style={{ color: c.textMuted, display: "inline-flex" }}>{arrow}</span>
+                    <span style={{ fontSize: 14, color: c.success, fontWeight: 600 }}>{issue.suggestion}</span>
+                  </div>
+                )}
+                {issue.other && (
+                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 6, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                    {otherLabel(issue)}: “{issue.other}”
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 14px", color: accent, borderColor: `${accent}55` }} disabled={busy === key} onClick={() => applyOne(issue)}>
+                    {busy === key ? "…" : L("Toepassen", "Aplicar", "Apply")}
+                  </button>
+                  <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 14px" }} onClick={() => ignoreOne(issue)}>
+                    {L("Negeren", "Ignorar", "Ignore")}
+                  </button>
+                </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14, color: c.danger, textDecoration: "line-through" }}>{issue.current || "—"}</span>
-                <span style={{ color: c.textMuted }}>→</span>
-                <span style={{ fontSize: 14, color: c.success, fontWeight: 600 }}>{issue.suggestion}</span>
-              </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 14px", color: accent, borderColor: `${accent}55` }} disabled={busy === issue.id + issue.field} onClick={() => applyOne(issue)}>
-                  {busy === issue.id + issue.field ? "…" : (lang === "nl" ? "Toepassen" : lang === "es" ? "Aplicar" : "Apply")}
-                </button>
-                <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 14px" }} onClick={() => ignoreOne(issue)}>
-                  {lang === "nl" ? "Negeren" : lang === "es" ? "Ignorar" : "Ignore"}
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -18561,14 +18604,35 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   in een box"). */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
 
-              {/* AI proofreader for the salon's own service names (NL, EN en sinds 12-11-2026 ES). */}
+              {/* AI proofreader for the salon's own catalogue: service names (NL, EN,
+                  sinds 12-11-2026 ES) en sinds 13-11-2026 ook omschrijvingen, varianten
+                  en extra's. Elke melding zegt in welke tabel hij hoort. */}
               <TranslationChecker lang={lang} accent={accent} onApply={async (issue) => {
+                const table = issue.table || "services";
+                const NAME = ["name_nl", "name_en", "name_es"], DESC = ["description_nl", "description_en", "description_es"];
+                if (!(NAME.includes(issue.field) || (table !== "service_extras" && DESC.includes(issue.field)))) return false;
+                // Alleen regels die in deze salon staan (de server leest al alleen de
+                // eigen diensten; dit is de tweede slot op de deur).
+                const svcId = table === "services" ? issue.id : issue.serviceId;
+                const svc = (salonData.services || []).find(s => s.id === svcId);
+                const listKey = table === "service_variants" ? "variants" : table === "service_extras" ? "extras" : null;
+                if (!svc || (listKey && !(svc[listKey] || []).some(x => x.id === issue.id))) return false;
                 const patch = { [issue.field]: issue.suggestion };
-                // The primary `name` column mirrors name_nl — keep it in sync.
-                if (issue.field === "name_nl") patch.name = issue.suggestion;
-                const { error } = await supabase.from("services").update(patch).eq("id", issue.id).eq("owner_id", salonData.owner_id);
-                if (error) return false;
-                update(d => { d.services = d.services.map(s => s.id === issue.id ? { ...s, ...patch } : s); return d; });
+                // The primary `name` column on services mirrors name_nl — keep it in sync.
+                if (table === "services" && issue.field === "name_nl") patch.name = issue.suggestion;
+                let q = supabase.from(table).update(patch).eq("id", issue.id);
+                if (table === "services") q = q.eq("owner_id", salonData.owner_id);
+                // .select: een update die door RLS niets raakt geeft geen fout, wel 0 rijen.
+                const { data, error } = await q.select("id");
+                if (error || !data?.length) return false;
+                update(d => {
+                  d.services = d.services.map(s => {
+                    if (s.id !== svcId) return s;
+                    if (!listKey) return { ...s, ...patch };
+                    return { ...s, [listKey]: (s[listKey] || []).map(x => x.id === issue.id ? { ...x, ...patch } : x) };
+                  });
+                  return d;
+                });
                 return true;
               }} />
 
