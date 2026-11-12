@@ -20,7 +20,7 @@
 // als props (`c` + `accent`), dus dit bestand geeft zijn eigen palet mee. De
 // globale .btn-*/.input-field-stijlen volgen het app-thema en worden hier
 // binnen .atelier overschreven, anders lekt een donker thema de bone-pagina in.
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import SupportChat from "./SupportChat.jsx";
@@ -432,6 +432,15 @@ function AtFeatureThemes({ lang }) {
       ] },
   ];
   const [active, setActive] = useState(0);
+  // Het vorige beeld krijgt .out, zodat het eigen uitgang-animatie speelt
+  // terwijl het nieuwe binnenkomt (Faisal 12-11: "smoother en cinematic").
+  // useLayoutEffect: de extra render valt vóór het tekenen, dus geen frame
+  // waarin het oude beeld al weg is maar nog geen .out heeft.
+  const [prev, setPrev] = useState(null);
+  const lastActive = useRef(0);
+  useLayoutEffect(() => {
+    if (lastActive.current !== active) { setPrev(lastActive.current); lastActive.current = active; }
+  }, [active]);
   // Draait vanzelf door de vier thema's (Faisal 11-11). Het balkje onder de
   // gekozen knop is de klok: een CSS-animatie van TH_SPIN; als die afloopt
   // gaat het volgende thema aan. Kiest iemand zelf (klik/toets), dan stopt
@@ -485,7 +494,7 @@ function AtFeatureThemes({ lang }) {
         <div style={{ width: TH_W * scale, height: TH_H * scale, margin: "0 auto", position: "relative" }}>
           <div style={{ position: "absolute", left: 0, top: 0, width: TH_W, height: TH_H, transform: `scale(${scale})`, transformOrigin: "0 0" }}>
             {themes.map((th, i) => (
-              <div key={th.id} className={`at-th-visual${i === active ? " on" : ""}`} aria-hidden="true">
+              <div key={th.id} className={`at-th-visual${i === active ? " on" : i === prev ? " out" : ""}`} aria-hidden="true">
                 <AtThemeVisual id={th.id} lang={lang} />
               </div>
             ))}
@@ -1206,8 +1215,34 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           /* Beeld bovenaan, naast de knoppen (Faisal 11-11: "niet zo in het
              midden"): bovenkant beeld = bovenkant eerste knop. */
           @media (min-width: 900px) { .at-th-stage { align-self: start; } }
-          .at-th-visual { position: absolute; inset: 0; opacity: 0; transform: translateY(10px); visibility: hidden; transition: opacity 0.45s ease, transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0.45s; }
-          .at-th-visual.on { opacity: 1; transform: none; visibility: visible; transition: opacity 0.45s ease, transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s; }
+          /* Wissel tussen de beelden (12-11, "smoother en cinematic"): het oude
+             beeld wijkt naar achter (iets omhoog, kleiner, zacht vervaagd), het
+             nieuwe komt een tel later van onderen uit een zachte waas op een
+             lange uitloop, en daarna bouwen de regels van de kaart zich één
+             voor één op. Geen tweede scroll- of hoogtewissel: alles binnen het
+             vaste kader. */
+          .at-th-visual { position: absolute; inset: 0; opacity: 0; visibility: hidden; pointer-events: none; }
+          .at-th-visual.on { opacity: 1; visibility: visible; animation: atThIn 1.05s cubic-bezier(0.16, 1, 0.3, 1) 0.14s both; }
+          .at-th-visual.out { visibility: visible; animation: atThOut 0.55s cubic-bezier(0.2, 0, 0, 1) both; }
+          @keyframes atThIn { 0% { opacity: 0; transform: translateY(26px) scale(0.985); filter: blur(7px); } 45% { opacity: 1; } 100% { opacity: 1; transform: none; filter: blur(0); } }
+          @keyframes atThOut { 0% { opacity: 1; transform: none; filter: blur(0); } 100% { opacity: 0; transform: translateY(-16px) scale(0.965); filter: blur(6px); } }
+          /* De regels van de nieuwe kaart: zonder eindframe, zodat elk element
+             naar zijn eigen stijl teruggaat (sommige regels zijn bewust lichter). */
+          .at-th-visual.on > div > * { animation: atThRise 0.75s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+          .at-th-visual.on > div > :nth-child(1) { animation-delay: 0.20s; }
+          .at-th-visual.on > div > :nth-child(2) { animation-delay: 0.27s; }
+          .at-th-visual.on > div > :nth-child(3) { animation-delay: 0.34s; }
+          .at-th-visual.on > div > :nth-child(4) { animation-delay: 0.41s; }
+          .at-th-visual.on > div > :nth-child(5) { animation-delay: 0.48s; }
+          .at-th-visual.on > div > :nth-child(6) { animation-delay: 0.55s; }
+          .at-th-visual.on > div > :nth-child(n+7) { animation-delay: 0.62s; }
+          @keyframes atThRise { from { opacity: 0; transform: translateY(12px); } }
+          /* De punten onder de knoppen lopen mee in hetzelfde ritme. */
+          .at-th-panel:not([hidden]) .at-th-points li, .at-th-panel:not([hidden]) .at-th-panel-lead { animation: atThRise 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+          .at-th-panel:not([hidden]) .at-th-points li:nth-child(1) { animation-delay: 0.20s; }
+          .at-th-panel:not([hidden]) .at-th-points li:nth-child(2) { animation-delay: 0.27s; }
+          .at-th-panel:not([hidden]) .at-th-points li:nth-child(3) { animation-delay: 0.34s; }
+          .at-th-panel:not([hidden]) .at-th-points li:nth-child(4) { animation-delay: 0.41s; }
           .at-th-detail { grid-area: detail; }
           .at-th-panel-lead { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 21px; color: ${EARTH}; margin-bottom: 10px; }
           @media (min-width: 900px) { .at-th-panel-lead { display: none; } .at-th-detail { padding-left: 18px; } }
@@ -1223,7 +1258,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-th:not(.run) .at-th-bar { animation-play-state: paused; }
           @media (hover: hover) { .at-th-tabs:hover .at-th-bar { animation-play-state: paused; } }
           .at-th-tabs:has(:focus-visible) .at-th-bar { animation-play-state: paused; }
-          @media (prefers-reduced-motion: reduce) { .at-th-visual, .at-th-visual.on, .at-th-tab, .at-th-tab:hover, .at-th-tab:hover .at-th-go { transition: none; transform: none; } .at-th-bar { display: none; } }
+          @media (prefers-reduced-motion: reduce) { .at-th-visual, .at-th-visual.on, .at-th-tab, .at-th-tab:hover, .at-th-tab:hover .at-th-go { transition: none; transform: none; } .at-th-visual.on, .at-th-visual.out, .at-th-visual.on > div > *, .at-th-panel .at-th-points li, .at-th-panel .at-th-panel-lead { animation: none; } .at-th-visual.out { visibility: hidden; } .at-th-bar { display: none; } }
           /* Citaten van salons (Beoordeel Vellu, 16-09): dezelfde zwevende
              bone-kaarten, gecentreerd, één tot drie naast elkaar. */
           .at-quote-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; max-width: 900px; margin: 0 auto; }
