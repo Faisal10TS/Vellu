@@ -14,6 +14,32 @@
 
 export const RELEASES = [
   {
+    // 12-11 (zesde): codes verhuizen mee (move_client_codes), inloopklanten met
+    // alleen een voornaam op een eigen kaart (los:<id>), "." / "none" telt niet
+    // als e-mailadres, samenvoegen van twee kaarten zonder e-mailadres.
+    id: "2026-11-12f",
+    date: "2026-11-12",
+    title: { nl: "Klantkaarten kloppen beter", en: "More accurate client cards", es: "Fichas de cliente más precisas" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Pas je het e-mailadres van een klant aan of voeg je twee klanten samen, dan gaan haar stempelkaart- en verjaardagscodes nu mee naar het nieuwe adres.",
+          en: "When you change a client's email address or merge two clients, their stamp-card and birthday codes now move to the new address too.",
+          es: "Si cambias el correo de un cliente o combinas dos clientes, sus códigos de la tarjeta de sellos y de cumpleaños ahora pasan también a la nueva dirección.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Inloopklanten met alleen een voornaam en geen e-mail of telefoon staan niet meer samen op één kaart. Dezelfde klant? Voeg de kaarten samen, ook als ze geen e-mailadres hebben.",
+          en: "Walk-in clients with only a first name and no email or phone no longer end up on one shared card. Same client? Merge the cards, even without an email address.",
+          es: "Los clientes sin cita con solo un nombre y sin correo ni teléfono ya no quedan juntos en una ficha. ¿Es el mismo cliente? Combina las fichas, también sin correo.",
+        },
+      },
+    ],
+  },
+  {
     // 12-11 (vijfde): verjaardag per klant uit (O2-10, manual_clients.birthday_off),
     // klantrijen per salon (clients.owner_id) en medewerkers wijzigen afspraken
     // via de server (staff_update_appointment / staff_create_appointment).

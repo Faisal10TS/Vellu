@@ -3992,6 +3992,14 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     const norm = s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
     return `naam:${norm || s.toLowerCase()}`;
   };
+  // Alleen een echt adres telt als e-mailadres van een klant. Bij een
+  // inloopklant staat soms "." of "none" (of een telefoonnummer) in het veld;
+  // als sleutel zette dat elke inloopklant met zo'n "adres" op één kaart.
+  // Zelfde regel als de stempeltrigger (geen stempels op zo'n adres).
+  const mailKeyOf = (e) => { const s = String(e || "").trim().toLowerCase(); return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) ? s : ""; };
+  // Eén woord is alleen een voornaam: twee inloopklanten "Maria" zonder
+  // e-mail of telefoon zijn niet vanzelf dezelfde persoon.
+  const singleWordName = (n) => String(n || "").trim().split(/\s+/).filter(Boolean).length === 1;
 
   useEffect(() => {
     let cancelled = false;
@@ -4066,6 +4074,15 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       const apptsSorted = (appts || []).slice().sort((x, y) => String(y.date || "").localeCompare(String(x.date || "")) || String(y.time || "").localeCompare(String(x.time || "")));
       // Klanten zonder e-mailadres: zie telKeyOf/nameKeyOf hierboven.
       const byEmail = new Map();
+      // Alleen een voornaam en geen e-mail of telefoon: elke afspraak een eigen
+      // kaart (los:<id>), want "Maria" zegt niet wélke Maria. Behalve als de
+      // salon zo iemand zelf als klant heeft opgeslagen (klantrij met die ene
+      // naam, zonder adres en nummer): dan horen die afspraken bij haar, zoals
+      // voorheen. Samenvoegen en Bewerken maken zo'n klantrij ook aan.
+      const soloContacts = new Set((manual || [])
+        .filter((m) => !mailKeyOf(m.email) && !telKeyOf(m.phone) && singleWordName(m.name))
+        .map((m) => nameKeyOf(m.name))
+        .filter(Boolean));
       for (const a of apptsSorted) {
         // Sleutel = het e-mailadres OP DE AFSPRAAK. Dat is wat de salon ziet
         // en bewerkt, waar de mails heen gaan en wat Samenvoegen herschrijft.
@@ -4074,11 +4091,15 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         // afspraak-adres los van elkaar, en bleef samenvoegen zonder effect
         // omdat de groepering op dat oude adres hing. Alleen terugvallen op
         // de clients-rij als de afspraak zelf geen adres heeft.
-        const email = String(a.client_email || a.clients?.email || "").trim().toLowerCase();
+        const email = mailKeyOf(a.client_email) || mailKeyOf(a.clients?.email);
         // Zonder adres: op nummer, anders op naam — behalve een Kassa-verkoop
         // zonder klant ("Losse verkoop"): die hoort bij niemand.
         const anonSale = ["losse verkoop", "venta directa", "walk-in sale"].includes(String(a.client_name || "").trim().toLowerCase());
-        const key = email || telKeyOf(a.clients?.phone || a.client_phone) || (anonSale ? "" : nameKeyOf(a.client_name));
+        let key = email || telKeyOf(a.clients?.phone || a.client_phone);
+        if (!key && !anonSale) {
+          const nk = nameKeyOf(a.client_name);
+          key = nk && singleWordName(a.client_name) && !soloContacts.has(nk) ? `los:${a.id}` : nk;
+        }
         if (!key) continue;
         let agg = byEmail.get(key);
         if (!agg) {
@@ -4130,12 +4151,12 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       const byMailName = new Map(); // `${email}|${naamsleutel}` → kaart
       const manualSorted = (manual || []).slice().sort((x, y) => String(x.created_at || "").localeCompare(String(y.created_at || "")) || String(x.id).localeCompare(String(y.id)));
       for (const m of manualSorted) {
-        const email = String(m.email || "").trim().toLowerCase();
+        const email = mailKeyOf(m.email);
         const card = email ? byEmail.get(email) : null;
         if (card && card.manualNameKey === undefined && nameKeyOf(m.name) && nameKeyOf(m.name) === nameKeyOf(card.name)) card.manualNameKey = nameKeyOf(m.name);
       }
       for (const m of manualSorted) {
-        const email = String(m.email || "").trim().toLowerCase();
+        const email = mailKeyOf(m.email);
         const nk = nameKeyOf(m.name);
         const base = email ? byEmail.get(email) : (byEmail.get(telKeyOf(m.phone)) || byEmail.get(nameKeyOf(m.name)));
         const fits = (cl) => !!cl && (cl.manualNameKey === undefined || cl.manualNameKey === nk);
@@ -4286,6 +4307,12 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     }
     const newEmail = editForm.email.trim();
     const newPhone = editForm.phone.trim();
+    // Geen "." of "none" als adres: zo'n adres telt in de lijst niet als
+    // e-mailadres (mailKeyOf) en er gaat ook geen mail heen.
+    if (newEmail && !mailKeyOf(newEmail)) {
+      toast.show(lang === "nl" ? "Dit e-mailadres klopt niet. Laat het veld leeg als de klant geen e-mailadres heeft." : lang === "es" ? "Este correo no es válido. Deja el campo vacío si el cliente no tiene correo." : "This email address isn't valid. Leave the field empty if the client has no email address.", "error");
+      return;
+    }
     const ids = (editing.appts || []).map((a) => a.id).filter(Boolean);
     const emailChanged = newEmail.toLowerCase() !== String(editing.email || "").toLowerCase();
     // Afspraken hangen aan hun e-mailadres (zonder adres: aan het
@@ -4339,6 +4366,14 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     // de klantrij(en). Mislukt de tweede stap, dan blijft het venster open en
     // zet nog een keer Opslaan alles recht (de afspraken-stap is herhaalbaar).
     let error = apptPatch ? await updateApptsByIds(ids, apptPatch) : null;
+    // Stempelkaart- en verjaardagscodes hangen aan het e-mailadres: die gaan
+    // mee naar het nieuwe adres. Bleven ze achter, dan kon de klant haar code
+    // niet meer gebruiken en gaf de stempelkaart voor dezelfde bezoeken nog een
+    // beloning. De server verhuist alleen als er op het oude adres geen
+    // afspraak meer staat; nog een keer Opslaan is dus veilig.
+    if (!error && apptPatch?.client_email && mailKeyOf(editing.email)) {
+      ({ error } = await supabase.rpc("move_client_codes", { p_from: editing.email, p_to: apptPatch.client_email }));
+    }
     // Update every manual_clients row behind this client (old duplicates
     // included); otherwise create one so future loads pick the override up.
     // De verjaardag staat alleen hier: manual_clients is wat de salon zelf
@@ -4368,15 +4403,24 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   const deleteClient = async () => {
     if (!editing) return;
     const hasHistory = (editing.appts || []).length > 0;
+    // Een losse kaart met alleen een voornaam verbergen maakt een klantrij met
+    // die naam, en daarmee gaan alle afspraken met die voornaam zonder
+    // contactgegevens samen uit de lijst (zie soloContacts). Dat zeggen we.
+    const solo = String(editing.key || "").startsWith("los:");
+    const soloLine = !solo ? "" : (lang === "nl"
+      ? ` Alle afspraken met de voornaam "${editing.name}" zonder contactgegevens verdwijnen dan samen uit de lijst.`
+      : lang === "es"
+      ? ` Todas las citas con el nombre "${editing.name}" sin datos de contacto desaparecen juntas de la lista.`
+      : ` Every appointment with the first name "${editing.name}" and no contact details leaves the list together.`);
     // Verborgen klanten blijven terug te vinden (en terug te zetten) onder
     // "Verborgen klanten"; met een e-mailadres zet een nieuwe afspraak haar
     // vanzelf terug (trigger appointments_unhide_client).
     const confirmMsg = hasHistory
       ? (lang === "nl"
-          ? `Klant verwijderen? ${editing.appts.length} afspra(a)k(en) blijven in je agenda en klanthistorie staan; de klant verdwijnt alleen uit deze lijst. Je vindt haar terug onder Verborgen klanten${editing.email ? "; bij een nieuwe afspraak komt ze vanzelf terug" : ""}.`
+          ? `Klant verwijderen? ${editing.appts.length} afspra(a)k(en) blijven in je agenda en klanthistorie staan; de klant verdwijnt alleen uit deze lijst. Je vindt haar terug onder Verborgen klanten${editing.email ? "; bij een nieuwe afspraak komt ze vanzelf terug" : ""}.${soloLine}`
           : lang === "es"
-          ? `¿Eliminar el cliente? Sus ${editing.appts.length} cita(s) siguen en tu agenda y en el historial; el cliente solo desaparece de esta lista. Lo encontrarás en Clientes ocultos${editing.email ? "; con una nueva cita vuelve solo a la lista" : ""}.`
-          : `Delete client? ${editing.appts.length} appointment(s) stay in your agenda and history; the client is only hidden from this list. You can find them under Hidden clients${editing.email ? "; a new appointment brings them back automatically" : ""}.`)
+          ? `¿Eliminar el cliente? Sus ${editing.appts.length} cita(s) siguen en tu agenda y en el historial; el cliente solo desaparece de esta lista. Lo encontrarás en Clientes ocultos${editing.email ? "; con una nueva cita vuelve solo a la lista" : ""}.${soloLine}`
+          : `Delete client? ${editing.appts.length} appointment(s) stay in your agenda and history; the client is only hidden from this list. You can find them under Hidden clients${editing.email ? "; a new appointment brings them back automatically" : ""}.${soloLine}`)
       : (lang === "nl" ? "Klant definitief verwijderen?" : lang === "es" ? "¿Eliminar este cliente de forma permanente?" : "Permanently delete this client?");
     if (!window.confirm(confirmMsg)) return;
     setDeleting(true);
@@ -4515,10 +4559,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   const mergePlan = (source, target) => {
     const hasAppts = (cl) => (cl?.appts || []).length > 0;
     if (!target.email && source.email) return { source: target, target: source, swapped: true, blocked: false };
-    if (!target.email && hasAppts(source)) {
-      if (!hasAppts(target)) return { source: target, target: source, swapped: true, blocked: false };
-      return { source, target, swapped: false, blocked: true };
-    }
+    if (!target.email && hasAppts(source) && !hasAppts(target)) return { source: target, target: source, swapped: true, blocked: false };
+    // Beide zonder e-mailadres en beide met afspraken: kan sinds 12-11-2026.
+    // De afspraken van de bron krijgen de naam en het nummer van de doelkaart
+    // (mergeClientInto), zodat ze bij het laden op dezelfde kaart vallen.
     return { source, target, swapped: false, blocked: false };
   };
   const mergeBlockedText = () => (lang === "nl"
@@ -4550,11 +4594,39 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       //    "Carmen@…" bleef zo onaangeroerd en de samenvoeging deed niets.
       //    Only this salon's rows are ever touched (owner_id).
       const ids = (source.appts || []).map(a => a.id).filter(Boolean);
+      // Nummer dat van de bron naar alle afspraken ging (pad zonder e-mail).
+      let carriedPhone = "";
+      // Doelkaart zonder adres en nummer met alleen een voornaam: die krijgt
+      // een klantrij, anders vielen de afspraken bij het laden weer uiteen
+      // (zie soloContacts).
+      let soloName = "";
       if (ids.length > 0 && target.email && source.email !== target.email) {
         const patch = { client_email: target.email };
         if (target.clientId) patch.client_id = target.clientId;
         const apptErr = await updateApptsByIds(ids, patch);
         if (apptErr) throw apptErr;
+        // Stempelkaart- en verjaardagscodes van de bron gaan mee (zie saveEdit).
+        if (mailKeyOf(source.email)) {
+          const { error: codeErr } = await supabase.rpc("move_client_codes", { p_from: source.email, p_to: target.email });
+          if (codeErr) throw codeErr;
+        }
+      } else if (ids.length > 0 && !target.email && (target.appts || []).length > 0) {
+        // Beide kaarten zonder e-mailadres. Zo'n kaart hangt aan het nummer of
+        // de naam op haar afspraken, dus de afspraken van de bron krijgen die
+        // van de doelkaart. Heeft alleen de bron een nummer, dan krijgen alle
+        // afspraken dat nummer — anders ging het bij het samenvoegen verloren.
+        const ta = target.appts[0];
+        const tPhone = ta.clients?.phone || ta.client_phone || "";
+        if (!telKeyOf(tPhone) && telKeyOf(source.phone)) {
+          carriedPhone = source.phone;
+          const allIds = [...ids, ...target.appts.map(a => a.id).filter(Boolean)];
+          const apptErr = await updateApptsByIds(allIds, { client_name: ta.client_name, client_phone: carriedPhone });
+          if (apptErr) throw apptErr;
+        } else {
+          const apptErr = await updateApptsByIds(ids, { client_name: ta.client_name, client_phone: tPhone || null });
+          if (apptErr) throw apptErr;
+          if (!telKeyOf(tPhone) && singleWordName(ta.client_name)) soloName = String(ta.client_name).trim();
+        }
       }
 
       // 2. Merge manual_clients rows. If source has notes/phone/birthday
@@ -4564,7 +4636,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       // Een kaart zonder e-mailadres met afspraken hangt aan haar eigen
       // nummer/naam; een ander nummer erbij zou haar klantrij aan een andere
       // kaart hangen.
-      if (source.phone && !target.phone && (target.email || !(target.appts || []).length)) patch.phone = source.phone;
+      if (carriedPhone) patch.phone = carriedPhone;
+      else if (source.phone && !target.phone && (target.email || !(target.appts || []).length)) patch.phone = source.phone;
       // Verjaardag gaat altijd mee als de doelkaart er geen heeft, ook als die
       // van de bron uit een boeking kwam (clients.birthday): na het
       // samenvoegen hangen haar afspraken aan de doelkaart en verdween die
@@ -4584,7 +4657,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       // e-mailadres of afspraken), dan komt die terug in de lijst — anders
       // verdween de samengevoegde klant.
       if (target.hidden) patch.hidden = false;
-      if (Object.keys(patch).length > 0) {
+      const needSoloRow = !!soloName && manualIdsOf(target).length === 0;
+      if (Object.keys(patch).length > 0 || needSoloRow) {
         const tids = manualIdsOf(target);
         let err;
         if (tids.length > 0) {
@@ -4592,7 +4666,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         } else {
           // Zonder e-mailadres hangt de nieuwe rij via het nummer of de naam
           // aan de kaart, dus die gaan dan mee.
-          const row = { owner_id: ownerId, email: target.email || null, name: target.name, ...patch };
+          const row = { owner_id: ownerId, email: target.email || null, name: soloName || target.name, ...patch };
           if (!target.email && target.phone && !row.phone) row.phone = target.phone;
           ({ error: err } = await supabase.from("manual_clients").insert(row));
         }
@@ -5165,6 +5239,17 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               {!selected.email && !selected.phone && (
                 <div style={{ fontSize: 12, color: c.textMuted }}>{lang === "nl" ? "Geen contactgegevens" : lang === "es" ? "Sin datos de contacto" : "No contact details"}</div>
               )}
+              {/* Losse afspraak met alleen een voornaam (los:<id>): die staat
+                  bewust op een eigen kaart, want "Maria" zegt niet wélke Maria. */}
+              {String(selected.key || "").startsWith("los:") && (
+                <div data-client-solo-note style={{ fontSize: 12, color: c.textSub, lineHeight: 1.5 }}>
+                  {lang === "nl"
+                    ? "Alleen een voornaam, dus deze kaart hoort bij één losse afspraak. Is het dezelfde klant als op een andere kaart? Gebruik Samenvoegen, of vul via Bewerken een achternaam of telefoonnummer in."
+                    : lang === "es"
+                    ? "Solo un nombre, así que esta ficha es de una sola cita. ¿Es el mismo cliente que en otra ficha? Usa Combinar, o añade un apellido o teléfono en Editar."
+                    : "Only a first name, so this card belongs to one single appointment. Same client as on another card? Use Merge, or add a last name or phone number via Edit."}
+                </div>
+              )}
               {birthdayOn && selected.birthday && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: c.text }}>
                   <NavIcon name="gift" size={15} color={accent} />
@@ -5505,10 +5590,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
             </div>
             <div style={{ fontSize: 12, color: c.textSub, marginBottom: 14, lineHeight: 1.5 }}>
               {lang === "nl"
-                ? <>Alle afspraken van <strong>{mergeSource.name}</strong> worden verplaatst naar de gekozen klant. Notities en telefoonnummer worden overgenomen als de andere klant die nog niet heeft.</>
+                ? <>Alle afspraken van <strong>{mergeSource.name}</strong> worden verplaatst naar de gekozen klant. Notities en telefoonnummer worden overgenomen als de andere klant die nog niet heeft. Stempelkaart- en verjaardagscodes gaan mee.</>
                 : lang === "es"
-                ? <>Todas las citas de <strong>{mergeSource.name}</strong> se trasladan al cliente que elijas. Las notas y el teléfono se copian si el otro cliente aún no los tiene.</>
-                : <>All appointments of <strong>{mergeSource.name}</strong> will move to the picked client. Notes and phone are carried over if the target lacks them.</>}
+                ? <>Todas las citas de <strong>{mergeSource.name}</strong> se trasladan al cliente que elijas. Las notas y el teléfono se copian si el otro cliente aún no los tiene. Los códigos de la tarjeta de sellos y de cumpleaños también pasan.</>
+                : <>All appointments of <strong>{mergeSource.name}</strong> will move to the picked client. Notes and phone are carried over if the target lacks them. Stamp-card and birthday codes move along too.</>}
             </div>
             <input className="input-field" placeholder={lang === "nl" ? "Zoek klant…" : lang === "es" ? "Buscar cliente…" : "Search client…"} value={mergeSearch} onChange={e => setMergeSearch(e.target.value)} style={{ width: "100%", marginBottom: 12 }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 360, overflowY: "auto" }}>
@@ -5583,7 +5668,8 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {dupePairs.map((p, i) => {
                   // Alleen knoppen die echt kunnen: een kaart zonder e-mailadres
-                  // kan de afspraken van de ander niet overnemen (mergePlan).
+                  // neemt de afspraken van een kaart mét adres niet over
+                  // (mergePlan draait dat om; twee kaarten zonder adres kan wel).
                   const keepSurvivor = mergePlan(p.source, p.survivor);
                   const keepSource = mergePlan(p.survivor, p.source);
                   const canKeepSurvivor = !keepSurvivor.blocked && !keepSurvivor.swapped;
@@ -5843,6 +5929,15 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 ? (lang === "nl" ? "Wijzigingen overschrijven de gegevens uit de afspraakhistorie." : lang === "es" ? "Los cambios sustituyen los datos del historial de citas." : "Changes override the data from appointment history.")
                 : (lang === "nl" ? "Pas de gegevens van deze klant aan." : lang === "es" ? "Actualiza los datos de este cliente." : "Update this customer's details.")}
             </div>
+            {String(editing.key || "").startsWith("los:") && (
+              <div data-edit-solo-note style={{ fontSize: 12, color: c.textSub, lineHeight: 1.5, marginTop: -8, marginBottom: 16, padding: "8px 12px", border: `1px solid ${c.border}`, borderRadius: 8, background: c.bgCard }}>
+                {lang === "nl"
+                  ? `Vul een achternaam, telefoonnummer of e-mailadres in, dan herkent Vellu deze klant bij een volgend bezoek. Sla je alleen "${editing.name}" op, dan komen alle afspraken met die voornaam zonder contactgegevens op deze kaart.`
+                  : lang === "es"
+                  ? `Añade un apellido, teléfono o correo y Vellu reconocerá a este cliente en la próxima visita. Si guardas solo "${editing.name}", todas las citas con ese nombre sin datos de contacto pasan a esta ficha.`
+                  : `Add a last name, phone number or email and Vellu will recognise this client next time. If you save just "${editing.name}", every appointment with that first name and no contact details moves onto this card.`}
+              </div>
+            )}
             {(() => { const lbl = { fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4, display: "block" }; return (
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
               <div><label style={lbl}>{lang === "nl" ? "Naam" : lang === "es" ? "Nombre" : "Name"}</label><input className="input-field" value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} placeholder={lang === "nl" ? "Voor- en achternaam" : lang === "es" ? "Nombre completo" : "Full name"} style={{ width: "100%" }} autoFocus /></div>
