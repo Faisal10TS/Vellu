@@ -1072,17 +1072,17 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     // stempelkaart, verjaardagscodes, aanbetaling, no-show-vergoeding,
     // wachtlijst, facturen en importeren ook in Starter zitten. Pro-only volgens
     // de code (isStarter/UpgradeCard): kassa en producten, analytics,
-    // kortingscodes, nieuwsbrief, klant-export, locaties, eigen login per
+    // kortingscodes, nieuwsbrief, locaties, eigen login per
     // medewerker, meer dan 3 medewerkers, eigen lettertype. Wijzigt de
     // afscherming in OwnerApp, dan deze lijsten mee.
     { name: "Starter", price: 19, popular: false, features: {
-      nl: ["Eigen boekingspagina in NL, EN en ES", "Bevestigingen en herinneringen per mail", "Reviews na elk bezoek", "Facturen automatisch verstuurd", "Stempelkaart en verjaardagscodes", "Aanbetaling en no-show-vergoeding", "Wachtlijst", "Eigen branding & logo", "Tot 3 medewerkers", "Klanten en afspraken importeren"],
-      en: ["Your own booking page in EN, NL and ES", "Email confirmations and reminders", "Reviews after every visit", "Invoices sent automatically", "Stamp card and birthday codes", "Deposits and no-show fees", "Waitlist", "Custom branding & logo", "Up to 3 staff members", "Import clients and appointments"],
-      es: ["Tu página de reservas en ES, NL y EN", "Confirmaciones y recordatorios por correo", "Reseñas después de cada visita", "Facturas enviadas automáticamente", "Tarjeta de sellos y códigos de cumpleaños", "Depósitos y tarifa por no presentarse", "Lista de espera", "Tu propia marca y logo", "Hasta 3 miembros del equipo", "Importa clientes y citas"] } },
+      nl: ["Eigen boekingspagina in NL, EN en ES", "Bevestigingen en herinneringen per mail", "Reviews na elk bezoek", "Facturen automatisch verstuurd", "Stempelkaart en verjaardagscodes", "Aanbetaling en no-show-vergoeding", "Wachtlijst", "Eigen branding & logo", "Tot 3 medewerkers", "Klanten en afspraken importeren", "Klantenlijst exporteren"],
+      en: ["Your own booking page in EN, NL and ES", "Email confirmations and reminders", "Reviews after every visit", "Invoices sent automatically", "Stamp card and birthday codes", "Deposits and no-show fees", "Waitlist", "Custom branding & logo", "Up to 3 staff members", "Import clients and appointments", "Export your client list"],
+      es: ["Tu página de reservas en ES, NL y EN", "Confirmaciones y recordatorios por correo", "Reseñas después de cada visita", "Facturas enviadas automáticamente", "Tarjeta de sellos y códigos de cumpleaños", "Depósitos y tarifa por no presentarse", "Lista de espera", "Tu propia marca y logo", "Hasta 3 miembros del equipo", "Importa clientes y citas", "Exporta tu lista de clientes"] } },
     { name: "Professional", price: 35, popular: true, features: {
-      nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Eigen login per medewerker", "Kassa, productverkoop en voorraad", "Analytics-dashboard", "Kortingscodes", "Nieuwsbrief & klant-export", "Meerdere locaties", "Eigen lettertype op je pagina", "Prioriteit support"],
-      en: ["Everything in Starter +", "Unlimited staff members", "Own login for each staff member", "Till, product sales and stock", "Analytics dashboard", "Discount codes", "Newsletter & client export", "Multiple locations", "Your own font on your page", "Priority support"],
-      es: ["Todo lo de Starter +", "Miembros del equipo ilimitados", "Acceso propio para cada miembro", "Caja, venta de productos e inventario", "Panel de analíticas", "Códigos de descuento", "Boletín y exportación de clientes", "Varias ubicaciones", "Tu propia tipografía en tu página", "Soporte prioritario"] } },
+      nl: ["Alles van Starter +", "Onbeperkt medewerkers", "Eigen login per medewerker", "Kassa, productverkoop en voorraad", "Analytics-dashboard", "Kortingscodes", "Nieuwsbrief naar al je klanten", "Meerdere locaties", "Eigen lettertype op je pagina", "Prioriteit support"],
+      en: ["Everything in Starter +", "Unlimited staff members", "Own login for each staff member", "Till, product sales and stock", "Analytics dashboard", "Discount codes", "Newsletter to all your clients", "Multiple locations", "Your own font on your page", "Priority support"],
+      es: ["Todo lo de Starter +", "Miembros del equipo ilimitados", "Acceso propio para cada miembro", "Caja, venta de productos e inventario", "Panel de analíticas", "Códigos de descuento", "Boletín para todos tus clientes", "Varias ubicaciones", "Tu propia tipografía en tu página", "Soporte prioritario"] } },
   ];
 
   // Gestructureerde gegevens voor zoekmachines (11-11-2026): wie Vellu is,
@@ -1649,7 +1649,7 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
               const dark = plan.popular;
               return (
                 <Reveal key={i} delay={i * 130}>
-                  <div className="at-price-card vl-glow" data-price-card onMouseMove={glowMove} style={{ background: dark ? INK : P.bgCard, color: dark ? BONE : INK, border: `1px solid ${dark ? INK : PUTTY}`, borderRadius: 20, padding: "36px 30px", position: "relative", height: "100%", boxSizing: "border-box" }}>
+                  <div className="at-price-card vl-glow" data-price-card onMouseMove={glowMove} style={{ background: dark ? INK : P.bgCard, color: dark ? BONE : INK, border: `1px solid ${dark ? INK : PUTTY}`, borderRadius: 20, padding: "36px 30px", position: "relative", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" }}>
                     {dark && (
                       <div style={{ position: "absolute", top: 22, right: 24, fontSize: 9, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: INK, background: PUTTY, borderRadius: 4, padding: "5px 12px" }}>
                         {t.popular}
@@ -1674,8 +1674,10 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
                         </div>
                       ))}
                     </div>
+                    {/* marginTop auto: de knoppen staan op één lijn, ook als de
+                        lijsten niet even lang zijn (Starter 11, Pro 10). */}
                     <button onClick={() => ownerStart()}
-                      style={{ width: "100%", padding: "15px 20px", borderRadius: R, border: `1px solid ${dark ? PUTTY : INK}`, background: dark ? PUTTY : "transparent", color: INK, fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer" }}>
+                      style={{ marginTop: "auto", width: "100%", padding: "15px 20px", borderRadius: R, border: `1px solid ${dark ? PUTTY : INK}`, background: dark ? PUTTY : "transparent", color: INK, fontFamily: "'Jost',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer" }}>
                       {t.getStarted}
                     </button>
                   </div>

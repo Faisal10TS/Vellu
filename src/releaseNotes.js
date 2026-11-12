@@ -14,6 +14,24 @@
 
 export const RELEASES = [
   {
+    // 12-11 (derde): planreview. Klant-export op elk plan. De Kassa-tab is nu
+    // ook voor Starter zichtbaar (met uitleg + upgrade) en eigen logins voor
+    // medewerkers zijn Professional; die twee bewust niet in de notes.
+    id: "2026-11-12c",
+    date: "2026-11-12",
+    title: { nl: "Je klantenlijst, altijd van jou", en: "Your client list, always yours", es: "Tu lista de clientes, siempre tuya" },
+    items: [
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Je klantenlijst exporteren (CSV) kan nu op elk abonnement, ook op Starter. Je vindt het bij Instellingen → Klanten & marketing.",
+          en: "Exporting your client list (CSV) now works on every plan, including Starter. You'll find it under Settings → Clients & marketing.",
+          es: "Exportar tu lista de clientes (CSV) ahora funciona en todos los planes, también en Starter. Lo encuentras en Ajustes → Clientes y marketing.",
+        },
+      },
+    ],
+  },
+  {
     // 12-11 (tweede): boekingspagina-ronde, punten 6 en 8. Accent als tekst
     // leesbaar (accentTextOn) en prijzen zonder ",00" (fmtPrice).
     id: "2026-11-12b",

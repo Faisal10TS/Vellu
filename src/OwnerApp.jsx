@@ -1117,11 +1117,14 @@ function NewsletterBlock({ ownerId, lang, c, accent, toast }) {
 // Starter plan. Trials and comped accounts (plan == null) deliberately see
 // everything — a full-featured trial converts better than a crippled one,
 // and the loss of these features is what sells the upgrade at conversion.
-function UpgradeCard({ feature, lang, c, accent, onUpgrade, compact = false }) {
+function UpgradeCard({ feature, desc = null, lang, c, accent, onUpgrade, compact = false }) {
   return (
     <div style={{ background: c.bgCard, border: `1.5px dashed ${accent}55`, borderRadius: 14, padding: compact ? "18px 16px" : "34px 24px", textAlign: "center", marginBottom: 12 }}>
       <div style={{ marginBottom: 10 }}><NavIcon name="crown" size={compact ? 20 : 28} color={accent} /></div>
       <div style={{ fontSize: compact ? 13 : 16, fontWeight: 600, marginBottom: 4, color: c.text }}>{feature}</div>
+      {/* Wat je ermee kunt, in één zin: alleen "Beschikbaar in Professional"
+          vertelt een Starter-salon niet waarom ze zou upgraden. */}
+      {desc && <div style={{ fontSize: 12, color: c.text, margin: "6px auto 8px", lineHeight: 1.55, maxWidth: 420 }}>{desc}</div>}
       <div style={{ fontSize: 11, color: c.textSub, marginBottom: 16, lineHeight: 1.5 }}>
         {lang === "nl" ? "Beschikbaar in het Professional plan." : lang === "es" ? "Disponible en el plan Professional." : "Available on the Professional plan."}
       </div>
@@ -11530,7 +11533,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // "Register"/"Till": die laatste twee zijn voor een tweedetaalspreker
     // dubbelzinnig (aanmelden / tot), en "Checkout" staat al op de knop
     // ernaast. Dit label is ook de paginatitel (zie navItems.find verderop).
-    ...(salonData.plan === "professional" ? [["kassa", "kassa", lang === "nl" ? "Kassa" : lang === "es" ? "Caja" : "Sales"]] : []),
+    // Sinds 12-11-2026 echt voor iedereen: de tab was voor Starter verborgen,
+    // waardoor de upsell hierboven nooit te zien was (planreview).
+    ["kassa", "kassa", lang === "nl" ? "Kassa" : lang === "es" ? "Caja" : "Sales"],
     ["klanten", "team", lang === "nl" ? "Klanten" : lang === "es" ? "Clientes" : "Clients"],
     ["analytics", "analytics", t.analytics],
     ["facturen", "facturen", t.invoices],
@@ -13535,7 +13540,11 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             <div className="fade-up" style={{ maxWidth: 960, margin: "0 auto" }}>
               {isMobile && <PTitle sub={lang === "nl" ? "Verkoop producten en kadobonnen" : lang === "es" ? "Vende productos y tarjetas regalo" : "Sell products and gift cards"}>{lang === "nl" ? "Kassa" : lang === "es" ? "Caja" : "Sales"}</PTitle>}
               {salonData.plan !== "professional" ? (
-                <UpgradeCard feature={lang === "nl" ? "Kassa" : lang === "es" ? "Caja" : "Sales"} lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
+                <UpgradeCard feature={lang === "nl" ? "Kassa" : lang === "es" ? "Caja" : "Sales"}
+                  desc={lang === "nl" ? "Verkoop producten en kadobonnen, los aan de balie of bij een afspraak. Houd je voorraad bij en tel aan het eind van de dag je kas met het kasboek."
+                    : lang === "es" ? "Vende productos y tarjetas regalo, en el mostrador o junto a una cita. Lleva tu inventario y cuadra la caja al final del día con el libro de caja."
+                    : "Sell products and gift cards, at the desk or with an appointment. Keep track of your stock and count your till at the end of the day with the cash book."}
+                  lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
               ) : (
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.4fr 1fr", gap: 14, alignItems: "start" }}>
                 {/* Links: zoeken/scannen + product-grid */}
@@ -23408,10 +23417,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               {/* CSV client export — downloadable client list for marketing,
                   GDPR portability requests, accountant handoff, or switching
                   platforms. Runs client-side via clientExport.js.
-                  Professional-only. */}
-              {isStarter ? (
-                <UpgradeCard feature={lang === "nl" ? "Klantenlijst exporteren" : lang === "es" ? "Exportar clientes" : "Export clients"} compact lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
-              ) : (
+                  Sinds 12-11-2026 op elk plan (planreview): "jouw klanten
+                  blijven jouw klanten" hoort niet achter een upgrade. */}
               <ClientExportBlock
                 ownerId={salonData.owner_id}
                 salonName={salonData.name}
@@ -23421,7 +23428,6 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 accent={accent}
                 toast={toast}
               />
-              )}
 
               {/* Klanten-import staat BEWUST buiten de Pro-check: overstappen
                   vanuit een andere app is onboarding, geen premium-functie. */}
