@@ -10,10 +10,48 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
-import { useTheme, ACCENT, Layout, NavIcon, ThemeToggle, LangToggle, useDashboardScrollbars } from "./shared.jsx";
+import { useTheme, ACCENT, Layout, NavIcon, ThemeToggle, LangToggle, useDashboardScrollbars, currencyForCountry } from "./shared.jsx";
 import { Star } from "./RateVellu.jsx";
 
 const fmtEur = (n) => `€${Math.round(Number(n) || 0).toLocaleString("nl-NL")}`;
+// Omzet van salons staat in hun eigen munt (NL €, Bonaire $, Curaçao XCG …):
+// nooit bij elkaar optellen, nooit als euro tonen (review 12-11-2026: de
+// homepage-kaart telde €19.737 + $13.132 + XCG 50 op tot "€32.919").
+const fmtCur = (countryCode, n) => `${currencyForCountry(countryCode).symbol}${Math.round(Number(n) || 0).toLocaleString("nl-NL")}`;
+// Bedragen per munt: [{ code, symbol, total }], euro eerst, daarna de grootste.
+function totalsByCurrency(rows, amountOf) {
+  const m = new Map();
+  for (const r of rows) {
+    const cur = currencyForCountry(r.country_code);
+    const t = m.get(cur.code) || { code: cur.code, symbol: cur.symbol, total: 0 };
+    t.total += Number(amountOf(r)) || 0;
+    m.set(cur.code, t);
+  }
+  return [...m.values()].sort((a, b) => (b.code === "EUR") - (a.code === "EUR") || b.total - a.total);
+}
+const localIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+// Cron health: na hoeveel uur zonder hartslag een job als "gestopt" telt.
+// Spiegel van MONITORED in supabase/functions/cron-watchdog/index.ts (daar
+// mailt de waakhond); cron-watchdog zelf wordt door api/cron-health-check.js
+// bewaakt, ook op 25 uur. Een job die hier ontbreekt telt 25 uur. Nieuwe job
+// in MONITORED? Zet hem hier ook neer, dan valt hij op als hij nooit draaide.
+const CRON_MAX_AGE_H = {
+  "send-reminders": 25, "send-reminders-digest": 25, "send-followups": 25, "send-rebook-nudge": 25,
+  "db-backup": 25, "check-pending-payments": 3, "prepay-watch": 3, "send-renewal-reminder": 25,
+  "vercel-cron-health-check": 25, "send-birthday-emails": 25, "send-activation-nudges": 25, "cron-watchdog": 25,
+};
+// Stand van één job: "down" (rood: laatste run faalde, te lang stil of nooit
+// gedraaid), "recovered" (oranje: fout of gedeeltelijk mislukt in de laatste 7
+// dagen, laatste run ok) of "ok".
+function cronState(j, now) {
+  const maxH = CRON_MAX_AGE_H[j.job_name] ?? 25;
+  const ageH = j.last_ran_at ? (now - new Date(j.last_ran_at).getTime()) / 3_600_000 : Infinity;
+  const stale = ageH > maxH;
+  const failed = j.last_status === "error";
+  const level = j.missing || stale || failed ? "down" : (j.last_status === "degraded" || j.errors_last_7d > 0) ? "recovered" : "ok";
+  return { level, stale, failed, ageH, maxH };
+}
 // Op de cent, voor de boekhouding (factuurlijst, btw-kaart).
 const fmtEur2 = (n) => `€${(Number(n) || 0).toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -108,7 +146,10 @@ const relTime = (iso) => {
 
 // Coloured pill for a salon's subscription state. `churning` (cancel at period
 // end) overrides — a still-paying-but-leaving customer is the one to chase.
-function statusBadge(classification, churning, c, accent) {
+// `everPaid`: de salon heeft ooit een factuur betaald. past_due zonder ooit te
+// betalen = de proef is afgelopen zonder dat er een plan gekozen werd (de
+// win-back-lijst); past_due na eerdere betalingen = een afschrijving mislukte.
+function statusBadge(classification, churning, c, accent, everPaid = false) {
   if (churning) return { label: "churning", color: c.danger };
   switch (classification) {
     case "paying": return { label: "paying", color: c.success };
@@ -116,9 +157,13 @@ function statusBadge(classification, churning, c, accent) {
     case "comped": return { label: "comped", color: c.textSub };
     case "cancelled": return { label: "cancelled", color: c.danger };
     case "expired": return { label: "expired", color: c.danger };
+    case "past_due": return everPaid ? { label: "payment failed", color: c.danger } : { label: "trial ended", color: c.warning };
+    case "none": return { label: "no trial", color: c.textMuted };
     default: return { label: classification || "none", color: c.textMuted };
   }
 }
+// Zelfde woorden als statusBadge, voor een kale subscription_status.
+const statusText = (status, everPaid) => status === "past_due" ? (everPaid ? "payment failed" : "trial ended") : status === "trialing" ? "trial" : status || "no trial";
 
 function StatCard({ label, value, sub, accent, c }) {
   return (
@@ -140,6 +185,8 @@ export default function AdminDashboard({ onLogout }) {
   const navigate = useNavigate();
 
   const [isAdmin, setIsAdmin] = useState(null); // null = loading, false = denied, true = ok
+  const [loadErrors, setLoadErrors] = useState([]); // [{ fn, message }] van RPC's die faalden
+  const [loaded, setLoaded] = useState(false); // alle RPC's teruggekomen (goed of fout)
   const [overview, setOverview] = useState(null);
   const [salons, setSalons] = useState([]);
   // Salon deactiveren / verwijderen (23-10-2026): { kind, salon } of null.
@@ -204,23 +251,28 @@ export default function AdminDashboard({ onLogout }) {
         return;
       }
       setIsAdmin(true);
-      const [ov, sl, rs, cr, tl, bo, sb, ar, ai, sv, sr, sc, ob, pi] = await Promise.all([
-        supabase.rpc("admin_overview"),
-        supabase.rpc("admin_salons_list"),
-        supabase.rpc("admin_recent_signups", { p_days: 30 }),
-        supabase.rpc("admin_cron_summary"),
-        supabase.rpc("admin_revenue_timeline", { p_days: 30 }),
-        supabase.rpc("admin_billing_overview"),
-        supabase.rpc("admin_subscriptions_list"),
-        supabase.rpc("admin_app_ratings"),
-        supabase.rpc("admin_rating_invites"),
-        supabase.rpc("admin_rating_site_visibility"),
-        supabase.rpc("admin_subscription_invoices"),
-        supabase.rpc("admin_subscription_cancellations"),
-        supabase.rpc("admin_onboarding"),
-        supabase.rpc("admin_price_list_imports"),
-      ]);
+      const calls = [
+        ["admin_overview"],
+        ["admin_salons_list"],
+        ["admin_recent_signups", { p_days: 30 }],
+        ["admin_cron_summary"],
+        ["admin_revenue_timeline", { p_days: 30 }],
+        ["admin_billing_overview"],
+        ["admin_subscriptions_list"],
+        ["admin_app_ratings"],
+        ["admin_rating_invites"],
+        ["admin_rating_site_visibility"],
+        ["admin_subscription_invoices"],
+        ["admin_subscription_cancellations"],
+        ["admin_onboarding"],
+        ["admin_price_list_imports"],
+      ];
+      const results = await Promise.all(calls.map(([fn, args]) => supabase.rpc(fn, args)));
+      const [ov, sl, rs, cr, tl, bo, sb, ar, ai, sv, sr, sc, ob, pi] = results;
       if (cancelled) return;
+      // Een kapotte RPC gaf vroeger alleen een lege tab (augustus 2026: drie
+      // tabs wekenlang leeg zonder melding). Nu staat bovenaan wat niet laadde.
+      setLoadErrors(results.map((r, i) => r.error ? { fn: calls[i][0], message: r.error.message || String(r.error.code || "error") } : null).filter(Boolean));
       setOverview(ov.data?.[0] || null);
       setSalons(sl.data || []);
       setRecent(rs.data || []);
@@ -235,6 +287,7 @@ export default function AdminDashboard({ onLogout }) {
       setSiteOn(!!sv.data);
       setOnboarding(ob.data || []);
       setPriceImports(pi.data || []);
+      setLoaded(true);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -416,19 +469,60 @@ export default function AdminDashboard({ onLogout }) {
     } finally { setFileBusy(""); }
   };
 
-  // Simple SVG sparkline for revenue timeline
+  // Salons die ooit een factuur betaalden. past_due betekent bij hen een
+  // mislukte afschrijving, bij de rest een proef die afliep zonder plan.
+  const paidOwners = new Set(subInvoices.filter(i => Number(i.total_eur) > 0).map(i => i.salon_id).filter(Boolean));
+  const liveSalons = salons.filter(s => !s.deactivated_at);
+  const trialEnded = liveSalons.filter(s => s.subscription_status === "past_due" && !paidOwners.has(s.id));
+  const paymentFailed = liveSalons.filter(s => s.subscription_status === "past_due" && paidOwners.has(s.id));
+  // Omzet van salons (voltooide afspraken), per munt.
+  const salonRevenue = totalsByCurrency(salons, s => s.total_revenue).filter(t => Math.round(t.total) !== 0);
+
+  // Cron: elke job uit de lijst plus de bewaakte jobs die nog nooit een
+  // hartslag schreven; rood bovenaan. Alleen als de RPC echt laadde, anders
+  // zou een mislukte lading alles als "nooit gedraaid" tonen.
+  const cronLoaded = loaded && !loadErrors.some(e => e.fn === "admin_cron_summary");
+  const cronRank = { down: 0, recovered: 1, ok: 2 };
+  const cronRows = [
+    ...cron,
+    ...(cronLoaded ? Object.keys(CRON_MAX_AGE_H).filter(n => !cron.some(j => j.job_name === n)).map(n => ({ job_name: n, missing: true, runs_last_7d: 0, errors_last_7d: 0, total_items_processed_7d: 0 })) : []),
+  ].map(j => ({ ...j, st: cronState(j, now) }))
+    .sort((a, b) => cronRank[a.st.level] - cronRank[b.st.level] || a.job_name.localeCompare(b.job_name));
+  const cronDown = cronRows.filter(j => j.st.level === "down").length;
+
+  // Omzet van salons per dag, één lijn per munt (bedragen niet omgerekend).
+  // Vaste as van 30 dagen t/m vandaag; dagen zonder afspraken tellen als 0.
+  // Toekomstige dagen vallen weg: de RPC gaf tot 12-11-2026 ook afspraken tot
+  // maanden vooruit mee, waardoor de lijn na vandaag naar nul zakte.
   const sparkline = (() => {
     if (!timeline.length) return null;
+    const days = [];
+    for (let i = 29; i >= 0; i--) { const d = new Date(now); d.setDate(d.getDate() - i); days.push(localIso(d)); }
+    const idx = new Map(days.map((d, i) => [d, i]));
+    const series = new Map();
+    for (const r of timeline) {
+      const i = idx.get(String(r.day).slice(0, 10));
+      if (i == null) continue;
+      const cur = currencyForCountry(r.country_code);
+      const s = series.get(cur.code) || { code: cur.code, symbol: cur.symbol, vals: days.map(() => 0), total: 0 };
+      s.vals[i] += Number(r.revenue) || 0;
+      s.total += Number(r.revenue) || 0;
+      series.set(cur.code, s);
+    }
+    const list = [...series.values()].filter(s => s.total > 0).sort((a, b) => (b.code === "EUR") - (a.code === "EUR") || b.total - a.total);
+    if (!list.length) return null;
     const W = 720, H = 80, pad = 4;
-    const maxRev = Math.max(...timeline.map(d => Number(d.revenue) || 0), 1);
-    const pts = timeline.map((d, i) => {
-      const x = pad + (i / Math.max(timeline.length - 1, 1)) * (W - pad * 2);
-      const y = H - pad - ((Number(d.revenue) || 0) / maxRev) * (H - pad * 2);
-      return { x, y, rev: Number(d.revenue) || 0, date: d.day };
+    const max = Math.max(1, ...list.flatMap(s => s.vals));
+    const X = (i) => pad + (i / (days.length - 1)) * (W - pad * 2);
+    const Y = (v) => H - pad - (v / max) * (H - pad * 2);
+    const colors = [accent, c.textSub, c.warning, c.textMuted];
+    const dashes = [undefined, "6 4", "2 3", "8 3 2 3"];
+    const lines = list.map((s, k) => {
+      const path = s.vals.map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+      return { ...s, path, area: `${path} L${X(days.length - 1).toFixed(1)},${H - pad} L${X(0).toFixed(1)},${H - pad} Z`, color: colors[k % colors.length], dash: dashes[k % dashes.length] };
     });
-    const path = pts.reduce((acc, p, i) => i === 0 ? `M${p.x},${p.y}` : `${acc} L${p.x},${p.y}`, "");
-    const area = `${path} L${pts[pts.length - 1].x},${H - pad} L${pts[0].x},${H - pad} Z`;
-    return { path, area, pts, W, H };
+    const dayLabel = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+    return { lines, W, H, first: dayLabel(days[0]), last: dayLabel(days[days.length - 1]) };
   })();
 
   return (
@@ -446,6 +540,16 @@ export default function AdminDashboard({ onLogout }) {
           </div>
         </div>
 
+        {loadErrors.length > 0 && (
+          <div data-admin-load-errors role="alert" style={{ background: `${c.danger}14`, border: `1px solid ${c.danger}55`, borderRadius: 12, padding: "12px 14px", marginBottom: 18, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: c.danger }}>Some data did not load, so parts of this page may be empty or wrong.</div>
+              <div style={{ fontFamily: "monospace", fontSize: 11, color: c.textSub, marginTop: 6, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{loadErrors.map(e => `${e.fn}: ${e.message}`).join("\n")}</div>
+            </div>
+            <button type="button" className="btn-ghost" onClick={() => window.location.reload()} style={{ fontSize: 11, padding: "7px 12px" }}>Reload</button>
+          </div>
+        )}
+
         {/* Tabs */}
         <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${c.border}`, overflowX: "auto" }}>
           {[
@@ -455,7 +559,7 @@ export default function AdminDashboard({ onLogout }) {
             ["signups", "Signups (30d)"],
             ["onboarding", `Onboarding${stuck.length ? ` (${stuck.length})` : ""}`],
             ["ratings", `Ratings${ratings.length ? ` (${ratings.length})` : ""}`],
-            ["cron", "Cron health"],
+            ["cron", `Cron health${cronDown ? ` (${cronDown})` : ""}`],
           ].map(([k, label]) => (
             <button
               key={k} onClick={() => setTab(k)}
@@ -477,10 +581,20 @@ export default function AdminDashboard({ onLogout }) {
           <>
             {/* Stat cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
-              <StatCard label="Total salons" value={overview?.total_salons ?? "—"} sub={`${overview?.paid_salons ?? 0} on paid plans`} accent={accent} c={c} />
+              {/* "on paid plans" telde iedereen met een plan (13), ook proef
+                  en afgelopen proef; betalend komt nu uit admin_billing_overview. */}
+              <StatCard label="Total salons" value={overview?.total_salons ?? "—"} sub={`${billing?.paying_count ?? 0} paying${trialEnded.length ? ` · ${trialEnded.length} trial ended` : ""}${paymentFailed.length ? ` · ${paymentFailed.length} payment failed` : ""}`} accent={accent} c={c} />
               <StatCard label="New (7 days)" value={overview?.salons_last_7d ?? "—"} sub="signups this week" accent={accent} c={c} />
               <StatCard label="Total appts" value={overview?.total_appointments ?? "—"} sub={`${overview?.appointments_last_30d ?? 0} in last 30d`} accent={accent} c={c} />
-              <StatCard label="Total revenue" value={fmtEur(overview?.total_revenue_eur)} sub={`${fmtEur(overview?.revenue_last_30d_eur)} last 30d`} accent={accent} c={c} />
+              <div data-salon-revenue style={{ display: "contents" }}>
+                <StatCard label="Salon revenue" accent={accent} c={c}
+                  value={salonRevenue.length ? (
+                    <span style={{ display: "flex", flexWrap: "wrap", columnGap: 12, rowGap: 4, fontSize: salonRevenue.length > 1 ? 22 : undefined }}>
+                      {salonRevenue.map(t => <span key={t.code} style={{ whiteSpace: "nowrap" }}>{t.symbol}{Math.round(t.total).toLocaleString("nl-NL")}</span>)}
+                    </span>
+                  ) : "—"}
+                  sub={salonRevenue.length > 1 ? "completed appts, not converted" : "completed appointments"} />
+              </div>
               <StatCard label="Staff accounts" value={overview?.total_staff ?? "—"} accent={accent} c={c} />
               <StatCard label="Unique clients" value={overview?.total_clients ?? "—"} accent={accent} c={c} />
               <StatCard label="Avg appts/salon" value={overview?.avg_appointments_per_salon ?? "—"} accent={accent} c={c} />
@@ -489,23 +603,36 @@ export default function AdminDashboard({ onLogout }) {
             {/* Revenue timeline */}
             {sparkline && (
               <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "18px 20px", marginBottom: 16 }}>
-                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>
-                  Revenue — last 30 days (all salons)
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>
+                    Salon revenue — last 30 days (completed appointments)
+                  </div>
+                  <div data-rev-legend style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 11, color: c.textSub }}>
+                    {sparkline.lines.map(l => (
+                      <span key={l.code} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <svg width="18" height="6" aria-hidden="true"><line x1="1" y1="3" x2="17" y2="3" stroke={l.color} strokeWidth="2" strokeDasharray={l.dash} strokeLinecap="round" /></svg>
+                        <strong style={{ color: c.text, fontWeight: 600 }}>{l.symbol}{Math.round(l.total).toLocaleString("nl-NL")}</strong>
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <svg viewBox={`0 0 ${sparkline.W} ${sparkline.H}`} style={{ width: "100%", height: 100, display: "block" }}>
+                <svg viewBox={`0 0 ${sparkline.W} ${sparkline.H}`} preserveAspectRatio="none" style={{ width: "100%", height: 100, display: "block" }}>
                   <defs>
                     <linearGradient id="adminRev" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={accent} stopOpacity="0.35" />
                       <stop offset="100%" stopColor={accent} stopOpacity="0" />
                     </linearGradient>
                   </defs>
-                  <path d={sparkline.area} fill="url(#adminRev)" />
-                  <path d={sparkline.path} fill="none" stroke={accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d={sparkline.lines[0].area} fill="url(#adminRev)" />
+                  {sparkline.lines.slice().reverse().map(l => (
+                    <path key={l.code} d={l.path} fill="none" stroke={l.color} strokeWidth="1.8" strokeDasharray={l.dash} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                  ))}
                 </svg>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: c.textMuted, marginTop: 8 }}>
-                  <span>{sparkline.pts[0]?.date}</span>
-                  <span>{sparkline.pts[sparkline.pts.length - 1]?.date}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: c.textMuted, marginTop: 8, gap: 12 }}>
+                  <span>{sparkline.first}</span>
+                  <span>{sparkline.last} (today)</span>
                 </div>
+                {sparkline.lines.length > 1 && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, textAlign: "center" }}>Each currency is its own line; amounts are not converted.</div>}
               </div>
             )}
 
@@ -541,8 +668,10 @@ export default function AdminDashboard({ onLogout }) {
               <StatCard label="ARR" value={fmtEur(billing?.arr_eur)} sub="annual run-rate" accent={accent} c={c} />
               <StatCard label="Collected to date" value={fmtEur(billing?.collected_total_eur)} sub={`${billing?.invoices_count ?? 0} invoices · ${fmtEur(billing?.collected_30d_eur)} last 30d`} accent={accent} c={c} />
               <StatCard label="Trials" value={billing?.trialing_count ?? 0} sub={`${billing?.trials_ending_14d ?? 0} ending in 14 days`} accent={accent} c={c} />
-              {(billing?.churning_count ?? 0) > 0 && <StatCard label="Churning" value={billing.churning_count} sub="cancel at period end" accent={c.danger} c={c} />}
-              {(billing?.comped_count ?? 0) > 0 && <StatCard label="Comped / free" value={billing.comped_count} sub="active, not paying (demo/comped)" accent={c.textSub} c={c} />}
+              {(billing?.churning_count ?? 0) > 0 && <StatCard label="Churning" value={billing.churning_count} sub="cancelled, access runs until the end of the paid period" accent={c.danger} c={c} />}
+              {trialEnded.length > 0 && <StatCard label="Trial ended, no plan" value={trialEnded.length} sub={trialEnded.map(s => (s.business_name || s.slug || "").trim()).join(", ")} accent={c.warning} c={c} />}
+              {paymentFailed.length > 0 && <StatCard label="Payment failed" value={paymentFailed.length} sub={paymentFailed.map(s => (s.business_name || s.slug || "").trim()).join(", ")} accent={c.danger} c={c} />}
+              {(billing?.comped_count ?? 0) > 0 && <StatCard label="Comped / free" value={billing.comped_count} sub="active, not paying and not cancelled" accent={c.textSub} c={c} />}
             </div>
 
             <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
@@ -762,7 +891,8 @@ export default function AdminDashboard({ onLogout }) {
                   </thead>
                   <tbody>
                     {subs.map(s => {
-                      const badge = statusBadge(s.classification, s.churning, c, accent);
+                      const everPaid = paidOwners.has(s.id);
+                      const badge = statusBadge(s.classification, s.churning, c, accent, everPaid);
                       // Opgezegd (loopt af of al gestopt): de laatste opzegging
                       // met reden onder de naam. Opnieuw betalend = niet tonen.
                       const leaving = s.churning || s.classification === "cancelled";
@@ -791,7 +921,11 @@ export default function AdminDashboard({ onLogout }) {
                                 ? (s.plan_expires_at ? `renews ${fmtDate(s.plan_expires_at)}` : "active")
                                 : s.classification === "trialing"
                                   ? (s.trial_ends_at ? `trial ends ${fmtDate(s.trial_ends_at)}` : "trial")
-                                  : "—"}
+                                  : s.classification === "past_due"
+                                    ? (everPaid
+                                      ? (s.plan_expires_at ? `unpaid since ${fmtDate(s.plan_expires_at)}` : "unpaid")
+                                      : (s.trial_ends_at ? `trial ended ${fmtDate(s.trial_ends_at)}` : "trial ended"))
+                                    : "—"}
                           </td>
                         </tr>
                       );
@@ -884,7 +1018,7 @@ export default function AdminDashboard({ onLogout }) {
                           afspraak; nu "Last booking", en "Last seen" = wanneer
                           de eigenaar de app laatst open had (admin_salons_list). */}
                       {[
-                        ["Salon"], ["Plan"], ["Staff"], ["Appts"], ["Revenue"],
+                        ["Salon"], ["Plan"], ["Staff"], ["Appts"], ["Revenue", "Completed appointments, in the salon's own currency."],
                         ["Last seen", "Last time the owner had Vellu open (login or session refresh, about hourly while the app is open). Staff accounts not counted."],
                         ["Last booking", "Last time a new appointment was made, by a client online or by the salon."],
                         ["Signed up"], ["GCal"],
@@ -914,7 +1048,7 @@ export default function AdminDashboard({ onLogout }) {
                           {s.appt_count}
                           <div style={{ fontSize: 9, color: c.textMuted }}>{s.completed_count} done · {s.upcoming_count} upcoming</div>
                         </td>
-                        <td style={{ padding: "12px 14px", color: accent, fontFamily: "'Cormorant Garamond',serif", fontSize: 15 }}>{fmtEur(s.total_revenue)}</td>
+                        <td data-salon-revenue-cell style={{ padding: "12px 14px", color: accent, fontFamily: "'Cormorant Garamond',serif", fontSize: 15, whiteSpace: "nowrap" }}>{fmtCur(s.country_code, s.total_revenue)}</td>
                         <td data-last-seen style={{ padding: "12px 14px", color: c.textSub, fontSize: 11, whiteSpace: "nowrap" }} title={s.last_seen ? fmtDateTime(s.last_seen) : undefined}>
                           {relTime(s.last_seen)}
                           {/* Nooit teruggekomen na het aanmelden: het signaal
@@ -1064,7 +1198,7 @@ export default function AdminDashboard({ onLogout }) {
                           <td style={{ padding: "10px", color: c.textMuted, whiteSpace: "nowrap" }}>{fmtDate(o.created_at)}</td>
                           <td style={{ padding: "10px", color: c.textMuted, whiteSpace: "nowrap" }} title={o.last_seen ? fmtDateTime(o.last_seen) : undefined}>{relTime(o.last_seen)}</td>
                           <td style={{ padding: "10px", whiteSpace: "nowrap", fontSize: 11 }}>
-                            {o.subscription_status || "no trial"}
+                            {statusText(o.subscription_status, paidOwners.has(o.id))}
                             {o.subscription_status === "trialing" && o.trial_ends_at && <div style={{ fontSize: 10, color: c.textMuted }}>until {fmtDate(o.trial_ends_at)}</div>}
                           </td>
                           <td style={{ padding: "10px", color: c.textSub }}>{o.visible_services}{o.services !== o.visible_services ? ` (${o.services})` : ""}</td>
@@ -1227,34 +1361,50 @@ export default function AdminDashboard({ onLogout }) {
         {/* ── CRON HEALTH TAB ── */}
         {tab === "cron" && (
           <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "18px 20px" }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>
+            <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>
               Cron jobs — runs in last 7 days
             </div>
-            {cron.length === 0 && (
-              <div style={{ color: c.textMuted, fontSize: 12, padding: 20, textAlign: "center" }}>No cron runs logged yet.</div>
+            <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
+              Red: the last run failed, or the job stopped (no run within its interval: 3 hours for the hourly payment checks, 25 hours for the rest, the same limits as the watchdog email). Orange: an error in the last 7 days, but the latest run succeeded.
+            </div>
+            {cronRows.length === 0 && (
+              <div style={{ color: c.textMuted, fontSize: 12, padding: 20, textAlign: "center" }}>{loaded ? "No cron runs logged yet." : "Loading…"}</div>
             )}
-            {cron.map(j => {
-              // Drie standen i.p.v. twee: rood = de LAATSTE run faalde (nu
-              // stuk), oranje = laatste run geslaagd maar eerder in het
-              // 7-dagen-venster zat een fout (hersteld), groen = schoon.
+            {cronRows.map(j => {
+              // Drie standen: rood = nu stuk (laatste run faalde, of de job is
+              // stil: geen hartslag binnen zijn interval, of nog nooit), oranje
+              // = hersteld (fout in het 7-dagenvenster, laatste run ok), groen
+              // = schoon. Tot 12-11-2026 keek de stip alleen naar fouten: een
+              // job die gewoon stopte bleef groen.
+              const { level, stale, failed, ageH, maxH } = j.st;
               const lastOk = j.last_status === "success";
-              const dotColor = !lastOk ? c.danger : j.errors_last_7d > 0 ? c.warning : c.success;
+              const dotColor = level === "down" ? c.danger : level === "recovered" ? c.warning : c.success;
+              const age = ageH < 48 ? `${Math.round(ageH)} hours` : `${Math.round(ageH / 24)} days`;
               return (
-                <div key={j.job_name} style={{ padding: "14px 0", borderBottom: `1px solid ${c.border}` }}>
+                <div key={j.job_name} data-cron-row={j.job_name} data-cron-level={level} style={{ padding: "14px 0", borderBottom: `1px solid ${c.border}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block" }} />
                       <span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 500 }}>{j.job_name}</span>
                     </div>
-                    <span style={{ fontSize: 11, color: c.textMuted }}>last ran {relTime(j.last_ran_at)}</span>
+                    <span style={{ fontSize: 11, color: stale ? c.danger : c.textMuted }}>{j.missing ? "never ran" : `last ran ${relTime(j.last_ran_at)}`}</span>
                   </div>
-                  <div style={{ display: "flex", gap: 16, fontSize: 11, color: c.textSub, marginTop: 8, flexWrap: "wrap" }}>
-                    <span>{j.runs_last_7d} runs</span>
-                    <span style={{ color: j.errors_last_7d > 0 ? (lastOk ? c.warning : c.danger) : c.textMuted }}>{j.errors_last_7d} errors</span>
-                    <span>{j.total_items_processed_7d} items processed</span>
-                    <span style={{ color: lastOk ? c.success : c.danger }}>last: {j.last_status}</span>
-                  </div>
-                  {!lastOk && j.last_error && (
+                  {!j.missing && (
+                    <div style={{ display: "flex", gap: 16, fontSize: 11, color: c.textSub, marginTop: 8, flexWrap: "wrap" }}>
+                      <span>{j.runs_last_7d} runs</span>
+                      <span style={{ color: j.errors_last_7d > 0 ? (lastOk ? c.warning : c.danger) : c.textMuted }}>{j.errors_last_7d} errors</span>
+                      <span>{j.total_items_processed_7d} items processed</span>
+                      <span style={{ color: lastOk ? c.success : j.last_status === "degraded" ? c.warning : c.danger }}>last: {j.last_status}</span>
+                    </div>
+                  )}
+                  {(j.missing || stale) && (
+                    <div data-cron-stale style={{ marginTop: 8, fontSize: 11, color: c.danger, background: `${c.danger}14`, border: `1px solid ${c.danger}33`, borderRadius: 8, padding: "8px 10px" }}>
+                      {j.missing
+                        ? `No run recorded. It should run at least every ${maxH} hours.`
+                        : `Stopped: no run for ${age}. It should run at least every ${maxH} hours.`}
+                    </div>
+                  )}
+                  {failed && j.last_error && (
                     <div style={{ marginTop: 8, fontSize: 10, color: c.danger, background: `${c.danger}14`, border: `1px solid ${c.danger}33`, borderRadius: 8, padding: "8px 10px", fontFamily: "monospace" }}>
                       {j.last_error}
                     </div>
