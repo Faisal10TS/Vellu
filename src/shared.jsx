@@ -1161,6 +1161,14 @@ function fmtAmt(sym, n) {
   const neg = v < 0 && Number(Math.abs(v).toFixed(2)) !== 0;
   return (sym || "") + (neg ? "-" : "") + int.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + dec;
 }
+// Prijzen op de boekingspagina (boekingspagina-ronde 12-11-2026, punt 8): een
+// rond bedrag zonder ",00" ("€38", "$1.250"), met centen precies als fmtAmt
+// ("€37,50"). Alleen voor wat de klant ziet; rapporten, facturen en de apps
+// van salon en team houden fmtAmt.
+function fmtPrice(sym, n) {
+  const s = fmtAmt(sym, n);
+  return s.endsWith(",00") ? s.slice(0, -3) : s;
+}
 
 // "Vanaf"-prijs van een dienst met varianten: de laagste prijs, maar zonder
 // varianten van €0. Beauty By Eydy (11-11-2026) had bij drie diensten een
@@ -2262,6 +2270,56 @@ export const readableAccent = (raw, themeName) => {
   return hex;
 };
 
+// Contrast (WCAG 2) tussen twee hexkleuren: 1 (gelijk) t/m 21 (zwart/wit).
+export const contrastRatio = (a, b) => {
+  const la = _hexLum(a), lb = _hexLum(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+};
+const _hexRgb = (raw) => {
+  const h = _sanitizeAccent(raw).slice(1);
+  const full = h.length < 6 ? h.split("").map(ch => ch + ch).join("").slice(0, 6) : h.slice(0, 6);
+  return [0, 2, 4].map(i => parseInt(full.slice(i, i + 2), 16) / 255);
+};
+const _rgbHsl = ([r, g, b]) => {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h / 6, s, l];
+};
+const _hslHex = (h, s, l) => {
+  const f = (n) => {
+    const k = (n + h * 12) % 12, a = s * Math.min(l, 1 - l);
+    const v = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0");
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+};
+// Accent als TEKSTkleur (boekingspagina-ronde 12-11-2026, punt 6). Een licht
+// accent (Eydy's roze #f4a4c0, het standaardgoud #c9a96e) is op de lichte
+// achtergrond nauwelijks leesbaar als prijs of "vandaag". Haalt het accent de
+// leesbaarheidsgrens niet (WCAG AA: 4,5:1), dan schuiven we alleen de
+// lichtheid op, tot net genoeg: zelfde tint, zelfde verzadiging, dus het
+// blijft herkenbaar roze of goud, alleen dieper. Op donker thema andersom.
+// Knoppen, chips en tinten houden de echte merkkleur; dit is alleen voor tekst
+// en iconen. Doel 5,2 tegen de paginakleur: kaarten en accenttinten (avatars
+// met initialen, gekozen chips) zijn net iets donkerder, en daar moet het
+// nog steeds 4,5 halen (gemeten 12-11).
+export const accentTextOn = (accentHex, bgHex, min = 5.2) => {
+  const acc = _sanitizeAccent(accentHex);
+  if (contrastRatio(acc, bgHex) >= min) return acc;
+  const darken = _hexLum(bgHex) > 0.4;
+  const [h, s, l] = _rgbHsl(_hexRgb(acc));
+  for (let i = 1; i <= 100; i++) {
+    const nl = darken ? l - i * 0.01 : l + i * 0.01;
+    if (nl < 0 || nl > 1) break;
+    const cand = _hslHex(h, s, nl);
+    if (contrastRatio(cand, bgHex) >= min) return cand;
+  }
+  return darken ? "#262626" : "#e9e9e9";
+};
+
 // Inktkleur voor tekst BOVENOP een accentvlak (knoppen, actieve chips).
 // Het thematoken btnOnDark is donkere inkt — prima op goud, onleesbaar op een
 // donker accent (espresso, of het genormaliseerde inkt-accent hierboven).
@@ -2655,8 +2713,11 @@ export const blockAppliesOn = (b, dateStr) => {
 // voor tekst/tinten/randen; `surfaceRaw` is de ONbewerkte merkkleur voor
 // gevulde knoppen en chips — een "witte" salon houdt zo witte pillen, met een
 // automatische outline (accentEdge) zodat ze niet in de achtergrond wegvallen.
-const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName = null) => {
+const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName = null, textRaw = rawAccent) => {
   const accent = _sanitizeAccent(rawAccent);
+  // Accent als tekst/icoon (accentTextOn); standaard gelijk aan accent, de
+  // boekingspagina geeft een leesbare variant mee (Layout textAccent).
+  const accentInk = _sanitizeAccent(textRaw);
   const onAccent = onAccentInk(accent, c.btnOnDark);
   const surface = _sanitizeAccent(surfaceRaw);
   const surfaceInk = onAccentInk(surface, c.btnOnDark);
@@ -2782,7 +2843,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     border-radius: 8px; padding: 10px 4px; font-size: 11px; font-weight: 500;
     cursor: pointer; transition: all 0.18s; text-align: center; color: ${c.textSub};
   }
-  .time-chip:hover { border-color: ${accent}55; color: ${accent}; background: ${accent}09; }
+  .time-chip:hover { border-color: ${accent}55; color: ${accentInk}; background: ${accent}09; }
   .time-chip.sel { background: ${surface}; border-color: ${surfaceBorder}; color: ${surfaceInk}; font-weight: 600; }
 
   .day-chip {
@@ -2808,7 +2869,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     background: ${c.bgCard}; border: 1px solid ${c.border}; border-radius: 14px;
     box-shadow: 0 22px 40px -26px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.04);
   }
-  .vl-ico-tile { width: 34px; height: 34px; border-radius: 9px; background: ${accent}18; color: ${accent}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .vl-ico-tile { width: 34px; height: 34px; border-radius: 9px; background: ${accent}18; color: ${accentInk}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .vl-tile {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
     padding: 14px 10px; border-radius: 12px; border: 1px solid ${c.border}; background: ${c.bgCard};
@@ -2823,7 +2884,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   [data-sheet-card] .appt-card { border: none; box-shadow: none; padding: 0; margin: 0; background: transparent; }
   .vl-tile:hover { transform: translateY(-2px); border-color: ${c.borderHover}; }
   .vl-tile.primary { background: ${surface}; color: ${surfaceInk}; border-color: ${surfaceBorder}; }
-  .vl-tile .vl-tile-ico { width: 34px; height: 34px; border-radius: 9px; background: ${accent}18; color: ${accent}; display: flex; align-items: center; justify-content: center; }
+  .vl-tile .vl-tile-ico { width: 34px; height: 34px; border-radius: 9px; background: ${accent}18; color: ${accentInk}; display: flex; align-items: center; justify-content: center; }
   .vl-tile.primary .vl-tile-ico { background: rgba(255,255,255,0.18); color: ${surfaceInk}; }
 
   .nav-item {
@@ -2879,7 +2940,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     padding: 10px 16px; font-family: var(--body-font, 'Jost', sans-serif); font-size: 11px; font-weight: 600;
     letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
   }
-  .flow-next-slot-chosen { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: ${accent}; }
+  .flow-next-slot-chosen { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: ${accentInk}; }
   .flow-done { text-align: center; padding-top: 40px; }
   .flow-done-icon { width: 64px; height: 64px; border-radius: 50%; background: ${accent}16; border: 1px solid ${accent}44; display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; }
   .flow-done-card { text-align: left; padding: 6px 20px; margin: 22px auto 20px; max-width: 460px; }
@@ -3155,7 +3216,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
     background: ${c.inputBg}; border: 1px solid ${c.inputBorder};
     font-size: 11px; color: ${c.textSub}; white-space: nowrap;
   }
-  .profile-service-details-link { color: ${accent}; cursor: pointer; font-size: 11px; }
+  .profile-service-details-link { color: ${accentInk}; cursor: pointer; font-size: 11px; }
   .profile-service-details-link:hover { text-decoration: underline; }
   .profile-service-price {
     font-family: var(--display-font, 'Cormorant Garamond', serif); font-size: 24px; font-weight: 400;
@@ -3287,7 +3348,7 @@ const makeCSS = (rawAccent, c = THEMES.dark, surfaceRaw = rawAccent, themeName =
   .profile-review-when { white-space: nowrap; }
   .profile-review-avatar {
     width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
-    background: ${accent}1a; color: ${accent}; display: flex; align-items: center; justify-content: center;
+    background: ${accent}1a; color: ${accentInk}; display: flex; align-items: center; justify-content: center;
     font-weight: 600; font-size: 12px;
   }
   .profile-write-review-btn {
@@ -3488,11 +3549,11 @@ function useDashboardScrollbars() {
   }, []);
 }
 
-function Layout({ children, accent = ACCENT, rawAccent = null, maxWidth = "100%" }) {
+function Layout({ children, accent = ACCENT, rawAccent = null, textAccent = null, maxWidth = "100%" }) {
   // rawAccent = de onbewerkte merkkleur voor gevulde knoppen/chips (zie
   // makeCSS); zonder die prop gedragen vlakken zich als voorheen (= accent).
   const { colors: c, theme } = useTheme();
-  const css = useMemo(() => makeCSS(accent, c, rawAccent || accent, theme), [accent, c, rawAccent, theme]);
+  const css = useMemo(() => makeCSS(accent, c, rawAccent || accent, theme, textAccent || accent), [accent, c, rawAccent, theme, textAccent]);
   return (
     <div style={{ width: "100%", maxWidth, margin: "0 auto", background: c.bg, minHeight: "100dvh" }}>
       <style>{css}</style>
@@ -3970,7 +4031,7 @@ export {
   DEFAULT_HOURS,
   T,
   LANGUAGES, COUNTRIES,
-  CURRENCIES, currencyForCountry, curSym, fmtMoney, fmtAmt, taxForCountry, ownerLangFor,
+  CURRENCIES, currencyForCountry, curSym, fmtMoney, fmtAmt, fmtPrice, taxForCountry, ownerLangFor,
   TAX_RULES, TAX_REGIONS_BY_COUNTRY, taxRuleFor, resolveTax,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded,
   makeCSS,

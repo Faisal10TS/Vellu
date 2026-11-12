@@ -12,7 +12,7 @@ import {
   getToday as deviceNow, fmt, parseDate, getDays, salonNow, tzFor, localToUtc, fetchAllRows,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
-  getPageFont, ensurePageFontLoaded, curSym, fmtAmt, variantFromPrice, Linkify, readableAccent, onAccentInk, blockAppliesOn, EmailTypoHint
+  getPageFont, ensurePageFontLoaded, curSym, fmtPrice, variantFromPrice, Linkify, readableAccent, onAccentInk, accentTextOn, blockAppliesOn, EmailTypoHint
 } from "./shared.jsx";
 
 // Zoekterm voor de kaart, "Open in Maps" en de route na het boeken
@@ -251,6 +251,7 @@ function ChipScroller({ children, className, size = 28, step = 220, gap = 7, pad
 // hij alleen maar in de weg zitten.
 function MonthJumpBar({ months, activeKey, onPick, c, accent }) {
   if (!months || months.length < 2) return null;
+  const ink = accentTextOn(accent, c.bg);
   return (
     <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 10, scrollbarWidth: "none", msOverflowStyle: "none" }}>
       {months.map(m => {
@@ -263,7 +264,7 @@ function MonthJumpBar({ months, activeKey, onPick, c, accent }) {
               fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
               background: on ? `${accent}18` : "transparent",
               border: `1px solid ${on ? accent : c.border}`,
-              color: on ? accent : c.textLabel,
+              color: on ? ink : c.textLabel,
               transition: "all 0.15s", whiteSpace: "nowrap",
             }}>
             {m.label}
@@ -288,6 +289,7 @@ function MonthJumpBar({ months, activeKey, onPick, c, accent }) {
 // functie is bewust altijd hetzelfde (wel/niet klant is niet af te leiden).
 function ReviewForm({ token, lang, t, accent, salonSlug }) {
   const { colors: c } = useTheme();
+  const ink = accentTextOn(accent, c.bg);
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState("");
@@ -383,7 +385,7 @@ function ReviewForm({ token, lang, t, accent, salonSlug }) {
               : "This review link is out of date and no longer works. You'll get a new invitation by email after your next visit."
         ) : reqState === "sent" ? (
           <div style={{ color: c.text }}>
-            <div style={{ marginBottom: 8, display: "flex", justifyContent: "center" }}><NavIcon name="mail" size={22} color={accent} /></div>
+            <div style={{ marginBottom: 8, display: "flex", justifyContent: "center" }}><NavIcon name="mail" size={22} color={ink} /></div>
             {t.reviewRequestSent}
           </div>
         ) : (
@@ -395,7 +397,7 @@ function ReviewForm({ token, lang, t, accent, salonSlug }) {
               style={{ width: "100%", marginBottom: 8, fontSize: 13, textAlign: "center" }} />
             {reqState === "error" && <div style={{ fontSize: 11, color: "#f87171", marginBottom: 8 }}>{t.reviewRequestFailed}</div>}
             <button className="btn-ghost" onClick={requestLink} disabled={reqState === "sending" || !reqEmail.trim()}
-              style={{ width: "100%", color: reqEmail.trim() ? accent : undefined, borderColor: reqEmail.trim() ? `${accent}44` : undefined, opacity: reqState === "sending" ? 0.5 : 1 }}>
+              style={{ width: "100%", color: reqEmail.trim() ? ink : undefined, borderColor: reqEmail.trim() ? `${accent}44` : undefined, opacity: reqState === "sending" ? 0.5 : 1 }}>
               {reqState === "sending" ? "..." : t.reviewRequestSend}
             </button>
           </>
@@ -452,7 +454,7 @@ function ReviewForm({ token, lang, t, accent, salonSlug }) {
         {t.reviewAnonymous}
       </label>
       {reviewError && <div style={{ fontSize: 11, color: "#f87171", marginBottom: 8, textAlign: "center" }}>{reviewError}</div>}
-      <button className="btn-ghost" style={{ width: "100%", color: rating > 0 ? accent : undefined, borderColor: rating > 0 ? `${accent}44` : undefined, opacity: submitting ? 0.5 : 1 }}
+      <button className="btn-ghost" style={{ width: "100%", color: rating > 0 ? ink : undefined, borderColor: rating > 0 ? `${accent}44` : undefined, opacity: submitting ? 0.5 : 1 }}
         onClick={submit} disabled={rating === 0 || submitting}>{submitting ? "..." : t.submitReview}</button>
     </div>
   );
@@ -470,6 +472,7 @@ function ReviewForm({ token, lang, t, accent, salonSlug }) {
 // kenmerk en QR-url terug), zodat de klant meteen kan betalen zonder eerst
 // haar mail te openen. De link komt van de salon: alleen http(s) laten we door.
 function PrepayBlock({ info, lang, accent, c }) {
+  const ink = accentTextOn(accent, c.bg);
   // "Kopieer IBAN": niet elke bank-app leest de SEPA-QR (25-09-2026), dus het
   // IBAN moet met één tik over te nemen zijn. Clipboard kan ontbreken (http,
   // oude webview) — dan blijft het gewoon selecteerbare tekst.
@@ -479,13 +482,13 @@ function PrepayBlock({ info, lang, accent, c }) {
   const copyIban = async () => {
     try { await navigator.clipboard.writeText(String(info.iban || "").replace(/\s+/g, "")); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* geen clipboard: tekst blijft selecteerbaar */ }
   };
-  const amount = fmtAmt(info.currency || "€", info.amount);
+  const amount = fmtPrice(info.currency || "€", info.amount);
   const safe = (u, httpsOnly) => { try { const x = new URL(String(u || "")); return (x.protocol === "https:" || (!httpsOnly && x.protocol === "http:")) ? x.toString() : ""; } catch { return ""; } };
   const link = safe(info.link, false);
   const qr = safe(info.qr_url, true);
   return (
     <div data-prepay-block="1" style={{ textAlign: "left", background: `${accent}0d`, border: `1px solid ${accent}33`, borderRadius: 16, padding: 16, margin: "0 auto 28px", maxWidth: 400 }}>
-      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent, marginBottom: 6 }}>{L("Betalen", "Payment", "Pago")} · {amount}</div>
+      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: ink, marginBottom: 6 }}>{L("Betalen", "Payment", "Pago")} · {amount}</div>
       <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
         {L("Maak ", "Transfer ", "Transfiere ")}<strong style={{ color: c.text }}>{amount}</strong>{L(" over vóór ", " before ", " antes del ")}<strong style={{ color: c.text }}>{info.due_text}</strong>{L(". Zodra de salon je betaling ziet, is je afspraak definitief en krijg je een bevestiging per e-mail. Niet op tijd betaald? Dan vervalt de reservering vanzelf en komt de tijd weer vrij.", ". As soon as the salon sees your payment, your appointment is final and you receive a confirmation by email. Not paid in time? The reservation expires by itself and the slot is released.", ". En cuanto el salón vea tu pago, tu cita será definitiva y recibirás una confirmación por correo. ¿No pagas a tiempo? La reserva caduca sola y la hora vuelve a quedar libre.")}
       </div>
@@ -502,7 +505,7 @@ function PrepayBlock({ info, lang, accent, c }) {
           {!qr && <div style={{ color: c.textMuted, marginBottom: 4 }}>{link ? L("Of maak het bedrag over naar:", "Or transfer the amount to:", "O transfiere el importe a:") : L("Maak het bedrag over naar:", "Transfer the amount to:", "Transfiere el importe a:")}</div>}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontWeight: 600, color: c.text, letterSpacing: "0.04em" }}>{info.iban}</span>
-            <button type="button" data-copy-iban onClick={copyIban} style={{ border: `1px solid ${accent}55`, background: copied ? `${accent}1a` : "transparent", color: accent, borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{copied ? L("Gekopieerd", "Copied", "Copiado") : L("Kopieer IBAN", "Copy IBAN", "Copiar IBAN")}</button>
+            <button type="button" data-copy-iban onClick={copyIban} style={{ border: `1px solid ${accent}55`, background: copied ? `${accent}1a` : "transparent", color: ink, borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{copied ? L("Gekopieerd", "Copied", "Copiado") : L("Kopieer IBAN", "Copy IBAN", "Copiar IBAN")}</button>
           </div>
           {info.iban_holder && <div>{L("t.n.v.", "in the name of", "a nombre de")} {info.iban_holder}</div>}
           {info.reference && <div>{L("o.v.v.", "reference:", "referencia:")} {info.reference}</div>}
@@ -757,6 +760,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   // donker accent moet de tekst óp knoppen/chips licht zijn (onAccentInk).
   const accent = readableAccent(initialSalon.accent, theme);
   const c = { ...themeC, btnOnDark: onAccentInk(accent, themeC.btnOnDark) };
+  // Accent als tekst- en icoonkleur: leesbaar op de achtergrond (punt 6,
+  // 12-11-2026). Vlakken, randen en tinten blijven `accent`.
+  const accentText = accentTextOn(accent, themeC.bg);
   // Beeldverhouding van de cover (naturalWidth/naturalHeight), gezet bij
   // onLoad. Een cover die als "vullend" te veel zou verliezen — een breed
   // logo-artwork zoals dat van My Whims — schakelt naar volledig-zichtbaar
@@ -1913,9 +1919,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
         </div>
         {clientFound && (
           <div style={{ background: `${accent}12`, border: `1px solid ${accent}30`, borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-            <NavIcon name="wave" size={18} color={accent} />
+            <NavIcon name="wave" size={18} color={accentText} />
             <div>
-              <div style={{ fontSize: 12, fontWeight: 500, color: accent }}>{t.welcomeBackClient}!</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: accentText }}>{t.welcomeBackClient}!</div>
               <div style={{ fontSize: 10, color: c.textSub }}>{t.foundYourDetails}</div>
             </div>
           </div>
@@ -2847,8 +2853,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     const label = capFirst(parseDate(firstOpenDate).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" }));
     return (
       <button type="button" onClick={() => { setDate(firstOpenDate); setTime(null); }}
-        style={{ background: `${accent}12`, border: `1px solid ${accent}44`, color: accent, borderRadius: 12, padding: "10px 16px", fontSize: 12.5, fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8, lineHeight: 1.4 }}>
-        <NavIcon name="calendar" size={14} color={accent} />
+        style={{ background: `${accent}12`, border: `1px solid ${accent}44`, color: accentText, borderRadius: 12, padding: "10px 16px", fontSize: 12.5, fontWeight: 500, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8, lineHeight: 1.4 }}>
+        <NavIcon name="calendar" size={14} color={accentText} />
         <span>{lang === "nl" ? "Eerste beschikbare dag: " : lang === "es" ? "Primera disponibilidad: " : "First available: "}<b>{label}</b></span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6" /></svg>
       </button>
@@ -3289,7 +3295,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
       if (Number.isFinite(top) && top > 0) high = Math.max(high, top);
     }
     const priceRange = high > 0 && low < Infinity
-      ? (low >= high ? fmtAmt(cur, high) : `${fmtAmt(cur, low)} – ${fmtAmt(cur, high)}`)
+      ? (low >= high ? fmtPrice(cur, high) : `${fmtPrice(cur, low)} – ${fmtPrice(cur, high)}`)
       : "";
     return jsonLdText(salonJsonLd({
       salon: {
@@ -3439,13 +3445,13 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     const label = capFirst(parseDate(firstOpenSlot.date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" }));
     return (
       <div className={`flow-next-slot${chosen ? " chosen" : ""}`} data-next-slot={chosen ? "chosen" : "open"}>
-        <div className="flow-next-slot-icon"><NavIcon name="calendar" size={18} color={accent} /></div>
+        <div className="flow-next-slot-icon"><NavIcon name="calendar" size={18} color={accentText} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="flow-next-slot-label">{nextAvailableLabel}</div>
           <div className="flow-next-slot-when"><b>{label}</b> {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {firstOpenSlot.time}</div>
         </div>
         {chosen ? (
-          <span className="flow-next-slot-chosen"><NavIcon name="check" size={12} color={accent} /> {lang === "nl" ? "Gekozen" : lang === "es" ? "Elegido" : "Chosen"}</span>
+          <span className="flow-next-slot-chosen"><NavIcon name="check" size={12} color={accentText} /> {lang === "nl" ? "Gekozen" : lang === "es" ? "Elegido" : "Chosen"}</span>
         ) : (
           <button type="button" className="flow-next-slot-btn" data-next-slot-pick onClick={() => { setPendingPick({ date: firstOpenSlot.date, time: firstOpenSlot.time }); setDate(firstOpenSlot.date); }}>{lang === "nl" ? "Kies" : lang === "es" ? "Elegir" : "Pick"}</button>
         )}
@@ -3468,7 +3474,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   };
 
   if (mode === "profile") return (
-    <Layout accent={accent} rawAccent={initialSalon.accent}>
+    <Layout accent={accent} rawAccent={initialSalon.accent} textAccent={accentText}>
 
       <div className="profile-root" style={{ background: c.bg, fontFamily: "var(--body-font, 'Jost', sans-serif)", color: c.text }}>
 
@@ -3668,7 +3674,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   <div key={s.id} className="profile-service-row" data-service-card onClick={() => enterBooking(s)}>
                     <div className="profile-service-thumb" style={{ display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative", ...(s.photos?.length > 0 ? {} : { background: `${accent}14`, borderColor: `${accent}33` }) }}>
                       {s.photos?.length > 0 ? <img src={thumbOf(s.photos[0].url || s.photos[0], 240)} alt={svcName(s)} loading="lazy" onError={thumbFallback(s.photos[0].url || s.photos[0], e => { e.target.style.display = "none"; })} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `${s.photos[0].focal_x ?? 50}% ${s.photos[0].focal_y ?? 50}%`, position: "absolute", inset: 0, zIndex: 1 }} /> : null}
-                      <NavIcon name={s.photos?.length > 0 ? "scissors" : svcIcon(s)} size={20} color={s.photos?.length > 0 ? c.textMuted : accent} />
+                      <NavIcon name={s.photos?.length > 0 ? "scissors" : svcIcon(s)} size={20} color={s.photos?.length > 0 ? c.textMuted : accentText} />
                     </div>
                     <div className="profile-service-info">
                       <div className="profile-service-name">{svcName(s)}</div>
@@ -3679,7 +3685,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                         // beschrijving? Dan tonen we de variantnamen als regel.
                         const desc = svcDesc(s);
                         const descStijl = { fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" };
-                        if (desc) return <div className="profile-service-desc" style={descStijl}><Linkify text={desc} color={accent} /></div>;
+                        if (desc) return <div className="profile-service-desc" style={descStijl}><Linkify text={desc} color={accentText} /></div>;
                         if (s.variants?.length > 1) {
                           const vNaam = (v) => lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl);
                           const lijst = s.variants.map(vNaam).filter(Boolean).join(" · ");
@@ -3702,7 +3708,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     {/* Prijs boven de Boek-knop, rechts uitgelijnd (mockup 15-09). */}
                     <div className="profile-service-side">
                       <div className="profile-service-price">
-                        {s.variants?.length > 0 ? <><span className="profile-service-from">{t.from}</span>{fmtAmt(cur, variantFromPrice(s.variants))}</> : `${fmtAmt(cur, parseFloat(s.price))}`}
+                        {s.variants?.length > 0 ? <><span className="profile-service-from">{t.from}</span>{fmtPrice(cur, variantFromPrice(s.variants))}</> : `${fmtPrice(cur, parseFloat(s.price))}`}
                       </div>
                       <button type="button" className="profile-service-book-btn" aria-label={`${t.book}: ${svcName(s)}`} onClick={e => { e.stopPropagation(); enterBooking(s); }}>
                         {t.book}
@@ -3754,7 +3760,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                 Settings → Team. Clients otherwise see all team
                                 members as equals. */}
                             {initialSalon.show_owner_on_booking && (member.is_owner === true || (member.user_id && member.user_id === initialSalon.owner_id)) && (
-                              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 6, background: `${accent}18`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 6, background: `${accent}18`, color: accentText, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
                                 {lang === "nl" ? "Eigenaar" : lang === "es" ? "Propietario" : "Owner"}
                               </span>
                             )}
@@ -3801,17 +3807,17 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     <div key={p.id} className="profile-product-card" data-product-card>
                       {p.photo_url
                         ? <img src={thumbOf(p.photo_url, 240)} onError={thumbFallback(p.photo_url)} alt={prodNameOf(p)} loading="lazy" className="profile-product-thumb" />
-                        : <div className="profile-product-thumb" style={{ background: `${accent}14`, display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="bag" size={16} color={accent} /></div>}
+                        : <div className="profile-product-thumb" style={{ background: `${accent}14`, display: "flex", alignItems: "center", justifyContent: "center" }}><NavIcon name="bag" size={16} color={accentText} /></div>}
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.3, color: c.text }}>{prodNameOf(p)}</div>
                         {pDesc && (
                           <div style={{ fontSize: 11.5, color: c.textSub, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={pDesc}>
-                            <Linkify text={pDesc} color={accent} />
+                            <Linkify text={pDesc} color={accentText} />
                           </div>
                         )}
                       </div>
                       {/* Prijs los van de (afgekapte) omschrijving, altijd zichtbaar. */}
-                      <div style={{ fontFamily: displayFont, fontSize: 16, color: accent, flexShrink: 0, whiteSpace: "nowrap" }}>{fmtAmt(cur, parseFloat(p.price))}</div>
+                      <div style={{ fontFamily: displayFont, fontSize: 16, color: accentText, flexShrink: 0, whiteSpace: "nowrap" }}>{fmtPrice(cur, parseFloat(p.price))}</div>
                     </div>
                     );
                   })}
@@ -3927,7 +3933,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       return (
                         <div key={dayIdx} className={isToday ? "today" : ""}>
                           <span>{FULL_DAYS[dayIdx]}{isToday ? ` · ${lang === "nl" ? "vandaag" : lang === "es" ? "hoy" : "today"}` : ""}</span>
-                          <span style={{ color: dayHrs.closed ? c.textMuted : (isToday ? accent : c.textSub) }}>{dayHrs.closed ? t.closed : fmtDayHours(dayHrs)}</span>
+                          <span style={{ color: dayHrs.closed ? c.textMuted : (isToday ? accentText : c.textSub) }}>{dayHrs.closed ? t.closed : fmtDayHours(dayHrs)}</span>
                         </div>
                       );
                     })}
@@ -4065,7 +4071,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 return (
                   <>
                     <a href={vlHref} target="_blank" rel="noopener" data-powered-by style={{ color: "inherit", textDecoration: "none" }}>
-                      {t.poweredBy} <span style={{ color: accent, fontWeight: 600 }}>Vellu</span>
+                      {t.poweredBy} <span style={{ color: accentText, fontWeight: 600 }}>Vellu</span>
                     </a>
                     {" · "}{t.noCommission}
                     <div style={{ marginTop: 8 }}>
@@ -4104,9 +4110,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               {/* Eerstvolgende dag (zelfde berekening als hero en onderbalk) */}
               {nextOpen && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginTop: 12, padding: "10px 14px", background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 8 }}>
-                  <NavIcon name="calendar" size={13} color={accent} />
+                  <NavIcon name="calendar" size={13} color={accentText} />
                   <div style={{ fontSize: 12, color: c.text }}>
-                    <span style={{ fontWeight: 600, color: accent }}>{nextOpen.dayLabel}</span>
+                    <span style={{ fontWeight: 600, color: accentText }}>{nextOpen.dayLabel}</span>
                     <span style={{ color: c.textSub }}> {lang === "nl" ? "beschikbaar" : lang === "es" ? "disponible" : "available"} · {fmtDayHours(nextOpen.hrs)}</span>
                   </div>
                 </div>
@@ -4126,7 +4132,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   return (
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0 2px", fontSize: 12 }}>
                       <span style={{ color: c.text, fontWeight: 600 }}>{FULL_DAYS[todayDayIndex]}</span>
-                      <span style={{ color: todayHrs.closed ? c.textMuted : accent, fontWeight: 600 }}>{todayHrs.closed ? t.closed : fmtDayHours(todayHrs)}</span>
+                      <span style={{ color: todayHrs.closed ? c.textMuted : accentText, fontWeight: 600 }}>{todayHrs.closed ? t.closed : fmtDayHours(todayHrs)}</span>
                     </div>
                   );
                 })()}
@@ -4329,7 +4335,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     <div className="flow-card" data-flow-summary style={{ padding: 20, marginTop: isMobile ? 0 : 20 }}>
       <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 12 }}>
         {t.yourBooking}
-        {selectedServices.length > 0 && <span style={{ color: accent, marginLeft: 6 }}>({selectedServices.length})</span>}
+        {selectedServices.length > 0 && <span style={{ color: accentText, marginLeft: 6 }}>({selectedServices.length})</span>}
       </div>
       {selectedLocation && (
         <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
@@ -4349,12 +4355,12 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 <span>{itemBaseDuration(item)} {t.min}{item.staff ? ` · ${item.staff.name}` : ""}</span>
                 {/* Alleen de behandeling zelf: de extra's staan hieronder elk
                     apart, anders telde de lezer ze twee keer. */}
-                <span style={{ color: accent }}>{(item.service.variants || []).length > 0 && !item.variant ? (lang === "nl" ? "vanaf " : lang === "es" ? "desde " : "from ") : ""}{fmtAmt(cur, itemBasePrice(item))}</span>
+                <span style={{ color: accentText }}>{(item.service.variants || []).length > 0 && !item.variant ? (lang === "nl" ? "vanaf " : lang === "es" ? "desde " : "from ") : ""}{fmtPrice(cur, itemBasePrice(item))}</span>
               </div>
               {item.extras.length > 0 && item.extras.map(e => (
                 <div key={e.id} style={{ fontSize: 10, color: c.textLabel, display: "flex", justifyContent: "space-between", marginTop: 3 }}>
                   <span>+ {lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}{e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}</span>
-                  <span>+{fmtAmt(cur, (parseFloat(e.price) * (e.per_unit ? (e.qty || 1) : 1)))}</span>
+                  <span>+{fmtPrice(cur, (parseFloat(e.price) * (e.per_unit ? (e.qty || 1) : 1)))}</span>
                 </div>
               ))}
             </div>
@@ -4366,7 +4372,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           <div style={{ fontSize: 12, color: c.textSub }}>
             {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
           </div>
-          <div style={{ fontSize: 18, fontWeight: 600, color: accent, marginTop: 4 }}>{time}</div>
+          <div style={{ fontSize: 18, fontWeight: 600, color: accentText, marginTop: 4 }}>{time}</div>
           {selectedServices.length > 0 && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 4 }}>{t.totalDuration}: {getDuration()} {t.min}</div>}
         </div>
       )}
@@ -4375,9 +4381,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           {appliedDiscount && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 11, color: "#4ade80" }}>
-                <NavIcon name="tag" size={11} color={accent} /> {appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`})
+                <NavIcon name="tag" size={11} color={accentText} /> {appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtPrice(cur, appliedDiscount.amount)}`})
               </span>
-              {discountOn() && <span style={{ fontSize: 12, color: c.textLabel, textDecoration: "line-through" }}>{fmtAmt(cur, getOriginalPrice())}</span>}
+              {discountOn() && <span style={{ fontSize: 12, color: c.textLabel, textDecoration: "line-through" }}>{fmtPrice(cur, getOriginalPrice())}</span>}
             </div>
           )}
           {/* Beperkte code (stylist, behandelingen of periode): zeggen waar hij
@@ -4389,7 +4395,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 12, color: c.textSub }}>{t.total}</span>
-            <span style={{ fontFamily: displayFont, fontSize: 26, color: accent }}>{fromPrefix}{fmtAmt(cur, getPrice())}</span>
+            <span style={{ fontFamily: displayFont, fontSize: 26, color: accentText }}>{fromPrefix}{fmtPrice(cur, getPrice())}</span>
           </div>
         </div>
       )}
@@ -4426,7 +4432,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
       return label;
     }).join(" + ");
     const calTitle = `${calLabel} @ ${initialSalon.name}`;
-    const calDetails = `${t.treatment}: ${calLabel}\n${t.total}: ${fmtAmt(cur, getPrice())}\n\nvellu.cc/${initialSalon.id}`;
+    const calDetails = `${t.treatment}: ${calLabel}\n${t.total}: ${fmtPrice(cur, getPrice())}\n\nvellu.cc/${initialSalon.id}`;
     const calLocation = [initialSalon.name, addr, city].filter(Boolean).join(", ");
     const openGoogleCal = () => window.open(getGoogleCalUrl({ title: calTitle, date, time, duration: getDuration(), description: calDetails, location: calLocation, tz: calTz }), "_blank");
     // RFC 5545: tekst escapen (\ ; , en regeleinden) en regels langer dan 75
@@ -4491,7 +4497,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     const products = chosenProducts();
     return (
       <div className="fade-up flow-done" data-done-screen>
-        <div className="flow-done-icon"><NavIcon name="check" size={26} color={accent} /></div>
+        <div className="flow-done-icon"><NavIcon name="check" size={26} color={accentText} /></div>
         <div style={{ fontFamily: displayFont, fontSize: isMobile ? 26 : 28, fontWeight: 300, marginBottom: 8 }}>{prepayInfo ? (lang === "nl" ? "Bijna klaar" : lang === "es" ? "Casi listo" : "Almost done") : t.confirmed}</div>
         <div style={{ fontSize: 13, color: c.textSub, lineHeight: 1.5, maxWidth: 420, margin: "0 auto" }}>
           {prepayInfo
@@ -4502,7 +4508,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
 
         <div className="flow-card flow-done-card">
           <div className="flow-done-row">
-            <div className="flow-done-row-icon"><NavIcon name="calendar" size={14} color={accent} /></div>
+            <div className="flow-done-row-icon"><NavIcon name="calendar" size={14} color={accentText} /></div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="flow-done-row-label">{lang === "nl" ? "Wanneer" : lang === "es" ? "Cuándo" : "When"}</div>
               <div className="flow-done-row-value">{capFirst(dateLabel)}</div>
@@ -4510,7 +4516,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             </div>
           </div>
           <div className="flow-done-row">
-            <div className="flow-done-row-icon"><NavIcon name="scissors" size={14} color={accent} /></div>
+            <div className="flow-done-row-icon"><NavIcon name="scissors" size={14} color={accentText} /></div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="flow-done-row-label">{t.treatment}</div>
               {selectedServices.map(item => (
@@ -4525,7 +4531,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           </div>
           {(addr || city) && (
             <div className="flow-done-row">
-              <div className="flow-done-row-icon"><NavIcon name="mappin" size={14} color={accent} /></div>
+              <div className="flow-done-row-icon"><NavIcon name="mappin" size={14} color={accentText} /></div>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div className="flow-done-row-label">{(where && where.name) || initialSalon.name}</div>
                 <div className="flow-done-row-value">{addr}{addr && city ? ", " : ""}{city}</div>
@@ -4534,12 +4540,12 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             </div>
           )}
           <div className="flow-done-row" style={{ alignItems: "center" }}>
-            <div className="flow-done-row-icon"><NavIcon name="tag" size={14} color={accent} /></div>
+            <div className="flow-done-row-icon"><NavIcon name="tag" size={14} color={accentText} /></div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="flow-done-row-label">{t.total}</div>
               <div className="flow-done-row-sub">{form.payment === "prepay" ? t.payPrepay : t.payArrival}</div>
             </div>
-            <div style={{ fontFamily: displayFont, fontSize: 24, color: accent, flexShrink: 0 }}>{fmtAmt(cur, getPrice())}</div>
+            <div style={{ fontFamily: displayFont, fontSize: 24, color: accentText, flexShrink: 0 }}>{fmtPrice(cur, getPrice())}</div>
           </div>
         </div>
 
@@ -4572,7 +4578,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   };
 
   return (
-    <Layout accent={accent} rawAccent={initialSalon.accent}>
+    <Layout accent={accent} rawAccent={initialSalon.accent} textAccent={accentText}>
 
       <div style={{
         minHeight: "100dvh", 
@@ -4745,10 +4751,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 {/* Selected services counter */}
                 {selectedServices.length > 0 && (
                   <div style={{ background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 14, padding: "10px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>
-                      <NavIcon name="check" size={11} color={accent} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
+                    <span style={{ fontSize: 12, color: accentText, fontWeight: 500 }}>
+                      <NavIcon name="check" size={11} color={accentText} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
                     </span>
-                    <span style={{ fontSize: 12, color: c.textSub }}>{getDuration()} {t.min} · {fromPrefix}{fmtAmt(cur, getOriginalPrice())}</span>
+                    <span style={{ fontSize: 12, color: c.textSub }}>{getDuration()} {t.min} · {fromPrefix}{fmtPrice(cur, getOriginalPrice())}</span>
                   </div>
                 )}
 
@@ -4766,7 +4772,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   // álle gekozen extra's uitvoert is nog kiesbaar.
                   const staffPickable = staffForService.filter(m => (item?.extras || []).every(e => extraAllowedFor(e, m.id)));
                   const heroThumb = s.photos?.[0]?.url || s.photos?.[0];
-                  const displayPrice = s.variants?.length > 0 ? `${t.from} ${fmtAmt(cur, variantFromPrice(s.variants))}` : `${fmtAmt(cur, parseFloat(s.price))}`;
+                  const displayPrice = s.variants?.length > 0 ? `${t.from} ${fmtPrice(cur, variantFromPrice(s.variants))}` : `${fmtPrice(cur, parseFloat(s.price))}`;
                   return (
                   <div key={s.id} data-svc={s.id} style={{ marginBottom: 8 }}>
                     {/* Service card — clean, thumbnail-based */}
@@ -4797,7 +4803,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                             decides, so no clamp here (variants show their full
                             text too). Only the salon-page list stays clamped
                             as a teaser. */}
-                        {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 4, lineHeight: 1.45 }}><Linkify text={svcDesc(s)} color={accent} /></div>}
+                        {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 4, lineHeight: 1.45 }}><Linkify text={svcDesc(s)} color={accentText} /></div>}
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 11, color: c.textLabel, display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <NavIcon name="clock" size={10} color={c.textLabel} /> {svcDuration(s)}
@@ -4852,18 +4858,18 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                   }}>
                                   <div>
                                     <div style={{ fontWeight: 500, fontSize: 13, color: c.text }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)}</div>
-                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}><Linkify text={lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)} color={accent} /></div>}
+                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}><Linkify text={lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)} color={accentText} /></div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
                                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                     {vSel && v.per_unit && (
                                       <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                        <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty - 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
+                                        <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty - 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accentText, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
                                         <span style={{ minWidth: 16, textAlign: "center", fontWeight: 600, fontSize: 13 }}>{vQty}</span>
-                                        <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty + 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
+                                        <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty + 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accentText, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
                                       </span>
                                     )}
-                                    <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{fmtAmt(cur, (parseFloat(v.price) * (v.per_unit && vSel ? vQty : 1)))}</div>
+                                    <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{fmtPrice(cur, (parseFloat(v.price) * (v.per_unit && vSel ? vQty : 1)))}</div>
                                   </div>
                                 </div>
                                 );
@@ -4894,19 +4900,19 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                       padding: "8px 14px", borderRadius: 8, cursor: "pointer", minHeight: 40,
                                       background: extraSel ? `${accent}14` : "transparent",
                                       border: `1px solid ${extraSel ? accent : c.border}`,
-                                      fontSize: 12, fontWeight: 500, color: extraSel ? accent : c.textSub,
+                                      fontSize: 12, fontWeight: 500, color: extraSel ? accentText : c.textSub,
                                       transition: "all 0.15s", display: "inline-flex", alignItems: "center", gap: 6
                                     }}>
                                     <span>+ {lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}</span>
                                     {showStep && (
                                       <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                        <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setExtraQty(s.id, e.id, qty - 1); }} style={{ width: 20, height: 20, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 13, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
+                                        <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setExtraQty(s.id, e.id, qty - 1); }} style={{ width: 20, height: 20, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accentText, cursor: "pointer", fontSize: 13, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
                                         <span style={{ minWidth: 14, textAlign: "center", fontWeight: 600 }}>{qty}</span>
-                                        <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setExtraQty(s.id, e.id, qty + 1); }} style={{ width: 20, height: 20, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 13, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
+                                        <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setExtraQty(s.id, e.id, qty + 1); }} style={{ width: 20, height: 20, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accentText, cursor: "pointer", fontSize: 13, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
                                       </span>
                                     )}
-                                    <span style={{ fontFamily: displayFont, fontSize: 14, color: accent }}>+{fmtAmt(cur, (parseFloat(e.price) * (e.per_unit ? qty : 1)))}</span>
-                                    {(parseInt(e.duration) || 0) > 0 && <span style={{ fontSize: 10, color: extraSel ? accent : c.textMuted }}>+{(parseInt(e.duration) || 0) * (e.per_unit ? qty : 1)} {t.min}</span>}
+                                    <span style={{ fontFamily: displayFont, fontSize: 14, color: accentText }}>+{fmtPrice(cur, (parseFloat(e.price) * (e.per_unit ? qty : 1)))}</span>
+                                    {(parseInt(e.duration) || 0) > 0 && <span style={{ fontSize: 10, color: extraSel ? accentText : c.textMuted }}>+{(parseInt(e.duration) || 0) * (e.per_unit ? qty : 1)} {t.min}</span>}
                                   </div>
                                 );
                               })}
@@ -4930,7 +4936,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                     padding: "8px 16px", borderRadius: 8, cursor: "pointer", minHeight: 40, display: "flex", alignItems: "center",
                                     background: !item?.staff ? `${accent}14` : "transparent",
                                     border: `1px solid ${!item?.staff ? accent : c.border}`,
-                                    fontSize: 12, fontWeight: 500, color: !item?.staff ? accent : c.textSub,
+                                    fontSize: 12, fontWeight: 500, color: !item?.staff ? accentText : c.textSub,
                                     transition: "all 0.15s"
                                   }}>{t.anyStaff}</div>
                               )}
@@ -4952,10 +4958,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                     border: `1px solid ${item?.staff?.id === m.id ? accent : c.border}`,
                                     transition: "all 0.15s", textAlign: "center"
                                   }}>
-                                  <div style={{ fontSize: 12, fontWeight: 500, color: item?.staff?.id === m.id ? accent : c.text }}>{m.name}</div>
+                                  <div style={{ fontSize: 12, fontWeight: 500, color: item?.staff?.id === m.id ? accentText : c.text }}>{m.name}</div>
                                   {m.role && <div style={{ fontSize: 10, color: c.textLabel }}>{m.role}</div>}
                                   {chipPrice != null && Number.isFinite(chipPrice) && (
-                                    <div style={{ fontSize: 10, color: item?.staff?.id === m.id ? accent : c.textSub, fontWeight: 600, marginTop: 2 }}>{fmtAmt(cur, chipPrice)}</div>
+                                    <div style={{ fontSize: 10, color: item?.staff?.id === m.id ? accentText : c.textSub, fontWeight: 600, marginTop: 2 }}>{fmtPrice(cur, chipPrice)}</div>
                                   )}
                                 </div>
                                 );
@@ -4989,21 +4995,21 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                               ? <img src={thumbOf(p.photo_url, 240)} onError={thumbFallback(p.photo_url)} alt="" loading="lazy" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
                               : <div style={{ width: 40, height: 40, borderRadius: 10, background: c.inputBg, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><NavIcon name="bag" size={17} color={c.textMuted} /></div>}
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontWeight: 500, fontSize: 13, color: qty > 0 ? accent : c.text }}>{prodNameOf(p)}</div>
+                              <div style={{ fontWeight: 500, fontSize: 13, color: qty > 0 ? accentText : c.text }}>{prodNameOf(p)}</div>
                               {(lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)) && (
                                 <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.4 }}>
-                                  <Linkify text={lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)} color={accent} />
+                                  <Linkify text={lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)} color={accentText} />
                                 </div>
                               )}
                             </div>
                             {qty > 0 && (
                               <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                                <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.max(0, qty - 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
+                                <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.max(0, qty - 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accentText, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
                                 <span style={{ minWidth: 16, textAlign: "center", fontWeight: 600, fontSize: 13 }}>{qty}</span>
-                                <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.min(20, qty + 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
+                                <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.min(20, qty + 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accentText, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
                               </span>
                             )}
-                            <div style={{ fontFamily: displayFont, fontSize: 16, color: accent, flexShrink: 0 }}>{qty > 1 ? `${fmtAmt(cur, (parseFloat(p.price) * qty))}` : `${fmtAmt(cur, parseFloat(p.price))}`}</div>
+                            <div style={{ fontFamily: displayFont, fontSize: 16, color: accentText, flexShrink: 0 }}>{qty > 1 ? `${fmtPrice(cur, (parseFloat(p.price) * qty))}` : `${fmtPrice(cur, parseFloat(p.price))}`}</div>
                           </div>
                         );
                       })}
@@ -5014,7 +5020,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 {/* Reviews */}
                 {initialSalon.reviews?.length > 0 && (
                   <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid " + c.border }}>
-                    <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} <span style={{ color: accent }}><FlowGlyph name="star" size={11} /></span></SL>
+                    <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} <span style={{ color: accentText }}><FlowGlyph name="star" size={11} /></span></SL>
                     {initialSalon.reviews.slice(0, 3).map(r => (
                       <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
@@ -5152,7 +5158,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                         <FirstAvailableHint />
                         {initialSalon.waitlist_enabled !== false && (
-                          <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
+                          <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accentText, borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
                         )}
                       </div>
                     </div>
@@ -5174,7 +5180,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                             <NavIcon name={group.icon} size={14} color={c.textLabel} />
                             <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel }}>{group.label}</span>
-                            <span style={{ fontSize: 10, color: accent }}>({group.times.filter(tt => !isTimeSlotBooked(tt)).length})</span>
+                            <span style={{ fontSize: 10, color: accentText }}>({group.times.filter(tt => !isTimeSlotBooked(tt)).length})</span>
                           </div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                             {group.times.map(tt => {
@@ -5256,7 +5262,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   <div style={{ marginBottom: 20, padding: "12px 16px", background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div>
                       <div style={{ fontSize: 12, color: "#4ade80", fontWeight: 500 }}><NavIcon name="tag" size={12} color="#4ade80" /> {t.codeApplied}</div>
-                      <div style={{ fontSize: 11, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`}</div>
+                      <div style={{ fontSize: 11, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtPrice(cur, appliedDiscount.amount)}`}</div>
                       {discountNote() && <div style={{ fontSize: 11, color: discountNote().warn ? "#f87171" : c.textSub, marginTop: 4, lineHeight: 1.4 }}>{discountNote().text}</div>}
                     </div>
                     <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}><NavIcon name="xmark" size={12} color={c.textLabel} /></div>
@@ -5317,7 +5323,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                           {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => `${lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
                         </div>
                         {/* itemBasePrice: mét de eigen prijs van de gekozen stylist, net als Summary en het totaal. */}
-                        <span style={{ fontSize: 12, color: accent, fontWeight: 500 }}>{fmtAmt(cur, (itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)))}</span>
+                        <span style={{ fontSize: 12, color: accentText, fontWeight: 500 }}>{fmtPrice(cur, (itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)))}</span>
                       </div>
                     ))}
                   </div>
@@ -5329,7 +5335,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       {chosenProducts().map(({ p, qty }) => (
                         <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                           <span style={{ fontSize: 13, fontWeight: 500, minWidth: 0 }}>{qty > 1 ? `${qty}\u00d7 ` : ""}{prodNameOf(p)}</span>
-                          <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0 }}>{fmtAmt(cur, ((parseFloat(p.price) || 0) * qty))}</span>
+                          <span style={{ fontSize: 12, color: accentText, fontWeight: 500, flexShrink: 0 }}>{fmtPrice(cur, ((parseFloat(p.price) || 0) * qty))}</span>
                         </div>
                       ))}
                     </div>
@@ -5352,14 +5358,14 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   {appliedDiscount && (
                     <div className="confirm-row">
                       <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}><NavIcon name="tag" size={11} color="#4ade80" /> {t.discount}</span>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`})</span>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtPrice(cur, appliedDiscount.amount)}`})</span>
                     </div>
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
-                    <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accentText }}>{t.total}</span>
                     <div>
-                      {discountOn() && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 10 }}>{fmtAmt(cur, getOriginalPrice())}</span>}
-                      <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>{fmtAmt(cur, getPrice())}</span>
+                      {discountOn() && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 10 }}>{fmtPrice(cur, getOriginalPrice())}</span>}
+                      <span style={{ fontFamily: displayFont, fontSize: 22, color: accentText }}>{fmtPrice(cur, getPrice())}</span>
                     </div>
                   </div>
                 </div>
@@ -5388,7 +5394,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                 )}
                 <button className="btn-primary" disabled={!canProceedStep1} onClick={() => goToStep(2)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                   {selectedServices.length > 0 ? (
-                    <>{t.next} · {getDuration()} {t.min} · {fromPrefix}{fmtAmt(cur, getOriginalPrice())}</>
+                    <>{t.next} · {getDuration()} {t.min} · {fromPrefix}{fmtPrice(cur, getOriginalPrice())}</>
                   ) : (
                     <>{t.noServicesSelected}</>
                   )}
@@ -5553,8 +5559,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     {/* Selected services counter */}
                     {selectedServices.length > 0 && (
                       <div style={{ background: `${accent}10`, border: `1px solid ${accent}30`, borderRadius: 14, padding: "10px 14px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: 11, color: accent, fontWeight: 500 }}>
-                          <NavIcon name="check" size={11} color={accent} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
+                        <span style={{ fontSize: 11, color: accentText, fontWeight: 500 }}>
+                          <NavIcon name="check" size={11} color={accentText} /> {selectedServices.length} {selectedServices.length === 1 ? t.serviceSelected : t.servicesSelected}
                         </span>
                         <span style={{ fontSize: 11, color: c.textSub }}>{getDuration()} {t.min}</span>
                       </div>
@@ -5562,7 +5568,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
 
                     {filteredServices.length === 0 && (
                       <div style={{ textAlign: "center", padding: "30px 16px", color: c.textMuted }}>
-                        <div style={{ marginBottom: 10 }}><NavIcon name="beauty" size={32} color={accent} /></div>
+                        <div style={{ marginBottom: 10 }}><NavIcon name="beauty" size={32} color={accentText} /></div>
                         <div style={{ fontSize: 12 }}>{activeCategory !== "all" ? (lang === "nl" ? "Geen behandelingen in deze categorie" : lang === "es" ? "No hay tratamientos en esta categoría" : "No treatments in this category") : (lang === "nl" ? "Nog geen behandelingen beschikbaar" : lang === "es" ? "Aún no hay tratamientos disponibles" : "No treatments available yet")}</div>
                       </div>
                     )}
@@ -5584,18 +5590,18 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                 <div style={{ fontWeight: 500, fontSize: 14 }}>{svcName(s)}</div>
                                 <div style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>
                                   {svcDuration(s)}
-                                  {(s.photos || []).length > 0 && <span style={{ color: accent, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
-                                  {(s.variants?.length > 0) && <span style={{ color: accent, marginLeft: 8 }}>· {s.variants.length} {s.variants.length === 1 ? "variant" : t.variants.toLowerCase()}</span>}
+                                  {(s.photos || []).length > 0 && <span style={{ color: accentText, marginLeft: 8 }}>· {s.photos.length} {t.photos.toLowerCase()}</span>}
+                                  {(s.variants?.length > 0) && <span style={{ color: accentText, marginLeft: 8 }}>· {s.variants.length} {s.variants.length === 1 ? "variant" : t.variants.toLowerCase()}</span>}
                                 </div>
                                 {/* Full description — the picker is where the
                                     client decides, so no clamp here (variants
                                     show their full text too). Only the
                                     salon-page list stays clamped as a teaser. */}
-                                {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.45 }}><Linkify text={svcDesc(s)} color={accent} /></div>}
+                                {svcDesc(s) && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.45 }}><Linkify text={svcDesc(s)} color={accentText} /></div>}
                               </div>
                             </div>
                             <div style={{ fontFamily: displayFont, fontSize: 20, color: c.text }}>
-                              {s.variants?.length > 0 ? `${t.from} ${fmtAmt(cur, variantFromPrice(s.variants))}` : `${fmtAmt(cur, parseFloat(s.price))}`}
+                              {s.variants?.length > 0 ? `${t.from} ${fmtPrice(cur, variantFromPrice(s.variants))}` : `${fmtPrice(cur, parseFloat(s.price))}`}
                             </div>
                           </div>
                           {(s.photos || []).length > 0 && (
@@ -5620,18 +5626,18 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                                   <div>
                                     <div style={{ fontWeight: 500, fontSize: 13 }}>{lang === "nl" ? v.name_nl : lang === "es" ? (v.name_es || v.name_en || v.name_nl) : (v.name_en || v.name_nl)}</div>
-                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}><Linkify text={lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)} color={accent} /></div>}
+                                    {v.description_nl && <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}><Linkify text={lang === "nl" ? v.description_nl : lang === "es" ? (v.description_es || v.description_en || v.description_nl) : (v.description_en || v.description_nl)} color={accentText} /></div>}
                                     <div style={{ fontSize: 10, color: c.textLabel, marginTop: 2 }}>{v.duration} {t.min}</div>
                                   </div>
                                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                     {vSel && v.per_unit && (
                                       <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                        <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty - 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
+                                        <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty - 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accentText, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
                                         <span style={{ minWidth: 16, textAlign: "center", fontWeight: 600, fontSize: 13 }}>{vQty}</span>
-                                        <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty + 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
+                                        <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setVariantQty(s.id, vQty + 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accentText, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
                                       </span>
                                     )}
-                                    <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{fmtAmt(cur, (parseFloat(v.price) * (v.per_unit && vSel ? vQty : 1)))}</div>
+                                    <div style={{ fontFamily: displayFont, fontSize: 18, color: c.text }}>{fmtPrice(cur, (parseFloat(v.price) * (v.per_unit && vSel ? vQty : 1)))}</div>
                                   </div>
                                 </div>
                               </div>
@@ -5661,12 +5667,12 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                     {extraSel && e.per_unit && (
                                       <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                        <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setExtraQty(s.id, e.id, qty - 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
+                                        <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setExtraQty(s.id, e.id, qty - 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accentText, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
                                         <span style={{ minWidth: 16, textAlign: "center", fontWeight: 600, fontSize: 13 }}>{qty}</span>
-                                        <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setExtraQty(s.id, e.id, qty + 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
+                                        <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setExtraQty(s.id, e.id, qty + 1); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accentText, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
                                       </span>
                                     )}
-                                    <div style={{ fontFamily: displayFont, fontSize: 16, color: accent }}>+{fmtAmt(cur, (parseFloat(e.price) * (e.per_unit ? qty : 1)))}</div>
+                                    <div style={{ fontFamily: displayFont, fontSize: 16, color: accentText }}>+{fmtPrice(cur, (parseFloat(e.price) * (e.per_unit ? qty : 1)))}</div>
                                   </div>
                                 </div>
                               </div>
@@ -5696,7 +5702,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                   <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
                                   {m.role && <div style={{ fontSize: 11, color: c.textLabel }}>{m.role}</div>}
                                   {chipPrice != null && Number.isFinite(chipPrice) && (
-                                    <div style={{ fontSize: 10, color: c.textSub, fontWeight: 600, marginTop: 2 }}>{fmtAmt(cur, chipPrice)}</div>
+                                    <div style={{ fontSize: 10, color: c.textSub, fontWeight: 600, marginTop: 2 }}>{fmtPrice(cur, chipPrice)}</div>
                                   )}
                                 </div>
                                 );
@@ -5728,18 +5734,18 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                 <div style={{ fontWeight: 500, fontSize: 12 }}>{prodNameOf(p)}</div>
                                 {(lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)) && (
                                   <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.4 }}>
-                                    <Linkify text={lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)} color={accent} />
+                                    <Linkify text={lang === "nl" ? p.description_nl : lang === "es" ? (p.description_es || p.description_en || p.description_nl) : (p.description_en || p.description_nl)} color={accentText} />
                                   </div>
                                 )}
                               </div>
                               {qty > 0 && (
                                 <span onClick={ev => ev.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                                  <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.max(0, qty - 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
+                                  <button type="button" aria-label="min" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.max(0, qty - 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accentText, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>−</button>
                                   <span style={{ minWidth: 16, textAlign: "center", fontWeight: 600, fontSize: 13 }}>{qty}</span>
-                                  <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.min(20, qty + 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accent, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
+                                  <button type="button" aria-label="plus" onClick={ev => { ev.stopPropagation(); setProductSel(s => ({ ...s, [p.id]: Math.min(20, qty + 1) })); }} style={{ width: 24, height: 24, borderRadius: "50%", border: `1px solid ${accent}66`, background: "transparent", color: accentText, cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}>+</button>
                                 </span>
                               )}
-                              <div style={{ fontFamily: displayFont, fontSize: 15, color: accent, flexShrink: 0 }}>{fmtAmt(cur, (parseFloat(p.price) * (qty || 1)))}</div>
+                              <div style={{ fontFamily: displayFont, fontSize: 15, color: accentText, flexShrink: 0 }}>{fmtPrice(cur, (parseFloat(p.price) * (qty || 1)))}</div>
                             </div>
                           );
                         })}
@@ -5832,7 +5838,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                             <FirstAvailableHint />
                             {/* Wachtlijst alleen op een volle dag; een dag zonder tijden is dicht. */}
                             {availableTimes.length > 0 && initialSalon.waitlist_enabled !== false && (
-                              <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accent, borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
+                              <button type="button" onClick={() => setWaitlistOpen(true)} style={{ background: "transparent", border: `1px solid ${accent}`, color: accentText, borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{t.joinWaitlist}</button>
                             )}
                           </div>
                         </div>
@@ -5875,7 +5881,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       <div style={{ marginBottom: 20, padding: "10px 14px", background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.2)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div>
                           <div style={{ fontSize: 11, color: "#4ade80", fontWeight: 500 }}><NavIcon name="tag" size={12} color="#4ade80" /> {t.codeApplied}</div>
-                          <div style={{ fontSize: 10, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`}</div>
+                          <div style={{ fontSize: 10, color: c.textSub }}>{appliedDiscount.code}: {appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtPrice(cur, appliedDiscount.amount)}`}</div>
                           {discountNote() && <div style={{ fontSize: 11, color: discountNote().warn ? "#f87171" : c.textSub, marginTop: 4, lineHeight: 1.4 }}>{discountNote().text}</div>}
                         </div>
                         <div onClick={() => setAppliedDiscount(null)} style={{ cursor: "pointer", fontSize: 12, color: c.textLabel }}><NavIcon name="xmark" size={12} color={c.textLabel} /></div>
@@ -5925,7 +5931,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                               {item.staff && <span style={{ fontSize: 11, color: c.textLabel, marginLeft: 6 }}>({item.staff.name})</span>}
                               {item.extras.length > 0 && <div style={{ fontSize: 10, color: c.textLabel }}>+ {item.extras.map(e => `${lang === "nl" ? e.name_nl : lang === "es" ? (e.name_es || e.name_en || e.name_nl) : (e.name_en || e.name_nl)}${e.per_unit && (e.qty || 1) > 1 ? ` ×${e.qty}` : ""}`).join(", ")}</div>}
                             </div>
-                            <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>{fmtAmt(cur, (itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)))}</span>
+                            <span style={{ fontSize: 12, color: accentText, fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>{fmtPrice(cur, (itemBasePrice(item) + item.extras.reduce((s, e) => s + parseFloat(e.price || 0) * (e.per_unit ? (e.qty || 1) : 1), 0)))}</span>
                           </div>
                         ))}
                       </div>
@@ -5937,7 +5943,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                           {chosenProducts().map(({ p, qty }) => (
                             <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                               <span style={{ fontSize: 13, fontWeight: 500, minWidth: 0 }}>{qty > 1 ? `${qty}\u00d7 ` : ""}{prodNameOf(p)}</span>
-                              <span style={{ fontSize: 12, color: accent, fontWeight: 500, flexShrink: 0 }}>{fmtAmt(cur, ((parseFloat(p.price) || 0) * qty))}</span>
+                              <span style={{ fontSize: 12, color: accentText, fontWeight: 500, flexShrink: 0 }}>{fmtPrice(cur, ((parseFloat(p.price) || 0) * qty))}</span>
                             </div>
                           ))}
                         </div>
@@ -5960,14 +5966,14 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                       {appliedDiscount && (
                         <div className="confirm-row">
                           <span style={{ fontSize: 11, color: "#4ade80", letterSpacing: "0.04em" }}><NavIcon name="tag" size={11} color="#4ade80" /> {t.discount}</span>
-                          <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtAmt(cur, appliedDiscount.amount)}`})</span>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: "#4ade80" }}>{appliedDiscount.code} ({appliedDiscount.type === "percent" ? `-${appliedDiscount.amount}%` : `-${fmtPrice(cur, appliedDiscount.amount)}`})</span>
                         </div>
                       )}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, paddingBottom: 4 }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accent }}>{t.total}</span>
+                        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: accentText }}>{t.total}</span>
                         <div>
-                          {discountOn() && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 8 }}>{fmtAmt(cur, getOriginalPrice())}</span>}
-                          <span style={{ fontFamily: displayFont, fontSize: 22, color: accent }}>{fmtAmt(cur, getPrice())}</span>
+                          {discountOn() && <span style={{ fontSize: 14, color: c.textLabel, textDecoration: "line-through", marginRight: 8 }}>{fmtPrice(cur, getOriginalPrice())}</span>}
+                          <span style={{ fontFamily: displayFont, fontSize: 22, color: accentText }}>{fmtPrice(cur, getPrice())}</span>
                         </div>
                       </div>
                     </div>
@@ -5984,7 +5990,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   {/* Reviews on mobile step 1 */}
                   {step === 1 && initialSalon.reviews?.length > 0 && (
                     <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid " + c.border }}>
-                      <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} <span style={{ color: accent }}><FlowGlyph name="star" size={11} /></span></SL>
+                      <SL>{t.reviews} ({initialSalon.reviews.length}) · {(initialSalon.reviews.reduce((s,r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)} <span style={{ color: accentText }}><FlowGlyph name="star" size={11} /></span></SL>
                       {initialSalon.reviews.slice(0, 3).map(r => (
                         <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid " + c.border }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
@@ -6019,7 +6025,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                     {/* Geen verouderde tijd tonen die stap 2 niet meer aanbiedt. */}
                     {chosenTimeOk && ` · ${time}`}
                   </div>
-                  <div style={{ fontFamily: displayFont, fontSize: 20, color: accent }}>{fromPrefix}{fmtAmt(cur, getPrice())}</div>
+                  <div style={{ fontFamily: displayFont, fontSize: 20, color: accentText }}>{fromPrefix}{fmtPrice(cur, getPrice())}</div>
                 </div>
                 {step === 1 && (
                   <button className="btn-primary" style={{ width: "auto", padding: "12px 24px", fontSize: 11, flexShrink: 0 }}
@@ -6093,7 +6099,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               {waitlistDone ? (
                 <div style={{ textAlign: "center" }}>
                   <div style={{ width: 56, height: 56, margin: "0 auto 16px", borderRadius: "50%", background: `${accent}18`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <NavIcon name="check" size={26} color={accent} />
+                    <NavIcon name="check" size={26} color={accentText} />
                   </div>
                   <div style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 300, marginBottom: 8 }}>{T[lang].waitlistJoined}</div>
                   <div style={{ fontSize: 13, color: c.textLabel, marginBottom: 20 }}>{T[lang].waitlistJoinedSub}</div>
@@ -6129,10 +6135,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                   display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8,
                                   border: `1.5px solid ${on ? accent : c.inputBorder}`,
                                   background: on ? `${accent}18` : "transparent",
-                                  color: on ? accent : c.textSub, fontSize: 12, fontWeight: on ? 600 : 500, cursor: "pointer",
+                                  color: on ? accentText : c.textSub, fontSize: 12, fontWeight: on ? 600 : 500, cursor: "pointer",
                                   transition: "all 0.15s", fontFamily: "var(--body-font, 'Jost', sans-serif)",
                                 }}>
-                                {on && <NavIcon name="check" size={11} color={accent} />}
+                                {on && <NavIcon name="check" size={11} color={accentText} />}
                                 <span>{capFirst(dd.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "short", day: "numeric", month: "short" }))}</span>
                               </button>
                             );

@@ -14,6 +14,31 @@
 
 export const RELEASES = [
   {
+    // 12-11 (tweede): boekingspagina-ronde, punten 6 en 8. Accent als tekst
+    // leesbaar (accentTextOn) en prijzen zonder ",00" (fmtPrice).
+    id: "2026-11-12b",
+    date: "2026-11-12",
+    title: { nl: "Je boekingspagina: beter leesbaar", en: "Your booking page: easier to read", es: "Tu página de reservas: más fácil de leer" },
+    items: [
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Tekst in je merkkleur (prijzen, \"vandaag\" bij je openingstijden) is nu altijd goed leesbaar. Is je kleur licht, dan gebruikt de pagina voor tekst een diepere tint van dezelfde kleur. Knoppen houden je eigen kleur.",
+          en: "Text in your brand colour (prices, \"today\" in your opening hours) is now always easy to read. If your colour is light, the page uses a deeper shade of the same colour for text. Buttons keep your own colour.",
+          es: "El texto en el color de tu marca (precios, \"hoy\" en tu horario) ahora siempre se lee bien. Si tu color es claro, la página usa un tono más profundo del mismo color para el texto. Los botones mantienen tu color.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Prijzen op je boekingspagina staan zonder \",00\": €38 in plaats van €38,00. Met centen blijft het zoals het was, bijvoorbeeld €37,50.",
+          en: "Prices on your booking page show without \",00\": €38 instead of €38,00. Prices with cents stay as they were, for example €37,50.",
+          es: "Los precios en tu página de reservas se muestran sin \",00\": €38 en vez de €38,00. Con céntimos se quedan igual, por ejemplo €37,50.",
+        },
+      },
+    ],
+  },
+  {
     // 12-11: boekingspagina-ronde, punt 7. Gestructureerde gegevens (JSON-LD,
     // salonSchema.js). De opgeschoonde plaats bovenaan (splitPlace) zit in
     // dezelfde deploy maar bewust NIET in deze notes (Faisal 12-11).
