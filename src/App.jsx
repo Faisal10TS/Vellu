@@ -923,6 +923,7 @@ function SalonRoute({ lang, setLang }) {
         show_owner_on_booking: !!data.show_owner_on_booking,
         booking_policy: data.booking_policy || "",
         booking_policy_en: data.booking_policy_en || "",
+        booking_policy_es: data.booking_policy_es || "",
         salon_phone: data.salon_phone || "",
         salon_instagram: data.salon_instagram || "",
         salon_email: data.salon_email || "",

@@ -444,11 +444,13 @@ function RescheduleModal({ appt, onClose, onSuccess, lang, c, accent, toast, sta
         )}
 
         <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 14, lineHeight: 1.5 }}>
+          {/* Geen zin meer over Google Agenda: koppelen staat sinds 05-10-2026
+              uit en geen salon is gekoppeld (audit punt 9, 12-11-2026). */}
           {lang === "nl"
-            ? "De klant ontvangt automatisch een e-mail met de nieuwe datum. Als Google Agenda gekoppeld is, wordt het event ook verplaatst."
+            ? "De klant ontvangt automatisch een e-mail met de nieuwe datum."
             : lang === "es"
-            ? "El cliente recibe automáticamente un correo con la nueva fecha. Si tienes Google Calendar conectado, el evento también se mueve."
-            : "The client will receive an automatic email with the new date. If Google Calendar is connected, the event will be moved too."}
+            ? "El cliente recibe automáticamente un correo con la nueva fecha."
+            : "The client will receive an automatic email with the new date."}
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
@@ -1861,7 +1863,7 @@ function AutoTranslateField({ nlValue, enValue, setNl, setEn, esValue, onEsChang
   const other = isNl
     ? { val: enValue, set: setEn, sourceLang: "NL", targetLang: "EN-US", label: "EN", labelLong: "Engels" }
     : isEs
-    ? { val: nlValue, set: hasEs ? setNl : setNlInEs, sourceLang: hasEs || esInEn ? "ES" : "EN", targetLang: "NL", label: "NL", labelLong: "Neerlandés" }
+    ? { val: nlValue, set: setNlInEs, sourceLang: hasEs || esInEn ? "ES" : "EN", targetLang: "NL", label: "NL", labelLong: "Neerlandés" }
     : { val: nlValue, set: setNl, sourceLang: "EN", targetLang: "NL", label: "NL", labelLong: "Dutch" };
   const El = textarea ? "textarea" : "input";
   const inputStyle = textarea
@@ -1929,9 +1931,10 @@ async function autoFillTranslations(form, pairs, currentLang) {
   for (const p of pairs) {
     // es field derived from the nl field name (name_nl→name_es, …). Only the
     // name_es / description_es columns actually exist on services/variants/
-    // extras/categories — never generate es for other fields (e.g. policy).
+    // extras/categories — never generate es for other fields, unless the pair
+    // names its es column itself (p.es, e.g. booking_policy_es since 12-11).
     const esField = p.es || p.nl.replace(/_nl$/, "_es");
-    const esOk = esField === "name_es" || esField === "description_es";
+    const esOk = !!p.es || esField === "name_es" || esField === "description_es";
     const fields = { nl: p.nl, en: p.en, ...(esOk ? { es: esField } : {}) };
     // Spaanse interface, veld zonder es-binding: de EN-kolom bevat wat de
     // eigenaar in het Spaans typte. Bron = ES; EN krijgt de Engelse vertaling
@@ -5961,7 +5964,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     return { 
       id: user.slug, name: user.name, city: user.city || "Nederland", accent: ACCENT, 
       services: [], appointments: [], business_hours: DEFAULT_HOURS,
-      booking_policy: "", booking_policy_en: "", salon_phone: "", salon_instagram: "", salon_email: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
+      booking_policy: "", booking_policy_en: "", booking_policy_es: "", salon_phone: "", salon_instagram: "", salon_email: "", phone_required: false, logo_url: "", cover_image_url: "", discount_codes: [],
       btw_rate: 21,
       locations: [], day_overrides: {}, account_type: user.account_type || "joint",
       min_advance_hours: 0, max_advance_days: 60, cancel_deadline_hours: 0,
@@ -6007,16 +6010,48 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [noShowFeeAsk, setNoShowFeeAsk] = useState(null);
   const noShowFeeSentence = (pct, l) => l === "nl"
     ? `Niet verschijnen zonder afmelding (no-show): wij brengen ${pct}% van het afspraakbedrag in rekening.`
+    : l === "es"
+    ? `No presentarse sin cancelar (no-show): cobramos el ${pct}% del importe de la cita.`
     : `No-show without cancelling: we charge ${pct}% of the appointment price.`;
   // Alleen of het beleid no-shows noemt (in eigen woorden mag ook — "Staat al
   // in mijn beleid"); niet de exacte zin of het percentage.
-  const policyMentionsNoShowFee = () => /no[- ]?show/i.test(`${salonData.booking_policy || ""}\n${salonData.booking_policy_en || ""}`);
+  const policyMentionsNoShowFee = () => /no[- ]?show/i.test(`${salonData.booking_policy || ""}\n${salonData.booking_policy_en || ""}\n${salonData.booking_policy_es || ""}`);
+  // Spaanse versie: alleen aanvullen als er al Spaanse tekst staat. Is hij
+  // leeg, dan vertaalt Opslaan hem straks uit de rest (met deze zin erin).
   const addNoShowFeeToPolicy = (pct) => update(d => {
-    const nl = (d.booking_policy || "").trim(), en = (d.booking_policy_en || "").trim();
+    const nl = (d.booking_policy || "").trim(), en = (d.booking_policy_en || "").trim(), es = (d.booking_policy_es || "").trim();
     if (!nl.includes(noShowFeeSentence(pct, "nl"))) d.booking_policy = (nl ? nl + "\n" : "") + noShowFeeSentence(pct, "nl");
     if (!en.includes(noShowFeeSentence(pct, "en"))) d.booking_policy_en = (en ? en + "\n" : "") + noShowFeeSentence(pct, "en");
+    if (es && !es.includes(noShowFeeSentence(pct, "es"))) d.booking_policy_es = es + "\n" + noShowFeeSentence(pct, "es");
     return d;
   });
+  // Boekingsbeleid zoals het het laatst uit de database kwam (laden of
+  // opslaan). Opslaan vergelijkt hiermee welke taal de eigenaar veranderde,
+  // zodat de vertalingen die taal volgen (zie de opslagknop).
+  const policyLoadedRef = useRef({ nl: "", en: "", es: "" });
+  // Spaanse interface, salon met beleid maar nog zonder Spaanse versie (alles
+  // van vóór 12-11-2026): één keer vertalen uit EN (of NL), zodat het veld niet
+  // leeg lijkt. Pas Opslaan bewaart het. Als "geladen" gemarkeerd, dus Opslaan
+  // ziet het niet als nieuwe Spaanse tekst en laat NL en EN staan.
+  const policyEsAutoRef = useRef(false);
+  useEffect(() => {
+    if (lang !== "es" || view !== "instellingen" || policyEsAutoRef.current) return;
+    if ((salonData.booking_policy_es || "").trim()) return;
+    const en = (salonData.booking_policy_en || "").trim(), nl = (salonData.booking_policy || "").trim();
+    if (!en && !nl) return;
+    policyEsAutoRef.current = true;
+    supabase.functions.invoke("translate-text", { body: { texts: [en || nl], source_lang: en ? "EN" : "NL", target_lang: "ES" } })
+      .then(({ data, error }) => {
+        const es = !error && data?.translations?.[0];
+        if (!es) return;
+        update(d => {
+          if ((d.booking_policy_es || "").trim()) return d;
+          policyLoadedRef.current = { ...policyLoadedRef.current, es: String(es).trim() };
+          d.booking_policy_es = es;
+          return d;
+        });
+      }, () => {});
+  }, [lang, view, salonData.booking_policy_es, salonData.booking_policy_en, salonData.booking_policy]);
   const chooseNoShowFee = (v) => {
     if (v === 0) { update(d => { d.no_show_fee_enabled = false; return d; }); return; }
     if (!salonData.no_show_fee_enabled) { setNoShowFeeAsk(v); return; }
@@ -6692,6 +6727,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         for (const m of manualClients || []) {
           if (m.email && m.notes) clientNotesMap[m.email.toLowerCase()] = m.notes;
         }
+        policyLoadedRef.current = { nl: (data.booking_policy || "").trim(), en: (data.booking_policy_en || "").trim(), es: (data.booking_policy_es || "").trim() };
         setSalonData(prev => ({
           ...prev,
           owner_id: data.id,
@@ -6727,6 +6763,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           business_hours: data.business_hours || DEFAULT_HOURS,
           booking_policy: data.booking_policy || "",
           booking_policy_en: data.booking_policy_en || "",
+          booking_policy_es: data.booking_policy_es || "",
           salon_phone: data.salon_phone || "",
           salon_instagram: data.salon_instagram || "",
           salon_email: data.salon_email || "",
@@ -20948,22 +20985,23 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 </div>
               </div>
 
-              {/* Booking Policy Section — separate NL/EN so the public profile
-                  shows the right text when the visitor toggles language. EN is
-                  optional; when empty the NL text is shown for both languages. */}
+              {/* Booking Policy Section — separate NL/EN/ES so the public
+                  profile shows the right text when the visitor toggles
+                  language. Empty EN/ES fall back to the next language. */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.bookingPolicy}</SL>
                 <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10 }}>{t.bookingPolicyDesc}</div>
-                {/* Bewust zonder esValue/onEsChange: het beleid heeft geen
-                    es-kolom. In de Spaanse interface geldt de getypte tekst dan
-                    als Spaans en vult Opslaan (autoFillTranslations met lang)
-                    NL en EN vanuit het Spaans, i.p.v. Spaans als Engels op te
-                    slaan. */}
+                {/* Sinds 12-11-2026 met eigen es-kolom (booking_policy_es). In
+                    de Spaanse interface bewerkt het veld de Spaanse tekst en
+                    maakt Opslaan NL en EN daaruit; in de NL/EN-interface is
+                    de Spaanse versie een vertaling die Opslaan bijhoudt. */}
                 <AutoTranslateField
                   nlValue={salonData.booking_policy || ""}
                   enValue={salonData.booking_policy_en || ""}
+                  esValue={salonData.booking_policy_es || ""}
                   setNl={v => update(d => { d.booking_policy = v; return d; })}
                   setEn={v => update(d => { d.booking_policy_en = v; return d; })}
+                  onEsChange={v => update(d => { d.booking_policy_es = v; return d; })}
                   lang={lang} accent={accent}
                   textarea rows={6}
                   placeholder={t.bookingPolicyPlaceholder}
@@ -21797,8 +21835,10 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           if (v !== 0) update(d => {
                             const nl = replaceNoShowSentence(d.booking_policy, noShowFeeSentence, "nl", v);
                             const en = replaceNoShowSentence(d.booking_policy_en, noShowFeeSentence, "en", v);
+                            const es = replaceNoShowSentence(d.booking_policy_es, noShowFeeSentence, "es", v);
                             if (nl !== (d.booking_policy || "")) d.booking_policy = nl;
                             if (en !== (d.booking_policy_en || "")) d.booking_policy_en = en;
+                            if (es !== (d.booking_policy_es || "")) d.booking_policy_es = es;
                             return d;
                           });
                           chooseNoShowFee(v);
@@ -21831,14 +21871,15 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     met iets anders dan wat de afspraakkaart straks rekent. */}
                 {salonData.no_show_fee_enabled && policyMentionsNoShowFee() && (() => {
                   const pct = Number(salonData.no_show_fee_pct ?? 20);
-                  const anders = noShowPctsInPolicy(`${salonData.booking_policy || ""}\n${salonData.booking_policy_en || ""}`).filter(p => p !== pct);
+                  const anders = noShowPctsInPolicy(`${salonData.booking_policy || ""}\n${salonData.booking_policy_en || ""}\n${salonData.booking_policy_es || ""}`).filter(p => p !== pct);
                   if (!anders.length) return null;
                   const genoemd = anders.map(p => `${String(p).replace(".", lang === "en" ? "." : ",")}%`).join(", ");
                   // Staat het afwijkende percentage in een door Vellu gemaakte
                   // zin, dan kan één knop hem bijwerken; eigen tekst niet.
                   const nlNieuw = replaceNoShowSentence(salonData.booking_policy, noShowFeeSentence, "nl", pct);
                   const enNieuw = replaceNoShowSentence(salonData.booking_policy_en, noShowFeeSentence, "en", pct);
-                  const herstelbaar = nlNieuw !== (salonData.booking_policy || "") || enNieuw !== (salonData.booking_policy_en || "");
+                  const esNieuw = replaceNoShowSentence(salonData.booking_policy_es, noShowFeeSentence, "es", pct);
+                  const herstelbaar = nlNieuw !== (salonData.booking_policy || "") || enNieuw !== (salonData.booking_policy_en || "") || esNieuw !== (salonData.booking_policy_es || "");
                   return (
                     <div data-no-show-fee-mismatch style={{ marginTop: 12, padding: "10px 12px", background: `${c.warning}12`, border: `1px solid ${c.warning}44`, borderRadius: 10, fontSize: 11, color: c.textSub, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       <NavIcon name="alerttri" size={12} color={c.warning} />
@@ -21849,7 +21890,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       </span>
                       {herstelbaar && (
                         <button type="button" className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px" }}
-                          onClick={() => update(d => { d.booking_policy = nlNieuw || d.booking_policy; d.booking_policy_en = enNieuw || d.booking_policy_en; return d; })}>
+                          onClick={() => update(d => { d.booking_policy = nlNieuw || d.booking_policy; d.booking_policy_en = enNieuw || d.booking_policy_en; d.booking_policy_es = esNieuw || d.booking_policy_es; return d; })}>
                           {lang === "nl" ? "Zin bijwerken" : lang === "es" ? "Actualizar frase" : "Update sentence"}
                         </button>
                       )}
@@ -23528,14 +23569,38 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   setSettingsTab("salon");
                   return;
                 }
-                // Auto-translate booking policy if only one language is filled.
-                const filledPolicy = await autoFillTranslations(
-                  { booking_policy: salonData.booking_policy || "", booking_policy_en: salonData.booking_policy_en || "" },
-                  [{ nl: "booking_policy", en: "booking_policy_en" }],
-                  lang
-                );
-                if (filledPolicy.booking_policy !== (salonData.booking_policy || "") || filledPolicy.booking_policy_en !== (salonData.booking_policy_en || "")) {
-                  update(d => { d.booking_policy = filledPolicy.booking_policy; d.booking_policy_en = filledPolicy.booking_policy_en; return d; });
+                // Boekingsbeleid in drie talen. De taal van de interface is de
+                // bron; de andere twee zijn vertalingen, die autoFillTranslations
+                // vult als ze leeg zijn. Wat de eigenaar sinds het laden
+                // veranderde (policyLoadedRef) bepaalt wat opnieuw moet:
+                //  - Spaanse interface, Spaanse tekst veranderd: NL en EN
+                //    opnieuw uit het Spaans (NL niet als de eigenaar die zelf in
+                //    "Editar versión NL" aanpaste). Zo deed het veld het ook
+                //    vóór de es-kolom.
+                //  - NL/EN-interface, NL of EN veranderd: de Spaanse versie
+                //    opnieuw. Die ziet de eigenaar hier niet, dus anders bleef
+                //    hij ongemerkt het oude beleid tonen. EN blijft zoals altijd
+                //    alleen gevuld als hij leeg is.
+                // Mislukt een vertaling, dan blijft de oude NL/EN-tekst staan
+                // (een leeg NL-beleid heft de akkoordplicht bij boeken op); een
+                // lege ES valt op de boekingspagina terug op EN.
+                const polIn = { booking_policy: salonData.booking_policy || "", booking_policy_en: salonData.booking_policy_en || "", booking_policy_es: salonData.booking_policy_es || "" };
+                const polLoaded = policyLoadedRef.current || { nl: "", en: "", es: "" };
+                const polWork = { ...polIn };
+                if (lang === "es") {
+                  const esNow = polIn.booking_policy_es.trim();
+                  if (esNow && esNow !== polLoaded.es) {
+                    if (!NL_SET_IN_ES.has(polIn.booking_policy.trim())) polWork.booking_policy = "";
+                    polWork.booking_policy_en = "";
+                  }
+                } else if (polIn.booking_policy.trim() !== polLoaded.nl || polIn.booking_policy_en.trim() !== polLoaded.en) {
+                  polWork.booking_policy_es = "";
+                }
+                const filledPolicy = await autoFillTranslations(polWork, [{ nl: "booking_policy", en: "booking_policy_en", es: "booking_policy_es" }], lang);
+                if (!String(filledPolicy.booking_policy || "").trim()) filledPolicy.booking_policy = polIn.booking_policy;
+                if (!String(filledPolicy.booking_policy_en || "").trim()) filledPolicy.booking_policy_en = polIn.booking_policy_en;
+                if (filledPolicy.booking_policy !== polIn.booking_policy || filledPolicy.booking_policy_en !== polIn.booking_policy_en || filledPolicy.booking_policy_es !== polIn.booking_policy_es) {
+                  update(d => { d.booking_policy = filledPolicy.booking_policy; d.booking_policy_en = filledPolicy.booking_policy_en; d.booking_policy_es = filledPolicy.booking_policy_es; return d; });
                 }
                 // Extra factuurprofielen leven in ÉÉN jsonb-kolom, inclusief hun
                 // next_invoice_number-teller die sendInvoiceWith ophoogt. Een
@@ -23607,6 +23672,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   business_hours: salonData.business_hours || DEFAULT_HOURS,
                   booking_policy: filledPolicy.booking_policy || null,
                   booking_policy_en: filledPolicy.booking_policy_en || null,
+                  booking_policy_es: filledPolicy.booking_policy_es || null,
                   salon_phone: salonData.salon_phone || null,
                   salon_instagram: salonData.salon_instagram || null,
                   salon_email: salonData.salon_email || null,
@@ -23677,6 +23743,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error");
                 } else {
                   // Settings saved successfully
+                  policyLoadedRef.current = { nl: (filledPolicy.booking_policy || "").trim(), en: (filledPolicy.booking_policy_en || "").trim(), es: (filledPolicy.booking_policy_es || "").trim() };
                   setSaved(true); setTimeout(() => setSaved(false), 2000);
                   toast.show(lang === "nl" ? "Instellingen opgeslagen" : lang === "es" ? "Ajustes guardados" : "Settings saved");
                   // Vangnet, géén blokkade: belastingplichtig zonder dienstentarief

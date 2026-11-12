@@ -1548,11 +1548,13 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     if (el) el.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
   };
   
-  // Booking policy: NL is the default, EN is optional. Falls back to NL when
-  // the salon hasn't provided an English translation, so we don't show empty
-  // space to English visitors of NL-only salons.
+  // Booking policy: NL is the default, EN and ES are optional. Spanish falls
+  // back to English, then to NL (salons from before the es column, 12-11-2026,
+  // have no Spanish version yet); English falls back to NL.
   const effectivePolicy = lang === "nl"
     ? (initialSalon.booking_policy || "")
+    : lang === "es"
+    ? (initialSalon.booking_policy_es || initialSalon.booking_policy_en || initialSalon.booking_policy || "")
     : (initialSalon.booking_policy_en || initialSalon.booking_policy || "");
 
   // Check if form is complete

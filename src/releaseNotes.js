@@ -14,6 +14,33 @@
 
 export const RELEASES = [
   {
+    // 12-11 (vierde): audit punten 1 en 7. Dubbele klantkaarten (trigger
+    // manual_clients_no_duplicate) en boekingsbeleid in het Spaans
+    // (booking_policy_es). Punt 9 (Google-zin uit het verzetvenster) bewust
+    // niet in de notes.
+    id: "2026-11-12d",
+    date: "2026-11-12",
+    title: { nl: "Je beleid nu ook in het Spaans", en: "Your policy now in Spanish too", es: "Tu política ahora también en español" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Je boekingsbeleid staat nu ook in het Spaans op je boekingspagina; Spaanstalige klanten zagen eerst de Engelse tekst. Vellu vertaalt het als je je instellingen opslaat.",
+          en: "Your booking policy now also appears in Spanish on your booking page; Spanish-speaking clients used to see the English text. Vellu translates it when you save your settings.",
+          es: "Tu política de reservas ahora también aparece en español en tu página de reservas; antes los clientes hispanohablantes veían el texto en inglés. Puedes editarla en Ajustes.",
+        },
+      },
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Voeg je een klant toe die er al staat (zelfde naam en e-mailadres), dan komt er geen tweede kaart meer bij. Ontbrekende gegevens, zoals een telefoonnummer, worden op de bestaande kaart aangevuld.",
+          en: "Adding a client who is already in your list (same name and email) no longer creates a second card. Missing details, such as a phone number, are added to the existing card.",
+          es: "Si añades un cliente que ya está en tu lista (mismo nombre y correo), ya no se crea una segunda ficha. Los datos que faltan, como un teléfono, se completan en la ficha existente.",
+        },
+      },
+    ],
+  },
+  {
     // 12-11 (derde): planreview. Klant-export op elk plan. De Kassa-tab is nu
     // ook voor Starter zichtbaar (met uitleg + upgrade) en eigen logins voor
     // medewerkers zijn Professional; die twee bewust niet in de notes.
