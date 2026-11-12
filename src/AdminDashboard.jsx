@@ -1,6 +1,5 @@
-// Platform admin dashboard. Gated by the `is_admin()` SQL function — all
-// five RPCs it calls (admin_overview, admin_salons_list, admin_recent_signups,
-// admin_cron_summary, admin_revenue_timeline) raise 'forbidden' unless
+// Platform admin dashboard. Gated by the `is_admin()` SQL function — every
+// admin_* RPC it calls (zie `calls` in loadAll) raises 'forbidden' unless
 // auth.uid() is in the app_admins table. So the frontend route check is
 // just a UX fast-fail; security sits in the DB.
 //
@@ -166,6 +165,44 @@ function statusBadge(classification, churning, c, accent, everPaid = false) {
 }
 // Zelfde woorden als statusBadge, voor een kale subscription_status.
 const statusText = (status, everPaid) => status === "past_due" ? (everPaid ? "payment failed" : "trial ended") : status === "trialing" ? "trial" : status || "no trial";
+// Automatische mails over het account (admin_lifecycle_emails): soort → tekst.
+const EMAIL_KIND_LABEL = {
+  no_services: "Activation: add your services",
+  no_bookings: "Activation: get your first bookings",
+  trial_ending: "Trial ends in 3 days",
+  trial_expired: "Trial has ended",
+  trial_autopay_ending: "Auto-pay starts in 3 days",
+  trial_autopay_today: "Auto-pay charged today",
+  renewal: "Yearly plan: renew now",
+};
+const emailKindLabel = (k) => EMAIL_KIND_LABEL[k] || k;
+// Salons-tab: eerste klik op een kolom sorteert tekst/status oplopend, getallen en datums aflopend.
+const SORT_DEFAULT_DIR = { name: 1, status: 1, staff: -1, appts: -1, revenue: -1, seen: -1, booking: -1, created: -1 };
+const EMAIL_KIND_SHORT = {
+  no_services: "Add services", no_bookings: "First bookings", trial_ending: "Trial ends soon", trial_expired: "Trial ended",
+  trial_autopay_ending: "Auto-pay soon", trial_autopay_today: "Auto-pay today", renewal: "Renew (yearly)",
+};
+// Mollie-gebeurtenis → { label, tone } in gewone woorden.
+function paymentLabel(e) {
+  const zero = Number(e.amount_eur) === 0;
+  switch (e.event_type) {
+    case "first_payment.created": return { label: "Checkout opened, no result yet", tone: "muted" };
+    case "first.paid": return zero ? { label: "Auto-pay set up (card linked, €0)", tone: "ok" } : { label: "First payment", tone: "ok" };
+    case "first.expired": return { label: "Checkout not finished", tone: "warn" };
+    case "oneoff.paid": return { label: "Yearly payment", tone: "ok" };
+    case "oneoff.expired": return { label: "Yearly checkout not finished", tone: "warn" };
+    case "recurring.paid": return { label: "Monthly charge", tone: "ok" };
+    case "recurring.failed": return { label: "Charge failed", tone: "bad" };
+    case "subscription.changed": return { label: "Subscription changed", tone: "muted" };
+    default: return { label: e.event_type, tone: e.status === "paid" ? "ok" : e.status === "failed" ? "bad" : e.status === "expired" ? "warn" : "muted" };
+  }
+}
+// De "checkout geopend"-regel van een betaling die daarna betaald of
+// verlopen is, zegt niets extra: weg. Wat overblijft staat echt nog open.
+function collapsePayments(events) {
+  const settled = new Set(events.filter(e => e.event_type !== "first_payment.created" && e.mollie_payment_id).map(e => e.mollie_payment_id));
+  return events.filter(e => !(e.event_type === "first_payment.created" && e.mollie_payment_id && settled.has(e.mollie_payment_id)));
+}
 function StatusPill({ badge }) {
   return <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: badge.color, background: `${badge.color}1a`, borderRadius: 6, padding: "3px 10px", whiteSpace: "nowrap" }}>{badge.label}</span>;
 }
@@ -239,6 +276,15 @@ export default function AdminDashboard({ onLogout }) {
   // boekingen) en de geüploade prijslijsten (parse-price-list).
   const [onboarding, setOnboarding] = useState([]);
   const [priceImports, setPriceImports] = useState([]);
+  // Ronde 3 (12-11-2026): Mollie-gebeurtenissen (admin_payment_events, 120
+  // dagen) en de automatische mails over het account (admin_lifecycle_emails).
+  const [payEvents, setPayEvents] = useState([]);
+  const [lifeEmails, setLifeEmails] = useState([]);
+  const [payFilter, setPayFilter] = useState("all"); // all | problems
+  const [payShown, setPayShown] = useState(25);
+  // Salons-tab sorteren en het detailpaneel (salon-id of null).
+  const [salonSort, setSalonSort] = useState({ key: "created", dir: -1 });
+  const [detailId, setDetailId] = useState(null);
   const [fileBusy, setFileBusy] = useState("");
   const [search, setSearch] = useState("");
   // Het peilmoment waar de trial-window tegen afgerekend wordt. Staat bewust in
@@ -273,10 +319,12 @@ export default function AdminDashboard({ onLogout }) {
         ["admin_subscription_cancellations"],
         ["admin_onboarding"],
         ["admin_price_list_imports"],
+        ["admin_payment_events", { p_days: 120 }],
+        ["admin_lifecycle_emails"],
       ];
       const results = await Promise.all(calls.map(([fn, args]) => supabase.rpc(fn, args).then(r => r, e => ({ data: null, error: { message: String(e?.message || e) } }))));
       if (seq !== loadSeq.current) return;
-      const [ov, sl, rs, cr, tl, bo, sb, ar, ai, sv, sr, sc, ob, pi] = results;
+      const [ov, sl, rs, cr, tl, bo, sb, ar, ai, sv, sr, sc, ob, pi, pe, le] = results;
       // Een kapotte RPC gaf vroeger alleen een lege tab (augustus 2026: drie
       // tabs wekenlang leeg zonder melding). Nu staat bovenaan wat niet laadde.
       setLoadErrors(results.map((r, i) => r.error ? { fn: calls[i][0], message: r.error.message || String(r.error.code || "error") } : null).filter(Boolean));
@@ -295,6 +343,8 @@ export default function AdminDashboard({ onLogout }) {
       put(sv, setSiteOn, d => !!d);
       put(ob, setOnboarding);
       put(pi, setPriceImports);
+      put(pe, setPayEvents);
+      put(le, setLifeEmails);
       setLoaded(true);
       setLoadedAt(Date.now());
       setNow(Date.now());
@@ -342,6 +392,13 @@ export default function AdminDashboard({ onLogout }) {
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setMe(data?.user?.email || null)).catch(() => {});
   }, []);
+  // Detailpaneel sluit met Escape.
+  useEffect(() => {
+    if (!detailId) return;
+    const onKey = (e) => { if (e.key === "Escape") setDetailId(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [detailId]);
 
   // Beoordelingsmail versturen (edge function send-rating-request, met de
   // JWT van de beheerder). mode: "test" (naar mijn eigen adres), "send"
@@ -511,6 +568,11 @@ export default function AdminDashboard({ onLogout }) {
   // Bron = admin_subscriptions_list (betalend vs. comped), anders de kale
   // subscription_status uit de salonlijst.
   const subById = new Map(subs.map(s => [s.id, s]));
+  // Salonnaam die het detailpaneel opent (Salons, Signups, Onboarding, Revenue, aandacht).
+  const salonBtn = (id, label, style = {}) => (
+    <button type="button" data-salon-open={id} onClick={() => setDetailId(id)}
+      style={{ background: "none", border: "none", padding: 0, font: "inherit", color: c.text, cursor: "pointer", textAlign: "left", textDecoration: "underline dotted", textUnderlineOffset: 3, ...style }}>{label}</button>
+  );
   const salonById = new Map(salons.map(s => [s.id, s]));
   const signupStatus = (id) => {
     const everPaid = paidOwners.has(id);
@@ -547,27 +609,84 @@ export default function AdminDashboard({ onLogout }) {
   const nameOf = (s) => String(s.business_name || s.slug || "").trim() || "(no name)";
   const dayOf = (iso) => new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
   const within = (iso, days) => !!iso && new Date(iso).getTime() <= now + days * 864e5;
-  const listedBilling = new Set([...trialEnded, ...paymentFailed].map(s => s.id));
   const subsLive = subs.filter(s => !salonById.get(s.id)?.deactivated_at);
+
+  // Betalingen (ronde 3): feed zonder de overbodige "checkout geopend"-regels,
+  // en per salon de laatste echte poging (feed = nieuwste eerst).
+  const payFeed = collapsePayments(payEvents);
+  // Afgebroken/mislukt maar daarna toch betaald ("paid later"). Gerekend vanaf
+  // het openen van de checkout: Get Niq'd Up opende op 24-10 twee checkouts,
+  // betaalde de tweede en de eerste verliep pas daarna.
+  const openedAt = new Map(payEvents.filter(e => e.event_type === "first_payment.created" && e.mollie_payment_id).map(e => [e.mollie_payment_id, e.created_at]));
+  const paidLaterOf = (e) => {
+    if (e.status !== "expired" && e.status !== "failed") return false;
+    const from = openedAt.get(e.mollie_payment_id) || e.created_at;
+    return payFeed.some(x => x.owner_id === e.owner_id && x.status === "paid" && Number(x.amount_eur) > 0 && x.created_at > from);
+  };
+  const lastTry = new Map();
+  for (const e of payFeed) {
+    if (!e.owner_id || e.event_type === "subscription.changed" || e.event_type === "first_payment.created") continue;
+    if (!lastTry.has(e.owner_id)) lastTry.set(e.owner_id, e);
+  }
+  // Wilde betalen maar het lukte niet (laatste 14 dagen): een afgebroken
+  // checkout bij een salon die nu niet betaalt, of een mislukte afschrijving.
+  const unfinished = [...lastTry.values()].filter(e =>
+    now - new Date(e.created_at).getTime() <= 14 * 864e5 &&
+    !salonById.get(e.owner_id)?.deactivated_at &&
+    !paidLaterOf(e) &&
+    (e.status === "failed" || (e.status === "expired" && subById.get(e.owner_id)?.classification !== "paying")));
+  // Automatische mails per salon, nieuwste eerst (zo komen ze uit de RPC).
+  const emailsByOwner = new Map();
+  for (const m of lifeEmails) { const a = emailsByOwner.get(m.owner_id) || []; a.push(m); emailsByOwner.set(m.owner_id, a); }
+  const lastNudge = (id) => (emailsByOwner.get(id) || []).find(m => m.kind === "no_services" || m.kind === "no_bookings");
+
+  // Elke regel: items { id, name, extra }; met id opent de naam het detailpaneel.
+  const unfinishedIds = new Set(unfinished.map(e => e.owner_id));
+  const listedBilling = new Set([...trialEnded, ...paymentFailed].map(s => s.id));
+  const it = (s, extra) => ({ id: s.id, name: nameOf(s), extra });
   const attention = [
     { key: "cron", tone: "danger", tab: "cron", tabLabel: "Cron health", title: "Cron job stopped or failing",
-      items: cronRows.filter(j => j.st.level === "down").map(j => j.job_name) },
+      items: cronRows.filter(j => j.st.level === "down").map(j => ({ name: j.job_name })) },
     { key: "payment_failed", tone: "danger", tab: "billing", tabLabel: "Revenue", title: "Payment failed",
-      items: paymentFailed.map(s => `${nameOf(s)}${s.plan_expires_at ? ` (unpaid since ${dayOf(s.plan_expires_at)})` : ""}`) },
+      items: paymentFailed.map(s => it(s, s.plan_expires_at ? `unpaid since ${dayOf(s.plan_expires_at)}` : null)) },
+    { key: "unfinished", tone: "warning", tab: "billing", tabLabel: "Revenue", title: "Tried to pay, did not finish",
+      items: unfinished.map(e => it(salonById.get(e.owner_id) || { id: e.owner_id, business_name: e.business_name, slug: e.slug }, `${paymentLabel(e).label.toLowerCase()}, ${dayOf(e.created_at)}`)) },
     { key: "leaving", tone: "warning", tab: "billing", tabLabel: "Revenue", title: "Cancelled, access still running",
-      items: subsLive.filter(s => s.churning).map(s => `${nameOf(s)}${s.plan_expires_at ? ` (ends ${dayOf(s.plan_expires_at)})` : ""}`) },
+      items: subsLive.filter(s => s.churning).map(s => it(s, s.plan_expires_at ? `ends ${dayOf(s.plan_expires_at)}` : null)) },
     { key: "trial_ended", tone: "warning", tab: "billing", tabLabel: "Revenue", title: "Trial ended without a plan",
-      items: trialEnded.map(s => { const t = subById.get(s.id)?.trial_ends_at; return `${nameOf(s)}${t ? ` (${dayOf(t)})` : ""}`; }) },
+      items: trialEnded.filter(s => !unfinishedIds.has(s.id)).map(s => { const t = subById.get(s.id)?.trial_ends_at; return it(s, t ? dayOf(t) : null); }) },
     { key: "stuck", tone: "warning", tab: "onboarding", tabLabel: "Onboarding", title: "Stuck in onboarding",
-      items: stuck.filter(o => !listedBilling.has(o.id)).map(o => `${nameOf(o)} (${o.why === "no_services" ? "no services" : o.appts ? "1 booking" : "no bookings"})`) },
+      items: stuck.filter(o => !listedBilling.has(o.id) && !unfinishedIds.has(o.id)).map(o => {
+        const n = lastNudge(o.id);
+        return it(o, `${o.why === "no_services" ? "no services" : o.appts ? "1 booking" : "no bookings"}${n ? `, emailed ${dayOf(n.sent_at)}` : ""}`);
+      }) },
     { key: "trial_ending", tone: "info", tab: "billing", tabLabel: "Revenue", title: "Trial ends within 7 days",
-      items: subsLive.filter(s => s.classification === "trialing" && within(s.trial_ends_at, 7)).map(s => `${nameOf(s)} (${dayOf(s.trial_ends_at)})`) },
+      items: subsLive.filter(s => s.classification === "trialing" && within(s.trial_ends_at, 7)).map(s => it(s, dayOf(s.trial_ends_at))) },
     { key: "renewing", tone: "quiet", tab: "billing", tabLabel: "Revenue", title: "Renews within 7 days",
       items: subsLive.filter(s => s.classification === "paying" && !s.churning && within(s.plan_expires_at, 7))
         .sort((a, b) => new Date(a.plan_expires_at) - new Date(b.plan_expires_at))
-        .map(s => `${nameOf(s)} (${dayOf(s.plan_expires_at)}${s.billing_interval === "yearly" ? ", yearly: pays by link" : ""})`) },
+        .map(s => it(s, `${dayOf(s.plan_expires_at)}${s.billing_interval === "yearly" ? ", yearly: pays by link" : ""}`)) },
   ].filter(a => a.items.length);
   const toneColor = { danger: c.danger, warning: c.warning, info: accent, quiet: c.textSub };
+
+  // Salons-tab sorteren (ronde 3). Status: problemen bovenaan.
+  const STATUS_RANK = { "payment failed": 0, "trial ended": 1, churning: 2, trial: 3, "no trial": 4, comped: 5, paying: 6, deactivated: 7 };
+  const ts = (iso) => (iso ? new Date(iso).getTime() : 0);
+  const sortVal = {
+    name: s => nameOf(s).toLowerCase(),
+    status: s => STATUS_RANK[signupStatus(s.id).badge.label] ?? 8,
+    staff: s => s.staff_count || 0,
+    appts: s => s.appt_count || 0,
+    revenue: s => Number(s.total_revenue) || 0,
+    seen: s => ts(s.last_seen),
+    booking: s => ts(s.last_activity),
+    created: s => ts(s.created_at),
+  };
+  const sortedSalons = [...visibleSalons].sort((a, b) => {
+    const f = sortVal[salonSort.key] || sortVal.created;
+    const va = f(a), vb = f(b);
+    return (va < vb ? -1 : va > vb ? 1 : 0) * salonSort.dir || ts(b.created_at) - ts(a.created_at);
+  });
 
   // Omzet van salons per dag, één lijn per munt (bedragen niet omgerekend).
   // Vaste as van 30 dagen t/m vandaag; dagen zonder afspraken tellen als 0.
@@ -678,9 +797,17 @@ export default function AdminDashboard({ onLogout }) {
                       <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>
                         {a.title} <span style={{ color: toneColor[a.tone], fontWeight: 600 }}>{a.items.length}</span>
                       </div>
-                      <div style={{ fontSize: 12, color: c.textSub, marginTop: 3, lineHeight: 1.55, overflowWrap: "anywhere" }}>{a.items.join(" · ")}</div>
+                      <div style={{ fontSize: 12, color: c.textSub, marginTop: 3, lineHeight: 1.55, overflowWrap: "anywhere" }}>
+                        {a.items.map((x, k) => (
+                          <span key={x.id || x.name}>
+                            {k > 0 && " · "}
+                            {x.id ? salonBtn(x.id, x.name, { color: c.textSub }) : x.name}
+                            {x.extra ? ` (${x.extra})` : ""}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                    <button type="button" onClick={() => setTab(a.tab)} style={{ fontSize: 11, color: accent, background: "none", border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", padding: "3px 0", flexShrink: 0, fontFamily: "inherit" }}>
+                    <button type="button" onClick={() => { if (a.key === "unfinished") setPayFilter("problems"); setTab(a.tab); }} style={{ fontSize: 11, color: accent, background: "none", border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", padding: "3px 0", flexShrink: 0, fontFamily: "inherit" }}>
                       {a.tabLabel}
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
                     </button>
@@ -756,7 +883,7 @@ export default function AdminDashboard({ onLogout }) {
                 {recent.slice(0, 5).map(s => (
                   <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${c.border}`, fontSize: 13 }}>
                     <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                      <div style={{ fontWeight: 500 }}>{s.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</div>
+                      <div style={{ fontWeight: 500 }}>{salonBtn(s.id, s.business_name || "(no name)")}</div>
                       <div style={{ fontSize: 11, color: c.textMuted }}>{s.email} · {s.city || "—"}{s.referred_by_name ? ` · via ${s.referred_by_name}` : ""}</div>
                     </div>
                     <div data-signup-status style={{ fontSize: 11, color: c.textSub, textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
@@ -1010,7 +1137,7 @@ export default function AdminDashboard({ onLogout }) {
                       return (
                         <tr key={s.id} style={{ borderBottom: `1px solid ${c.border}` }}>
                           <td style={{ padding: "12px 14px" }}>
-                            <a href={`/${s.slug}`} target="_blank" rel="noreferrer" style={{ color: c.text, textDecoration: "none", fontWeight: 500 }}>{s.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</a>
+                            {salonBtn(s.id, s.business_name || "(no name)", { fontWeight: 500 })}
                             {lc && (
                               <div data-sub-cancel-reason style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.4, maxWidth: 360 }}>
                                 Cancelled {fmtDate(lc.created_at)} · <span style={{ color: lc.reason ? c.textSub : c.textMuted }}>{cancelReasonLabel(lc.reason)}</span>
@@ -1045,6 +1172,52 @@ export default function AdminDashboard({ onLogout }) {
                 </table>
               </div>
             </div>
+
+            {/* Betalingen (ronde 3, 12-11-2026): alles wat Mollie meldde, ook
+                checkouts die een salon opende maar niet afmaakte. Tot nu toe
+                zag niemand dat Brilliant Beauty op 10-09 vijf keer begon. */}
+            {(() => {
+              const problems = payFeed.filter(e => e.status === "expired" || e.status === "failed");
+              const list = payFilter === "problems" ? problems : payFeed;
+              const toneCol = { ok: c.success, warn: c.warning, bad: c.danger, muted: c.textMuted };
+              return (
+                <div data-payments style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "14px 18px", marginTop: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>Payments — last 120 days</div>
+                    <div style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+                      {[["all", `All (${payFeed.length})`], ["problems", `Not finished or failed (${problems.length})`]].map(([k, l]) => (
+                        <button key={k} type="button" data-pay-filter={k} onClick={() => { setPayFilter(k); setPayShown(25); }}
+                          style={{ fontSize: 11, padding: "5px 10px", borderRadius: 8, border: `1px solid ${payFilter === k ? accent : c.border}`, background: payFilter === k ? `${accent}1a` : "transparent", color: payFilter === k ? accent : c.textSub, cursor: "pointer", fontFamily: "inherit" }}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 8 }}>Everything Mollie reported: payments, monthly charges, and checkouts a salon opened but did not finish. Amounts in euro.</div>
+                  {list.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: 16, textAlign: "center" }}>Nothing here.</div>}
+                  {list.slice(0, payShown).map(e => {
+                    const p = paymentLabel(e);
+                    // Afgebroken of mislukt, maar daarna toch betaald: geen probleem meer.
+                    const paidLater = paidLaterOf(e);
+                    return (
+                      <div key={e.id} data-pay-row={p.tone} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap", padding: "9px 0", borderTop: `1px solid ${c.border}`, fontSize: 12 }}>
+                        <div style={{ minWidth: 0, flex: "1 1 240px" }}>
+                          <span style={{ color: paidLater ? c.textSub : toneCol[p.tone], fontWeight: 600 }}>{p.label}</span>
+                          <span style={{ color: c.textSub }}> · {salonById.has(e.owner_id) ? salonBtn(e.owner_id, nameOf(e), { color: c.textSub }) : (e.business_name || "(deleted salon)")}</span>
+                          {paidLater && <span data-paid-later style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: c.success, background: `${c.success}1a`, borderRadius: 6, padding: "2px 7px", whiteSpace: "nowrap" }}>paid later</span>}
+                          {e.description && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{e.description}</div>}
+                        </div>
+                        <div style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+                          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 15, color: p.tone === "ok" ? c.text : c.textMuted }}>{fmtEur2(e.amount_eur)}</div>
+                          <div style={{ fontSize: 10, color: c.textMuted }}>{fmtDateTime(e.created_at)}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {list.length > payShown && (
+                    <button type="button" className="btn-ghost" data-pay-more onClick={() => setPayShown(n => n + 50)} style={{ marginTop: 10, fontSize: 11, padding: "7px 12px" }}>Show more ({list.length - payShown})</button>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Opzeggingen met reden (14-10-2026): de salon kiest in het
                 opzegvenster optioneel een reden en kan iets toelichten. Elke
@@ -1128,21 +1301,35 @@ export default function AdminDashboard({ onLogout }) {
                           afspraak; nu "Last booking", en "Last seen" = wanneer
                           de eigenaar de app laatst open had (admin_salons_list). */}
                       {[
-                        ["Salon"], ["Plan"], ["Staff"], ["Appts"], ["Revenue", "Completed appointments, in the salon's own currency."],
-                        ["Last seen", "Last time the owner had Vellu open (login or session refresh, about hourly while the app is open). Staff accounts not counted."],
-                        ["Last booking", "Last time a new appointment was made, by a client online or by the salon."],
-                        ["Signed up"], ["GCal"],
+                        ["Salon", null, "name"], ["Status", "Subscription status (same labels as the Revenue tab), with the plan below.", "status"], ["Staff", null, "staff"], ["Appts", null, "appts"],
+                        ["Revenue", "Completed appointments, in the salon's own currency. Sorting compares the numbers as they are, without converting currencies.", "revenue"],
+                        ["Last seen", "Last time the owner had Vellu open (login or session refresh, about hourly while the app is open). Staff accounts not counted.", "seen"],
+                        ["Last booking", "Last time a new appointment was made, by a client online or by the salon.", "booking"],
+                        ["Signed up", null, "created"], ["GCal"],
                         ["Actions", "Deactivate: reversible (billing stops, booking page closed, logins blocked, data kept). Delete: only after deactivating; removes everything except your invoices."],
-                      ].map(([h, tip]) => (
-                        <th key={h} title={tip} style={{ padding: "12px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, cursor: tip ? "help" : undefined, whiteSpace: "nowrap" }}>{h}</th>
-                      ))}
+                      ].map(([h, tip, key]) => {
+                        const active = key && salonSort.key === key;
+                        return (
+                          <th key={h} title={tip || undefined} aria-sort={active ? (salonSort.dir > 0 ? "ascending" : "descending") : undefined} style={{ padding: "12px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: active ? accent : c.textLabel, whiteSpace: "nowrap" }}>
+                            {key ? (
+                              <button type="button" data-salon-sort={key} onClick={() => setSalonSort(s => s.key === key ? { key, dir: -s.dir } : { key, dir: SORT_DEFAULT_DIR[key] })}
+                                style={{ background: "none", border: "none", padding: 0, font: "inherit", letterSpacing: "inherit", textTransform: "inherit", color: "inherit", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                {h}
+                                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ opacity: active ? 1 : 0.35 }}>
+                                  {active && salonSort.dir > 0 ? <polyline points="6 15 12 9 18 15" /> : <polyline points="6 9 12 15 18 9" />}
+                                </svg>
+                              </button>
+                            ) : <span style={{ cursor: tip ? "help" : undefined }}>{h}</span>}
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleSalons.map(s => (
+                    {sortedSalons.map(s => (
                       <tr key={s.id} data-salon-row={s.slug} style={{ borderBottom: `1px solid ${c.border}`, opacity: s.deactivated_at ? 0.7 : 1 }}>
                         <td style={{ padding: "12px 14px" }}>
-                          <a href={`/${s.slug}`} target="_blank" rel="noreferrer" style={{ color: c.text, textDecoration: "none", fontWeight: 500 }}>{s.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</a>
+                          {salonBtn(s.id, s.business_name || "(no name)", { fontWeight: 500 })}
                           <div style={{ fontSize: 10, color: c.textMuted }}>{s.email} · {s.city || "—"}</div>
                           {s.deactivated_at && (
                             <div data-salon-deactivated style={{ fontSize: 10, color: c.danger, marginTop: 3 }}>
@@ -1150,8 +1337,9 @@ export default function AdminDashboard({ onLogout }) {
                             </div>
                           )}
                         </td>
-                        <td style={{ padding: "12px 14px" }}>
-                          <span style={{ fontSize: 11, color: s.plan ? accent : c.textMuted, fontWeight: s.plan ? 600 : 400 }}>{s.plan || "—"}</span>
+                        <td data-salon-status style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                          <StatusPill badge={signupStatus(s.id).badge} />
+                          <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, textTransform: "capitalize" }}>{[s.plan, subById.get(s.id)?.billing_interval].filter(Boolean).join(" · ") || "—"}</div>
                         </td>
                         <td style={{ padding: "12px 14px", color: c.textSub }}>{s.staff_count}</td>
                         <td style={{ padding: "12px 14px", color: c.textSub }}>
@@ -1265,7 +1453,7 @@ export default function AdminDashboard({ onLogout }) {
             {recent.map(s => (
               <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${c.border}` }}>
                 <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                  <div style={{ fontWeight: 500, fontSize: 13 }}>{s.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</div>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{salonBtn(s.id, s.business_name || "(no name)")}</div>
                   <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
                     {s.email} · {s.city || "—"} · /{s.slug}
                     {s.referred_by_name && <span style={{ color: accent }}> · referred by {s.referred_by_name}</span>}
@@ -1298,7 +1486,7 @@ export default function AdminDashboard({ onLogout }) {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                       <tr style={{ borderBottom: `1px solid ${c.border}` }}>
-                        {["Salon", "Missing", "Signed up", "Last seen", "Status", "Services", "Bookings", "Price list"].map(h => (
+                        {["Salon", "Missing", "Signed up", "Last seen", "Status", "Services", "Bookings", "Emails sent", "Price list"].map(h => (
                           <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, whiteSpace: "nowrap" }}>{h}</th>
                         ))}
                       </tr>
@@ -1307,7 +1495,7 @@ export default function AdminDashboard({ onLogout }) {
                       {stuck.map(o => (
                         <tr key={o.id} data-onboarding-row={o.slug} style={{ borderBottom: `1px solid ${c.border}` }}>
                           <td style={{ padding: "10px" }}>
-                            <a href={`/${o.slug}`} target="_blank" rel="noreferrer" style={{ color: c.text, textDecoration: "none", fontWeight: 500 }}>{o.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</a>
+                            {salonBtn(o.id, o.business_name || "(no name)", { fontWeight: 500 })}
                             <div style={{ fontSize: 10, color: c.textMuted }}><a href={`mailto:${o.email}`} style={{ color: "inherit" }}>{o.email}</a> · {o.country_code || "—"}</div>
                           </td>
                           <td style={{ padding: "10px", color: c.warning, whiteSpace: "nowrap" }}>{o.why === "no_services" ? "No services" : o.appts ? "Only 1 booking" : "No bookings yet"}</td>
@@ -1318,6 +1506,13 @@ export default function AdminDashboard({ onLogout }) {
                           </td>
                           <td style={{ padding: "10px", color: c.textSub }}>{o.visible_services}{o.services !== o.visible_services ? ` (${o.services})` : ""}</td>
                           <td style={{ padding: "10px", color: c.textSub }}>{o.appts}</td>
+                          <td data-onboarding-emails style={{ padding: "10px", fontSize: 10, color: c.textSub, whiteSpace: "nowrap", lineHeight: 1.6 }}>
+                            {(emailsByOwner.get(o.id) || []).length === 0 ? <span style={{ color: c.textMuted }}>—</span> : (emailsByOwner.get(o.id) || []).map((m, k) => (
+                              <div key={k} title={emailKindLabel(m.kind)} style={{ color: m.kind === "no_services" || m.kind === "no_bookings" ? c.text : c.textSub }}>
+                                {EMAIL_KIND_SHORT[m.kind] || m.kind} <span style={{ color: c.textMuted }}>· {dayOf(m.sent_at)}</span>
+                              </div>
+                            ))}
+                          </td>
                           <td style={{ padding: "10px", fontSize: 11, whiteSpace: "nowrap", color: o.last_import_status === "failed" || o.last_import_status === "empty" ? c.danger : c.textSub }}>
                             {o.last_import_at ? `${o.last_import_status}${o.last_import_found != null ? ` · ${o.last_import_found} found` : ""}${o.last_import_added != null ? ` · ${o.last_import_added} added` : ""}` : "—"}
                           </td>
@@ -1537,6 +1732,149 @@ export default function AdminDashboard({ onLogout }) {
           </div>
         )}
       </div>
+
+      {/* ── SALON DETAIL (ronde 3, 12-11-2026): alles over één salon op één
+          plek. Opent vanuit elke salonnaam; sluit met Escape, X of ernaast
+          klikken. Alleen lezen, uit data die de pagina al heeft. ── */}
+      {detailId && (() => {
+        const s = salonById.get(detailId);
+        if (!s) return null;
+        const sub = subById.get(detailId);
+        const ob = onboarding.find(o => o.id === detailId);
+        const st = signupStatus(detailId);
+        const everPaid = paidOwners.has(detailId);
+        const invs = subInvoices.filter(i => i.salon_id === detailId);
+        const pays = payFeed.filter(e => e.owner_id === detailId);
+        const mails = emailsByOwner.get(detailId) || [];
+        const cancel = lastCancelByOwner.get(detailId);
+        const imports = priceImports.filter(p => p.owner_id === detailId);
+        const referrer = s.referred_by ? salonById.get(s.referred_by) : null;
+        const referred = salons.filter(x => x.referred_by === detailId);
+        const subLine = !sub ? null
+          : sub.churning ? (sub.plan_expires_at ? `Cancelled, access ends ${fmtDate(sub.plan_expires_at)}` : "Cancelled")
+          : sub.classification === "paying" ? (sub.plan_expires_at ? `Renews ${fmtDate(sub.plan_expires_at)}` : "Active")
+          : sub.classification === "trialing" ? (sub.trial_ends_at ? `Trial ends ${fmtDate(sub.trial_ends_at)}` : "Trial")
+          : sub.classification === "past_due" ? (everPaid ? (sub.plan_expires_at ? `Unpaid since ${fmtDate(sub.plan_expires_at)}` : "Unpaid") : (sub.trial_ends_at ? `Trial ended ${fmtDate(sub.trial_ends_at)}` : "Trial ended"))
+          : null;
+        const label = { fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel };
+        const Section = ({ title, n, children }) => (
+          <div style={{ marginTop: 22 }}>
+            <div style={{ ...label, marginBottom: 8 }}>{title}{n != null ? ` — ${n}` : ""}</div>
+            {children}
+          </div>
+        );
+        const row = (key, left, right, sub2) => (
+          <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, padding: "7px 0", borderTop: `1px solid ${c.border}`, fontSize: 12 }}>
+            <div style={{ minWidth: 0 }}>{left}{sub2 && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{sub2}</div>}</div>
+            <div style={{ whiteSpace: "nowrap", color: c.textMuted, fontSize: 11, textAlign: "right" }}>{right}</div>
+          </div>
+        );
+        const facts = [
+          ["Signed up", fmtDate(s.created_at)],
+          ["Last seen", s.last_seen ? relTime(s.last_seen) : "—"],
+          ["Last booking", s.last_activity ? relTime(s.last_activity) : "—"],
+          ["Country", s.country_code || "—"],
+          ["Plan", [s.plan, sub?.billing_interval].filter(Boolean).join(" · ") || "—"],
+          ["MRR", fmtEur(sub?.mrr_eur)],
+          ["Appointments", `${s.appt_count} · ${s.completed_count} done · ${s.upcoming_count} upcoming`],
+          ["Revenue", fmtCur(s.country_code, s.total_revenue)],
+          ["Services on booking page", ob ? `${ob.visible_services}${ob.services !== ob.visible_services ? ` (of ${ob.services})` : ""}` : "—"],
+          ["Staff accounts", s.staff_count],
+          ["Google Calendar", s.google_connected ? "connected" : "—"],
+          ["Referral code", s.referral_code || "—"],
+        ];
+        const toneCol = { ok: c.success, warn: c.warning, bad: c.danger, muted: c.textMuted };
+        return (
+          <div onClick={() => setDetailId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 400, display: "flex", justifyContent: "flex-end" }}>
+            <aside data-salon-detail={s.slug} role="dialog" aria-modal="true" aria-label={`${nameOf(s)} details`} onClick={e => e.stopPropagation()}
+              style={{ width: "min(560px, 100%)", height: "100%", overflowY: "auto", overscrollBehavior: "contain", background: c.bg, borderLeft: `1px solid ${c.border}`, color: c.text, padding: "22px 24px 48px", boxSizing: "border-box", fontFamily: "'Jost',sans-serif" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ ...label, color: accent, marginBottom: 6 }}>Salon</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, fontWeight: 300, lineHeight: 1.1, overflowWrap: "anywhere" }}>{nameOf(s)}</div>
+                </div>
+                <button type="button" data-salon-detail-close aria-label="Close" onClick={() => setDetailId(null)}
+                  style={{ width: 36, height: 36, borderRadius: "50%", border: `1px solid ${c.border}`, background: "transparent", color: c.textSub, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+                <StatusPill badge={st.badge} />
+                {subLine && <span style={{ fontSize: 12, color: c.textSub }}>{subLine}</span>}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+                <a href={`/${s.slug}`} target="_blank" rel="noreferrer" className="btn-ghost" style={{ fontSize: 11, padding: "7px 12px", display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none" }}>
+                  Booking page
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+                </a>
+                {s.email && (
+                  <a href={`mailto:${s.email}`} className="btn-ghost" style={{ fontSize: 11, padding: "7px 12px", display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", textTransform: "none", letterSpacing: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><rect x="3" y="5" width="18" height="14" rx="2" /><polyline points="3 7 12 13 21 7" /></svg>
+                    {s.email}
+                  </a>
+                )}
+              </div>
+              {s.deactivated_at && (
+                <div style={{ marginTop: 14, fontSize: 12, color: c.danger, background: `${c.danger}14`, border: `1px solid ${c.danger}44`, borderRadius: 8, padding: "9px 12px" }}>
+                  Deactivated {fmtDate(s.deactivated_at)}{s.deactivated_reason ? ` · ${s.deactivated_reason}` : ""}
+                </div>
+              )}
+
+              <div data-salon-facts style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px 18px", marginTop: 20 }}>
+                {facts.map(([k, v]) => (
+                  <div key={k}>
+                    <div style={label}>{k}</div>
+                    <div style={{ fontSize: 13, marginTop: 3, overflowWrap: "anywhere", textTransform: k === "Plan" ? "capitalize" : undefined }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              {(referrer || referred.length > 0) && (
+                <div style={{ fontSize: 12, color: c.textSub, marginTop: 14, lineHeight: 1.6 }}>
+                  {referrer && <div>Came via {salonBtn(referrer.id, nameOf(referrer), { color: c.textSub })}</div>}
+                  {referred.length > 0 && <div>Brought in {referred.map((x, k) => <span key={x.id}>{k > 0 && ", "}{salonBtn(x.id, nameOf(x), { color: c.textSub })}</span>)}</div>}
+                </div>
+              )}
+
+              {cancel && (
+                <Section title="Cancellation">
+                  <div style={{ fontSize: 12, color: c.textSub, lineHeight: 1.6 }}>
+                    Cancelled {fmtDate(cancel.created_at)}{cancel.access_until ? `, access until ${fmtDate(cancel.access_until)}` : ""} · {cancelReasonLabel(cancel.reason)}
+                    {cancel.note && <div style={{ color: c.text }}>“{cancel.note}”</div>}
+                  </div>
+                </Section>
+              )}
+
+              <Section title="Emails Vellu sent" n={mails.length}>
+                {mails.length === 0
+                  ? <div style={{ fontSize: 12, color: c.textMuted }}>No account emails (activation or trial) yet.</div>
+                  : mails.map((m, k) => row(k, emailKindLabel(m.kind), fmtDateTime(m.sent_at)))}
+              </Section>
+
+              <Section title="Payments, last 120 days" n={pays.length}>
+                {pays.length === 0
+                  ? <div style={{ fontSize: 12, color: c.textMuted }}>Nothing from Mollie.</div>
+                  : pays.map(e => {
+                    const p = paymentLabel(e);
+                    const paidLater = paidLaterOf(e);
+                    return row(e.id, <><span style={{ color: paidLater ? c.textSub : toneCol[p.tone], fontWeight: 600 }}>{p.label}</span>{paidLater && <span style={{ marginLeft: 8, fontSize: 10, color: c.success }}>paid later</span>}</>, <>{fmtEur2(e.amount_eur)}<div style={{ fontSize: 10 }}>{fmtDateTime(e.created_at)}</div></>, e.description);
+                  })}
+              </Section>
+
+              <Section title="Invoices" n={invs.length}>
+                {invs.length === 0
+                  ? <div style={{ fontSize: 12, color: c.textMuted }}>No invoices.</div>
+                  : invs.map(i => row(i.invoice_number, <span style={{ fontFamily: "monospace", fontSize: 11 }}>{i.invoice_number}</span>, <>{fmtEur2(i.total_eur)}<div style={{ fontSize: 10 }}>{fmtDate(i.issued_on)}</div></>, [i.plan, i.billing_interval].filter(Boolean).join(" · ")))}
+              </Section>
+
+              {imports.length > 0 && (
+                <Section title="Price lists uploaded" n={imports.length}>
+                  {imports.map(p => row(p.id, p.status === "ok" ? `${p.services_found} found${p.applied_at ? `, ${p.services_added} added` : ", not added"}` : p.status, fmtDateTime(p.created_at)))}
+                </Section>
+              )}
+            </aside>
+          </div>
+        );
+      })()}
     </Layout>
   );
 }
