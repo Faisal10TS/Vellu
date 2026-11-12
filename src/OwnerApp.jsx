@@ -2259,7 +2259,7 @@ function ExtraAdder({ serviceId, lang, t, accent, onAdd, nextPosition = 0, cur =
 // `accountType`: optioneel ("team" | "joint"); zonder prop leest hij het type
 // van het opgeslagen profiel. Alleen bij een teamaccount gaat er na het
 // toevoegen een uitnodiging per e-mail uit.
-function StaffAdder({ ownerId, services, lang, t, accent, onAdd, salonHours, accountType }) {
+function StaffAdder({ ownerId, services, lang, t, accent, onAdd, salonHours, accountType, isStarter = false }) {
   const { colors: c } = useTheme();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -2297,6 +2297,12 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd, salonHours, acc
         // waarom, i.p.v. stil niets te doen (vroeger kon zij zichzelf koppelen
         // door met dit adres een account te maken; dat kan niet meer).
         toast.show(lang === "nl" ? `Teamlid toegevoegd. Met een gedeeld account krijgt zij geen eigen login; kies ${t.teamAccount} bij ${t.accountType} als zij zelf moet kunnen inloggen.` : lang === "es" ? `Miembro añadido. Con una cuenta compartida no recibe acceso propio; elige ${t.teamAccount} en ${t.accountType} si debe poder entrar por su cuenta.` : `Team member added. With a joint account they do not get their own login; choose ${t.teamAccount} under ${t.accountType} if they should be able to sign in themselves.`);
+        return;
+      }
+      // Eigen login per medewerker is Professional (Faisal 12-11-2026), dus
+      // op Starter geen uitnodiging. create-staff-account weigert hem ook.
+      if (isStarter) {
+        toast.show(lang === "nl" ? "Teamlid toegevoegd. Een eigen login voor je medewerkers zit in Professional." : lang === "es" ? "Miembro añadido. Un acceso propio para tu equipo está en Professional." : "Team member added. Your team's own logins are part of Professional.");
         return;
       }
       const { data, error } = await supabase.functions.invoke("create-staff-account", {
@@ -2364,6 +2370,8 @@ function StaffAdder({ ownerId, services, lang, t, accent, onAdd, salonHours, acc
           // Gedeeld account: het adres krijgt wel meldingen van haar boekingen
           // (book-appointment staff_emails), maar geen login.
           ? (lang === "nl" ? `Met een gedeeld account loggen jullie allemaal met dezelfde login in. Op dit adres krijgt de medewerker meldingen van haar boekingen. Een eigen login kan alleen met een teamaccount (${t.accountType}: ${t.teamAccount}).` : lang === "es" ? `Con una cuenta compartida todos usan el mismo acceso. En este correo el miembro recibe avisos de sus reservas. Un acceso propio solo es posible con una cuenta de equipo (${t.accountType}: ${t.teamAccount}).` : `With a joint account everyone signs in with the same login. This address gets notifications about their bookings. Their own login is only possible with a team account (${t.accountType}: ${t.teamAccount}).`)
+          // Teamaccount op Starter: een eigen login is Professional.
+          : isStarter ? (lang === "nl" ? "Een eigen login voor je medewerkers zit in Professional. Op dit adres krijgt de medewerker wel meldingen van haar boekingen." : lang === "es" ? "Un acceso propio para tu equipo está en Professional. En este correo el miembro sí recibe avisos de sus reservas." : "Your team's own logins are part of Professional. This address still gets notifications of their bookings.")
           : (lang === "nl" ? "Voeg een e-mailadres toe als de medewerker in moet kunnen loggen op hun eigen dashboard. Bij een teamaccount krijgt zij daarna een uitnodigingslink per e-mail." : lang === "es" ? "Añade un correo si este miembro del personal debe poder acceder a su propio panel. Con una cuenta de equipo recibirá después un enlace de invitación por correo." : "Add an email if this staff member should be able to log into their own dashboard. With a team account they then get an invitation link by email.")}</div>
       </div>
       {services.length > 0 && (
@@ -20148,8 +20156,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 // Uitnodiging per e-mail: create-staff-account maakt een eenmalige
                 // link (7 dagen geldig) en Vellu mailt die; daarmee maakt de
                 // medewerker zelf haar login. Alleen een bekend e-mailadres koppelt
-                // niet meer. Geen plan-slot: het oude koppelen op e-mail werkte ook
-                // op Starter; alleen "Login aanmaken" met wachtwoord is Professional.
+                // niet meer. Sinds 12-11-2026 Professional, net als "Login
+                // aanmaken" met wachtwoord (Faisal: eigen login per medewerker =
+                // Pro, zoals de prijzen zeggen). Bestaande logins blijven werken.
                 const mailStaffInvite = async (m, email) => {
                   setStaffInvite(prev => ({ ...prev, [m.id]: { ...(prev[m.id] || {}), mailing: true } }));
                   let code = null;
@@ -20167,6 +20176,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   }
                   toast.show(code === "rate_limited"
                     ? (lang === "nl" ? "Te veel pogingen achter elkaar. Probeer het over een minuut opnieuw." : lang === "es" ? "Demasiados intentos seguidos. Inténtalo de nuevo en un minuto." : "Too many attempts in a row. Try again in a minute.")
+                    : code === "plan_required"
+                    ? (lang === "nl" ? "Een eigen login voor je medewerkers zit in Professional." : lang === "es" ? "Un acceso propio para tu equipo está en Professional." : "Your team's own logins are part of Professional.")
                     : code === "not_invitable"
                     ? (lang === "nl" ? "Deze medewerker heeft al een login of nog geen e-mailadres." : lang === "es" ? "Este miembro del equipo ya tiene acceso o aún no tiene correo." : "This team member already has a login or no e-mail address yet.")
                     : (lang === "nl" ? "De uitnodiging kon niet worden verstuurd. Probeer het later opnieuw." : lang === "es" ? "No se pudo enviar la invitación. Inténtalo más tarde." : "The invitation could not be sent. Please try again later."), "error");
@@ -20420,7 +20431,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                               // Nieuw of gewijzigd e-mailadres zonder login: meteen de
                               // uitnodiging mailen (best effort, eigen melding). Niet naar
                               // het eigen adres van de eigenaar (haar eigen teamrij).
-                              if (salonData.account_type === "team" && !m.user_id && m.active !== false && emailTrim
+                              if (salonData.account_type === "team" && !isStarter && !m.user_id && m.active !== false && emailTrim
                                 && emailTrim !== String(m.email || "").trim().toLowerCase()
                                 && emailTrim !== String(user?.email || "").trim().toLowerCase()) {
                                 mailStaffInvite(m, emailTrim);
@@ -20534,8 +20545,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                               : "She is inactive. Activate her first if she needs a login."}
                           </div>
                         )}
-                        {/* Uitnodiging per e-mail: op elk plan (zie mailStaffInvite). */}
-                        {salonData.account_type === "team" && !m.user_id && m.active !== false && (
+                        {/* Uitnodiging per e-mail: Professional (zie mailStaffInvite). */}
+                        {salonData.account_type === "team" && !isStarter && !m.user_id && m.active !== false && (
                           <div style={{ padding: "12px", background: `${accent}08`, border: `1px solid ${accent}22`, borderRadius: 12, marginBottom: 8 }}>
                             <div style={{ fontSize: 10, fontWeight: 600, color: accent, marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}><NavIcon name="mail" size={10} color={accent} /> {lang === "nl" ? "Uitnodiging per e-mail" : lang === "es" ? "Invitación por correo" : "Invitation by e-mail"}</div>
                             <div style={{ fontSize: 10, color: c.textSub, lineHeight: 1.45, marginBottom: m.email ? 8 : 0 }}>
@@ -20546,10 +20557,10 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             {m.email && inviteKnop(m)}
                           </div>
                         )}
-                        {/* Zelf een login met wachtwoord aanmaken is Professional. */}
+                        {/* Eigen login (uitnodiging of zelf met wachtwoord) is Professional. */}
                         {salonData.account_type === "team" && !m.user_id && m.active !== false && isStarter && (
                           <div style={{ padding: "12px", background: `${accent}08`, border: `1px dashed ${accent}33`, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                            <div style={{ fontSize: 10, color: c.textSub }}><NavIcon name="key" size={10} color={accent} /> {lang === "nl" ? "Zelf een login met wachtwoord aanmaken zit in Professional." : lang === "es" ? "Crear tú un acceso con contraseña es una función de Professional." : "Creating a login with a password yourself is a Professional feature."}</div>
+                            <div style={{ fontSize: 10, color: c.textSub }}><NavIcon name="key" size={10} color={accent} /> {lang === "nl" ? "Een eigen login voor je medewerkers zit in Professional." : lang === "es" ? "Un acceso propio para tu equipo está en Professional." : "Your team's own logins are part of Professional."}</div>
                             <button className="btn-ghost" style={{ fontSize: 10, padding: "6px 12px", color: accent, borderColor: `${accent}44` }} onClick={goUpgrade}>{lang === "nl" ? "Upgraden" : lang === "es" ? "Mejorar plan" : "Upgrade"}</button>
                           </div>
                         )}
@@ -20637,12 +20648,12 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 {isStarter && (salonData.staff || []).length >= 3 ? (
                   <UpgradeCard feature={lang === "nl" ? "Meer dan 3 medewerkers" : lang === "es" ? "Más de 3 empleados" : "More than 3 staff members"} compact lang={lang} c={c} accent={accent} onUpgrade={goUpgrade} />
                 ) : (
-                <StaffAdder ownerId={salonData.owner_id} services={salonData.services} lang={lang} t={t} accent={accent} salonHours={salonData.business_hours} onAdd={(member) => {
+                <StaffAdder ownerId={salonData.owner_id} services={salonData.services} lang={lang} t={t} accent={accent} salonHours={salonData.business_hours} isStarter={isStarter} onAdd={(member) => {
                   update(d => { d.staff = [...(d.staff || []), member]; return d; });
-                  // StaffAdder mailt in een teamsalon meteen de uitnodiging; de knop
-                  // op de kaart zegt dan "Opnieuw mailen" (een nieuwe link maakt
-                  // die eerste ongeldig).
-                  if (salonData.account_type === "team" && member?.email) setStaffInvite(prev => ({ ...prev, [member.id]: { ...(prev[member.id] || {}), mailed: true } }));
+                  // StaffAdder mailt in een teamsalon (Professional) meteen de
+                  // uitnodiging; de knop op de kaart zegt dan "Opnieuw mailen"
+                  // (een nieuwe link maakt die eerste ongeldig).
+                  if (salonData.account_type === "team" && !isStarter && member?.email) setStaffInvite(prev => ({ ...prev, [member.id]: { ...(prev[member.id] || {}), mailed: true } }));
                 }} />
                 )}
               </div>

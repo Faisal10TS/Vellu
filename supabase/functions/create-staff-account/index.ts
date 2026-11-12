@@ -128,6 +128,11 @@ serve(async (req) => {
         .maybeSingle();
       if (rowErr) return reply(500, { error: "lookup_failed" });
       if (!row || row.owner_id !== callerId) return reply(403, { error: "forbidden" });
+      // Eigen login per medewerker is Professional (12-11-2026), ook via de
+      // uitnodiging; zelfde regel als "Login aanmaken" hieronder. Bestaande
+      // logins blijven werken: dit raakt alleen nieuwe uitnodigingen.
+      const { data: inviter } = await supabase.from("profiles").select("plan").eq("id", callerId).maybeSingle();
+      if (inviter?.plan === "starter") return reply(403, { error: "plan_required" });
       const inviteEmail = String(row.email || "").trim().toLowerCase();
       // Een inactief teamlid krijgt geen uitnodiging: inactief = geen toegang.
       if (!inviteEmail || row.user_id || row.active === false) return reply(400, { error: "not_invitable" });
