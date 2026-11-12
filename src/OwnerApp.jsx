@@ -742,7 +742,10 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, days = null, prefix, 
       // afspraak; het nummer dat de klant bij haar laatste boeking invulde
       // is daarom de terugval. Ook lege nummers overslaan: anders "won" een
       // nieuwere boeking zonder nummer van een oudere mét nummer.
-      supabase.from("appointments").select("client_email, client_name, client_phone, date").eq("owner_id", uid).or(orIlike("client_email", part)).not("client_phone", "is", null).neq("client_phone", "").order("date", { ascending: false }),
+      // Alle pagina's: 40 vaste klanten met elk 25+ bezoeken halen samen de
+      // PostgREST-grens van 1000, en dan viel wie het langst geleden kwam
+      // stil weg (geen nummer, geen WhatsApp-knop). Datum + id = vaste volgorde.
+      fetchAllRows(() => supabase.from("appointments").select("client_email, client_name, client_phone, date").eq("owner_id", uid).or(orIlike("client_email", part)).not("client_phone", "is", null).neq("client_phone", "").order("date", { ascending: false }).order("id")),
     ])));
     const m = [], cl = [], ap = [];
     for (const [rm, rc, ra] of results) { m.push(...(rm.data || [])); cl.push(...(rc.data || [])); ap.push(...(ra.data || [])); }
@@ -2049,8 +2052,8 @@ function QtyStepper({ value, onChange, max = 10, accent, c }) {
 }
 
 // Owner-facing proofreader. One click sends the salon's service names to the
-// check-translations edge function (Claude) and lists genuine typos / NL-EN
-// mismatches with a suggested fix. Nothing changes until the owner clicks
+// check-translations edge function (Claude) and lists genuine typos and
+// translations (NL / EN / ES) that don't match, with a suggested fix. Nothing changes until the owner clicks
 // Apply; beauty jargon (wispy, PMU, foreign fill…) is never flagged.
 function TranslationChecker({ lang, accent, onApply }) {
   const { colors: c } = useTheme();
@@ -2062,7 +2065,7 @@ function TranslationChecker({ lang, accent, onApply }) {
   const run = async () => {
     setState("loading");
     try {
-      const { data, error } = await supabase.functions.invoke("check-translations", { body: {} });
+      const { data, error } = await supabase.functions.invoke("check-translations", { body: { lang } });
       if (error || !data || data.error) {
         toast.show(lang === "nl" ? "Controle mislukt, probeer het opnieuw." : lang === "es" ? "La verificación falló, inténtalo de nuevo." : "Check failed, please try again.", "error");
         setState("idle");
@@ -2090,7 +2093,9 @@ function TranslationChecker({ lang, accent, onApply }) {
   };
 
   const ignoreOne = (issue) => setIssues(prev => prev.filter(i => !(i.id === issue.id && i.field === issue.field)));
-  const langLabel = (f) => f === "name_nl" ? (lang === "nl" ? "Nederlands" : lang === "es" ? "Neerlandés" : "Dutch") : (lang === "nl" ? "Engels" : lang === "es" ? "Inglés" : "English");
+  const langLabel = (f) => f === "name_nl" ? (lang === "nl" ? "Nederlands" : lang === "es" ? "Neerlandés" : "Dutch")
+    : f === "name_es" ? (lang === "nl" ? "Spaans" : lang === "es" ? "Español" : "Spanish")
+    : (lang === "nl" ? "Engels" : lang === "es" ? "Inglés" : "English");
 
   return (
     <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: 16, marginBottom: 20 }}>
@@ -2098,7 +2103,7 @@ function TranslationChecker({ lang, accent, onApply }) {
         <div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{lang === "nl" ? "Vertalingen controleren" : lang === "es" ? "Revisar traducciones" : "Check translations"}</div>
           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 3, lineHeight: 1.5, maxWidth: 420 }}>
-            {lang === "nl" ? "Laat AI je dienstnamen (NL + EN) nakijken op typefouten en verkeerde vertalingen. Vakjargon (wispy, PMU…) blijft ongemoeid." : lang === "es" ? "Deja que la IA revise los nombres de tus servicios (NL + EN) en busca de erratas y traducciones incorrectas. Los términos del sector (wispy, PMU…) se dejan tal cual." : "Let AI proofread your service names (NL + EN) for typos and wrong translations. Industry terms (wispy, PMU…) are left alone."}
+            {lang === "nl" ? "Laat AI je dienstnamen in het Nederlands, Engels en Spaans nakijken op typefouten en verkeerde vertalingen. Vakjargon (wispy, PMU…) blijft ongemoeid." : lang === "es" ? "Deja que la IA revise los nombres de tus servicios en neerlandés, inglés y español en busca de erratas y traducciones incorrectas. Los términos del sector (wispy, PMU…) se dejan tal cual." : "Let AI proofread your service names in Dutch, English and Spanish for typos and wrong translations. Industry terms (wispy, PMU…) are left alone."}
           </div>
         </div>
         <button className="btn-ghost" style={{ padding: "9px 16px", color: accent, borderColor: `${accent}55`, whiteSpace: "nowrap" }} disabled={state === "loading"} onClick={run}>
@@ -18556,7 +18561,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   in een box"). */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
 
-              {/* AI proofreader for the salon's own service names (NL + EN). */}
+              {/* AI proofreader for the salon's own service names (NL, EN en sinds 12-11-2026 ES). */}
               <TranslationChecker lang={lang} accent={accent} onApply={async (issue) => {
                 const patch = { [issue.field]: issue.suggestion };
                 // The primary `name` column mirrors name_nl — keep it in sync.
