@@ -259,6 +259,18 @@ b.client_email=w.client_email||"";
 b.client_name=w.client_name||"";
 if(["nl","en","es"].includes(w.lang))b.lang=w.lang;
 }
+// MAILPLAFOND PER SALON (audit 05-10-2026, zwakke plek 2; sinds 12-11-2026).
+// Aanmelden is open en een eigenaar mag afspraken met elk adres aanmaken; zo
+// kon één account onbeperkt mails via Vellu laten versturen. claim_salon_email
+// telt elke aanvraag met een login en weigert boven 120 per uur / 400 per 24
+// uur (salon jonger dan 7 dagen: 30 / 100). Server-aanroepen tellen niet mee.
+// Lukt de telling zelf niet, dan gaat de mail gewoon uit: liever een gemiste
+// telling dan een gemiste bevestiging.
+try{
+const lr=await fetch(`${SU}/rest/v1/rpc/claim_salon_email`,{method:"POST",headers:{"apikey":SK,"Authorization":`Bearer ${SK}`,"Content-Type":"application/json"},body:JSON.stringify({p_owner:salonId,p_kind:String(type||"")})});
+if(lr.ok){const v=await lr.json();if(v==="hour"||v==="day")return deny("mail_limit",429);}
+else console.error("claim_salon_email failed:",lr.status,(await lr.text().catch(()=>"")).slice(0,200));
+}catch(e){console.error("claim_salon_email error:",e);}
 }
 const lang=b.lang||"nl";const nD=fmtD(b.date,lang);CURSYM=(typeof b.currency==="string"&&b.currency.trim())?b.currency.replace(/^\s+/,""):"€";
 // Owner-facing emails (booking_notification, owner_cancellation,

@@ -85,6 +85,12 @@ function clientIp(req: Request): string {
   return String(ip || "").trim() || "unknown";
 }
 
+// Hoe vaak één e-mailadres zich binnen 24 uur mag aanmelden: bij één salon en
+// bij alle salons samen. Elke aanmelding = één mail naar het adres en één naar
+// de salon. Zie het plafond in de handler.
+const MAX_PER_SALON_PER_DAY = 5;
+const MAX_TOTAL_PER_DAY = 15;
+
 const isEmail = (s: unknown) => typeof s === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
 // "Vandaag" in de tijdzone van de salon (zelfde tabel als book-appointment):
@@ -281,36 +287,79 @@ serve(async (req) => {
 
   // Al wachtend voor die dag (zelfde salon, zelfde adres)? Dan niet nog een rij
   // en niet nog een mail: een tweede klik of een herhaalde aanroep stuurt niets.
-  const { data: bestaand, error: bestaandErr } = await supabase
-    .from("waitlist")
-    .select("date, client_email")
-    .eq("owner_id", ownerId)
-    .eq("status", "waiting")
-    .in("date", dates)
-    .ilike("client_email", likeEscape(clientEmail));
-  if (bestaandErr) return json(500, { error: "waitlist_lookup_failed" }, origin);
-  const alWachtend = new Set((bestaand || [])
-    .filter((r: any) => String(r.client_email || "").trim().toLowerCase() === clientEmail)
-    .map((r: any) => String(r.date)));
-  const nieuweDagen = dates.filter((d) => !alWachtend.has(d));
+  const nogNietWachtend = async (): Promise<string[] | null> => {
+    const { data: bestaand, error: bestaandErr } = await supabase
+      .from("waitlist")
+      .select("date, client_email")
+      .eq("owner_id", ownerId)
+      .eq("status", "waiting")
+      .in("date", dates)
+      .ilike("client_email", likeEscape(clientEmail));
+    if (bestaandErr) return null;
+    const alWachtend = new Set((bestaand || [])
+      .filter((r: any) => String(r.client_email || "").trim().toLowerCase() === clientEmail)
+      .map((r: any) => String(r.date)));
+    return dates.filter((d) => !alWachtend.has(d));
+  };
+  let nieuweDagen = await nogNietWachtend();
+  if (!nieuweDagen) return json(500, { error: "waitlist_lookup_failed" }, origin);
   if (nieuweDagen.length === 0) return json(200, { success: true, inserted: 0 }, origin);
 
-  const { data: inserted, error: insErr } = await supabase
+  // Mailplafond per adres (audit 05-10, zwakke plek 3). Elke geslaagde
+  // aanmelding stuurt één mail naar dit adres en één naar de salon. Zonder
+  // plafond kon iemand met andermans adres steeds een nieuwe dag kiezen en zo
+  // tientallen mails laten versturen. Eén aanmelding = één insert, en alle
+  // rijen daarvan delen dezelfde created_at; zo tellen we aanmeldingen, niet
+  // dagen. Een echte klant komt hier nooit aan: die meldt zich hooguit een
+  // paar keer aan.
+  const sinds = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: recent, error: recentErr } = await supabase
     .from("waitlist")
-    .insert(nieuweDagen.map((d) => ({
-      owner_id: ownerId,
-      staff_id: staffId,
-      date: d,
-      client_name: clientName,
-      client_email: clientEmail,
-      client_phone: clientPhone,
-      service_ids: serviceIds.length ? serviceIds : null,
-      notes,
-      status: "waiting",
-      lang: rowLang,
-    })))
-    .select("date, client_name, client_email, client_phone, notes");
-  if (insErr || !inserted || inserted.length === 0) {
+    .select("owner_id, client_email, created_at")
+    .ilike("client_email", likeEscape(clientEmail))
+    .gte("created_at", sinds)
+    .limit(1000);
+  if (recentErr) return json(500, { error: "waitlist_lookup_failed" }, origin);
+  const eigen = (recent || []).filter((r: any) => String(r.client_email || "").trim().toLowerCase() === clientEmail);
+  const aanmeldingen = new Set(eigen.map((r: any) => String(r.created_at))).size;
+  const hierAanmeldingen = new Set(eigen.filter((r: any) => r.owner_id === ownerId).map((r: any) => String(r.created_at))).size;
+  if (hierAanmeldingen >= MAX_PER_SALON_PER_DAY || aanmeldingen >= MAX_TOTAL_PER_DAY) {
+    return json(429, { error: "waitlist_limit" }, origin);
+  }
+
+  // Twee identieke aanvragen tegelijk kwamen allebei langs de controle
+  // hierboven en zetten dan allebei rijen neer, met twee keer mail. Sinds
+  // 12-11-2026 houdt de unieke index waitlist_waiting_unique (salon, adres,
+  // dag, alleen status 'waiting') de tweede tegen: die krijgt 23505. Dan kijken
+  // we opnieuw welke dagen echt nog nieuw zijn; zijn dat er geen, dan heeft de
+  // andere aanvraag alles al gedaan (inclusief de mails) en melden we 0.
+  const rijen = (dagen: string[]) => dagen.map((d) => ({
+    owner_id: ownerId,
+    staff_id: staffId,
+    date: d,
+    client_name: clientName,
+    client_email: clientEmail,
+    client_phone: clientPhone,
+    service_ids: serviceIds.length ? serviceIds : null,
+    notes,
+    status: "waiting",
+    lang: rowLang,
+  }));
+  let inserted: any[] | null = null;
+  let insErr: any = null;
+  for (let poging = 0; poging < 3; poging++) {
+    const r = await supabase
+      .from("waitlist")
+      .insert(rijen(nieuweDagen))
+      .select("date, client_name, client_email, client_phone, notes");
+    if (!r.error) { inserted = r.data; break; }
+    insErr = r.error;
+    if (r.error.code !== "23505") break;
+    nieuweDagen = await nogNietWachtend();
+    if (!nieuweDagen) return json(500, { error: "waitlist_lookup_failed" }, origin);
+    if (nieuweDagen.length === 0) return json(200, { success: true, inserted: 0 }, origin);
+  }
+  if (!inserted || inserted.length === 0) {
     console.error("waitlist insert failed:", insErr);
     return json(500, { error: "insert_failed" }, origin);
   }

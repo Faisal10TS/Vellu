@@ -2241,7 +2241,11 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           ? (lang === "nl" ? "De wachtlijst is bij deze salon niet beschikbaar." : lang === "es" ? "La lista de espera no está disponible en este salón." : "The waitlist isn't available at this salon.")
           : code === "rate_limited"
             ? (lang === "nl" ? "Te veel pogingen, probeer het zo opnieuw." : lang === "es" ? "Demasiados intentos, inténtalo de nuevo en un momento." : "Too many attempts, try again in a moment.")
-            : T[lang].waitlistSubmitError);
+            // Mailplafond per adres in waitlist-notify (5 per salon, 15 in
+            // totaal, per 24 uur).
+            : code === "waitlist_limit"
+              ? (lang === "nl" ? "Dit e-mailadres is vandaag al vaak op de wachtlijst gezet. Probeer het morgen opnieuw of neem contact op met de salon." : lang === "es" ? "Este correo ya se ha apuntado muchas veces hoy a la lista de espera. Inténtalo mañana o contacta con el salón." : "This email address has joined the waitlist many times today. Try again tomorrow or contact the salon.")
+              : T[lang].waitlistSubmitError);
       return;
     }
     setWaitlistDone(true);

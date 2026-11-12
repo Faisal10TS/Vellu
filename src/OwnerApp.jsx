@@ -5988,6 +5988,18 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // the URL bar collapses, visualViewport.resize fires and we re-measure → buffer goes to 0.
   const toast = useToast();
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
+  // Mailplafond per salon bereikt (send-emails 429 mail_limit, zie sendEmails
+  // in shared.jsx): één melding, hooguit één per minuut. Een gewone salon komt
+  // er nooit aan (120 per uur, 400 per dag), maar als het gebeurt moet ze
+  // weten dat die mail niet de deur uit ging.
+  const mailLimitToastRef = useRef(null);
+  mailLimitToastRef.current = () => toast.show(lang === "nl" ? "Te veel e-mails in korte tijd: deze mail is niet verstuurd. Probeer het over een uur opnieuw." : lang === "es" ? "Demasiados correos en poco tiempo: este correo no se envió. Inténtalo de nuevo en una hora." : "Too many emails in a short time: this email was not sent. Try again in an hour.", "error");
+  useEffect(() => {
+    let last = 0;
+    const onLimit = () => { if (Date.now() - last < 60000) return; last = Date.now(); mailLimitToastRef.current?.(); };
+    window.addEventListener("vellu:mail-limit", onLimit);
+    return () => window.removeEventListener("vellu:mail-limit", onLimit);
+  }, []);
   // No-show-vergoeding (verzoek van een salon via Faisal, 16-09): aanzetten
   // opent eerst de vraag of de zin in het boekingsbeleid mag — zonder die zin
   // heeft de salon geen grond om iets te rekenen. noShowFeeAsk = het gekozen

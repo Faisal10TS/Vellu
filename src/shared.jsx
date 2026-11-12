@@ -488,6 +488,12 @@ async function sendEmails(type, booking) {
     });
     if (error) {
       console.error("Email error:", error);
+      // Mailplafond per salon bereikt (send-emails 429 mail_limit, sinds
+      // 12-11-2026): OwnerApp en StaffApp tonen dan één melding. Een losse
+      // aanroeper hoeft daar niets voor te doen.
+      try {
+        if (error.context?.status === 429 && typeof window !== "undefined") window.dispatchEvent(new CustomEvent("vellu:mail-limit"));
+      } catch { /* melding is bijzaak */ }
       return { success: false, error };
     }
     return { success: true, data };

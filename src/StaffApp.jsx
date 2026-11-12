@@ -149,6 +149,16 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   };
   const { confirmState, confirm: showConfirm, handleYes: confirmYes, handleNo: confirmNo } = useConfirm();
   const toast = useToast();
+  // Mailplafond per salon bereikt (send-emails 429 mail_limit): zelfde melding
+  // als in OwnerApp, hooguit één per minuut.
+  const mailLimitToastRef = useRef(null);
+  mailLimitToastRef.current = () => toast.show(lang === "nl" ? "Te veel e-mails in korte tijd: deze mail is niet verstuurd. Probeer het over een uur opnieuw." : lang === "es" ? "Demasiados correos en poco tiempo: este correo no se envió. Inténtalo de nuevo en una hora." : "Too many emails in a short time: this email was not sent. Try again in an hour.", "error");
+  useEffect(() => {
+    let last = 0;
+    const onLimit = () => { if (Date.now() - last < 60000) return; last = Date.now(); mailLimitToastRef.current?.(); };
+    window.addEventListener("vellu:mail-limit", onLimit);
+    return () => window.removeEventListener("vellu:mail-limit", onLimit);
+  }, []);
 
   const [view, setView] = useState("dashboard");
   // Scroll-nudge na iOS-toetsenbord-dismiss voor overgebleven fixed elementen;
@@ -388,14 +398,30 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // boeking, geen annulering, niets — tot hij de pagina herlaadde. Precies het
   // euvel dat de dep hierboven moest verhelpen, alleen erger. Met een naam per
   // filter is het tweede kanaal echt nieuw en meldt het zich netjes aan.
+  //
+  // Omzet of klantgegevens voor het team uit: dan GEEN realtime op
+  // appointments. Dat kanaal levert altijd de volle rij (prijzen, betaald
+  // bedrag, e-mail, telefoon) aan het toestel; stripRow verborg ze alleen op
+  // het scherm, in het netwerkverkeer stonden ze er gewoon (audit 05-10,
+  // zwakke plek 1). Restrisico: de UPDATE-rechten van een medewerker leunen
+  // op leesrecht op de EIGEN afspraken, dus met een zelfgebouwd verzoek zijn
+  // die rijen nog te lezen. Dichtzetten vraagt dat alle wijzigingen van
+  // medewerkers via RPC's lopen. In plaats daarvan elke 30 seconden de inhaalslag
+  // via staff_list_appointments, die de velden op de server al weglaat. Het
+  // scherm loopt hooguit een halve minuut achter; terugkeren naar de app
+  // haalt meteen op (zie het inhaal-effect hieronder).
+  const liveRows = showMoney && showContact;
   useEffect(() => {
     if (!staffMember.id || !salonProfile.id) return;
+    if (!liveRows) {
+      const iv = setInterval(() => resyncApptsRef.current?.(), 30000);
+      return () => clearInterval(iv);
+    }
     const channel = supabase
       .channel(`staff-appointments-${seeAll ? `all-${salonProfile.id}` : staffMember.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: seeAll ? `owner_id=eq.${salonProfile.id}` : `staff_id=eq.${staffMember.id}` }, (payload) => {
-        // Realtime levert de volle rij; eerst dezelfde velden eraf als de RPC
-        // wegstript wanneer omzet of klantgegevens voor het team uit staan.
-        // (Op de lijn zitten ze nog wel: restrisico, zie audit S1-12.)
+        // Dit kanaal draait alleen als alles zichtbaar is (liveRows), dus
+        // stripRow laat de rij hier ongemoeid; hij blijft als vangnet staan.
         const row = stripRowRef.current(payload.new);
         if (payload.eventType === "INSERT") {
           // Tijdens het omzetten van de schakelaar leeft het oude kanaal nog even
@@ -414,7 +440,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       // zie het inhaal-effect hieronder.
       .subscribe((status) => { if (status === "SUBSCRIBED") resyncApptsRef.current?.(); });
     return () => { supabase.removeChannel(channel); };
-  }, [staffMember.id, salonProfile.id, seeAll]);
+  }, [staffMember.id, salonProfile.id, seeAll, liveRows]);
 
   // ── Inhaalslag na afwezigheid ────────────────────────────────
   // Zelfde gat als in OwnerApp (daar uitgebreid toegelicht): het kanaal
