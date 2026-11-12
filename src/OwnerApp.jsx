@@ -1987,6 +1987,47 @@ async function autoFillTranslations(form, pairs, currentLang) {
   return updated;
 }
 
+// Hernoemd of herschreven in de brontaal (bron = nl/en/es: de taal waarin
+// getypt werd)? Dan kloppen de andere talen niet meer. autoFillTranslations
+// vult alleen lege velden, dus maak de vertalingen leeg die niet tegelijk zelf
+// werden aangepast; die worden daarna opnieuw vertaald vanuit de nieuwe tekst.
+// Met de hand aangepaste vertalingen blijven staan. Gebruikt door de
+// Diensten-instellingen (bron = interfacetaal) en de medewerkers-app.
+function verouderdeVertalingenWissen(form, stored, pairs, bron) {
+  const tekstVan = (v) => String(v ?? "").trim();
+  const out = { ...form };
+  for (const p of pairs) {
+    const velden = { nl: p.nl, en: p.en, es: p.es || p.nl.replace(/_nl$/, "_es") };
+    // Eerste keer ingevuld in de brontaal (was leeg) is geen hernoeming: de
+    // bestaande vertalingen blijven dan staan. Brontekst gewist: niets om
+    // vanuit te vertalen, dus ook niets leegmaken.
+    if (!tekstVan(stored[velden[bron]]) || !tekstVan(form[velden[bron]])) continue;
+    if (tekstVan(form[velden[bron]]) === tekstVan(stored[velden[bron]])) continue;
+    for (const lg of ["nl", "en", "es"]) {
+      if (lg !== bron && tekstVan(form[velden[lg]]) === tekstVan(stored[velden[lg]])) out[velden[lg]] = "";
+    }
+  }
+  return out;
+}
+
+// Medewerkers-app: dienst of variant hernoemd? Zelfde regel als hierboven,
+// inclusief het Spaans, dat daar niet in beeld is (tot 12-11-2026 hield dat
+// de oude naam). NL en EN staan daar naast elkaar, dus de bron is het veld
+// dat veranderde; veranderden ze allebei, dan de taal van de app.
+async function hertaalNaBewerken(form, stored, pairs, lang) {
+  const tekst = (v) => String(v ?? "").trim();
+  const voorkeur = lang === "nl" ? ["nl", "en"] : ["en", "nl"];
+  let out = { ...form };
+  for (const p of pairs) {
+    const es = p.nl.replace(/_nl$/, "_es");
+    if (!(es in out)) out[es] = stored[es] || "";
+    const bron = voorkeur.find((lg) => tekst(form[p[lg]]) !== tekst(stored[p[lg]]));
+    if (!bron) continue;
+    out = await autoFillTranslations(verouderdeVertalingenWissen(out, stored, [p], bron), [p], bron);
+  }
+  return out;
+}
+
 // Compact −/N/+ quantity stepper for per-unit items in the owner's manual
 // booking form (mirrors the client-side stepper). Clamps to [1, max].
 function QtyStepper({ value, onChange, max = 10, accent, c }) {
@@ -3576,13 +3617,21 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish }) {
   const saveStep2 = async () => {
     if (!svcName.trim() || !svcPrice) return;
     setSaving(true);
+    // De naam staat in de taal van de app; de andere twee talen vertalen.
+    // Tot 12-11-2026 kreeg NL en EN hier allebei de getypte tekst en bleef ES
+    // leeg (Aura Glow, Aura nails, Bee Bare: eerste dienst "X | X | leeg").
+    // Lukt vertalen niet, dan blijft het als voorheen.
+    const typed = svcName.trim();
+    const ownLg = lang === "en" ? "en" : lang === "es" ? "es" : "nl";
+    const names = await autoFillTranslations({ name_nl: "", name_en: "", name_es: "", [`name_${ownLg}`]: typed }, [{ nl: "name_nl", en: "name_en" }], ownLg);
     // services.name is NOT NULL — keep it in sync with the localized names so
     // legacy queries still work for newly-created services.
     const { data: newSvc, error } = await supabase.from("services").insert({
       owner_id: salonData.owner_id,
-      name: svcName.trim(),
-      name_nl: svcName.trim(),
-      name_en: svcName.trim(),
+      name: names.name_nl || typed,
+      name_nl: names.name_nl || typed,
+      name_en: names.name_en || typed,
+      name_es: names.name_es || null,
       price: parseFloat(svcPrice),
       duration: parseInt(svcDuration) || 60,
       position: 0
@@ -18485,19 +18534,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               // verouderd. autoFillTranslations vult alleen lege velden, dus maak
               // de vertalingen leeg die de eigenaar zelf niet aanpaste; die worden
               // daarna opnieuw vertaald. Met de hand aangepaste vertalingen blijven.
-              const verouderdeVertalingenLeeg = (form, stored, pairs) => {
-                const out = { ...form };
-                for (const p of pairs) {
-                  const velden = { nl: p.nl, en: p.en, es: p.nl.replace(/_nl$/, "_es") };
-                  // Eerste keer ingevuld in de eigen taal (was leeg) is geen
-                  // hernoeming: de bestaande vertalingen blijven dan staan.
-                  if (!tekstVan(stored[velden[bronTaal]]) || tekstVan(form[velden[bronTaal]]) === tekstVan(stored[velden[bronTaal]])) continue;
-                  for (const lg of ["nl", "en", "es"]) {
-                    if (lg !== bronTaal && tekstVan(form[velden[lg]]) === tekstVan(stored[velden[lg]])) out[velden[lg]] = "";
-                  }
-                }
-                return out;
-              };
+              const verouderdeVertalingenLeeg = (form, stored, pairs) => verouderdeVertalingenWissen(form, stored, pairs, bronTaal);
               // Naam leeggemaakt in de eigen taal, of nergens een naam: weigeren.
               // (Een nog nooit ingevulde vertaling mag leeg zijn; die vult de save.)
               const naamOntbreekt = (form, stored = {}) => {
@@ -24626,5 +24663,5 @@ function noShowPctsInPolicy(text) {
 
 // ─── STAFF APP (team member view) ─────────────────────────────
 
-export { OwnerApp, PlanSelection, OnboardingWizard, VariantAdder, ExtraAdder, StaffAdder, LocationAdder, RevenueReportBlock };
+export { OwnerApp, PlanSelection, OnboardingWizard, VariantAdder, ExtraAdder, StaffAdder, LocationAdder, RevenueReportBlock, autoFillTranslations, verouderdeVertalingenWissen, hertaalNaBewerken };
 export default OwnerApp;

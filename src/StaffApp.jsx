@@ -16,7 +16,7 @@ import {
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
-import { VariantAdder, ExtraAdder, RevenueReportBlock } from "./OwnerApp.jsx";
+import { VariantAdder, ExtraAdder, RevenueReportBlock, hertaalNaBewerken } from "./OwnerApp.jsx";
 import InstallAppPrompt from "./InstallAppPrompt.jsx";
 
 // Ophaalvenster van de agenda: 90 dagen terug, op de klok van de salon.
@@ -3389,9 +3389,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                             </div>
                             <div style={{ display: "flex", gap: 8 }}>
                               <button className="btn-primary" style={{ flex: 1, padding: "11px 18px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }} onClick={async () => {
-                                const { error } = await supabase.from("services").update({ name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, name: editSvcForm.name_nl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id).eq("owner_id", salonProfile.id);
+                                const n = await hertaalNaBewerken(editSvcForm, s, [{ nl: "name_nl", en: "name_en" }], lang);
+                                const naamNl = n.name_nl || n.name_en;
+                                const { error } = await supabase.from("services").update({ name_nl: naamNl, name_en: n.name_en, name_es: n.name_es || null, name: naamNl, price: parseFloat(editSvcForm.price), duration: parseInt(editSvcForm.duration) }).eq("id", s.id).eq("owner_id", salonProfile.id);
                                 if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
-                                setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, name_nl: editSvcForm.name_nl, name_en: editSvcForm.name_en, price: editSvcForm.price, duration: editSvcForm.duration} : sv));
+                                setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, name_nl: naamNl, name_en: n.name_en, name_es: n.name_es || null, price: editSvcForm.price, duration: editSvcForm.duration} : sv));
                                 setEditingSvc(null);
                               }}><NavIcon name="check" size={12} color={c.btnOnDark} /> {t.saveChanges}</button>
                               <button className="btn-ghost" style={{ padding: "11px 18px" }} onClick={() => setEditingSvc(null)}><NavIcon name="xmark" size={12} /></button>
@@ -3461,9 +3463,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                           const price = parseFloat(editVarForm.price);
                                           const duration = parseInt(editVarForm.duration);
                                           if (!editVarForm.name_nl || !Number.isFinite(price) || !Number.isFinite(duration)) { toast.show(lang === "nl" ? "Vul alle velden in" : lang === "es" ? "Completa todos los campos" : "Fill in all fields", "error"); return; }
-                                          const { error } = await supabase.from("service_variants").update({ name_nl: editVarForm.name_nl, name_en: editVarForm.name_en || null, price, duration, description_nl: editVarForm.description_nl || null, description_en: editVarForm.description_en || null }).eq("id", v.id);
+                                          const n = await hertaalNaBewerken(editVarForm, v, [{ nl: "name_nl", en: "name_en" }, { nl: "description_nl", en: "description_en" }], lang);
+                                          const velden = { name_nl: n.name_nl || n.name_en, name_en: n.name_en || null, name_es: n.name_es || null, description_nl: n.description_nl || null, description_en: n.description_en || null, description_es: n.description_es || null };
+                                          const { error } = await supabase.from("service_variants").update({ ...velden, price, duration }).eq("id", v.id);
                                           if (error) { toast.show(lang === "nl" ? "Opslaan mislukt" : lang === "es" ? "Error al guardar" : "Save failed", "error"); return; }
-                                          setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.map(vr => vr.id === v.id ? {...vr, name_nl: editVarForm.name_nl, name_en: editVarForm.name_en || null, price, duration, description_nl: editVarForm.description_nl || null, description_en: editVarForm.description_en || null} : vr)} : sv));
+                                          setServices(svcs => svcs.map(sv => sv.id === s.id ? {...sv, variants: sv.variants.map(vr => vr.id === v.id ? {...vr, ...velden, price, duration} : vr)} : sv));
                                           setEditingVar(null);
                                         }}><NavIcon name="check" size={12} color="currentColor" /> {lang === "nl" ? "Opslaan" : lang === "es" ? "Guardar" : "Save"}</button>
                                         <button className="btn-ghost" style={{ padding: "9px 14px" }} onClick={() => setEditingVar(null)}><NavIcon name="xmark" size={12} color="currentColor" /></button>

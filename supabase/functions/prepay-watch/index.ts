@@ -18,16 +18,36 @@
 // Idempotent: elke stap claimt eerst (update ... where status/stempel nog oud)
 // en mailt pas als de claim raak was. Twee keer draaien = niets dubbel.
 //
-// TOEGANG: verify_jwt=false zoals de andere cron-functies (check-pending-
-// payments). Bewust geen geheim: een vreemde kan er hooguit de veegronde mee
-// vervroegen, en die doet alleen wat over een uur toch zou gebeuren.
+// TOEGANG: verify_jwt=false (pg_cron heeft geen gebruikers-JWT), maar sinds
+// 12-11-2026 alleen met het cron-geheim, zoals send-reminders c.s. Daarvoor
+// draaide de veegronde voor elk verzoek, ook een OPTIONS zonder geheim; een
+// vreemde kon er reserveringen mee laten vervallen en mails mee versturen,
+// alleen eerder dan gepland. Toegestaan:
+//   - x-internal-secret = de service-role-sleutel (handmatig/server);
+//   - x-cron-secret = de CRON_SECRET-env, of een geheim dat de database
+//     bevestigt via cron_secret_ok() (pg_cron leest het uit de vault).
+// Anders 401 zonder iets te doen. Uitrol: eerst de cron-job met de header
+// (migratie prepay_watch_cron_geheim), dan deze functie.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+async function cronAuthorized(req: Request): Promise<boolean> {
+  const internal = req.headers.get("x-internal-secret") || "";
+  if (internal && SUPABASE_SERVICE_KEY && internal === SUPABASE_SERVICE_KEY) return true;
+  const cs = req.headers.get("x-cron-secret") || "";
+  if (!cs) return false;
+  if (CRON_SECRET && cs === CRON_SECRET) return true;
+  try {
+    const { data, error } = await supabase.rpc("cron_secret_ok", { p_secret: cs });
+    return !error && data === true;
+  } catch { return false; }
+}
 
 const MAX_PER_RUN = 50;
 const REMIND_BEFORE_MS = 6 * 3600000;
@@ -215,7 +235,12 @@ async function notifyWaitlist(a: any, b: ReturnType<typeof baseOf>) {
   } catch (e) { console.error("waitlist notify failed:", e); }
 }
 
-serve(async () => {
+serve(async (req) => {
+  const jsonRes = (body: unknown, status: number) =>
+    new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  // Alleen de planner (POST met geheim); niets anders start de veegronde.
+  if (req.method !== "POST") return jsonRes({ error: "method_not_allowed" }, 405);
+  if (!(await cronAuthorized(req))) return jsonRes({ error: "unauthorized" }, 401);
   const t0 = Date.now();
   let processed = 0;
   try {
