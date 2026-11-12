@@ -25,6 +25,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import SupportChat from "./SupportChat.jsx";
 import { supabase } from "./supabase.js";
+import { splitPlace } from "./salonSchema.js";
 import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS, rememberRef, useReferralPromo, rewardLabel, promoEndLabel, planMatrix } from "./shared.jsx";
 import {
   SalonFinder, StickyStartPill, ArrowIcon,
@@ -882,7 +883,7 @@ function SalonRatingQuotes({ lang, quotes }) {
             <div className="at-quote-card vl-glow" data-quote-card onMouseMove={glowMove}>
               <StarRow value={q.rating} size={14} />
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 19, lineHeight: 1.35, color: INK, margin: "12px 0 14px" }}>“{q.liked}”</div>
-              <div style={{ fontSize: 11, color: EARTH, letterSpacing: "0.08em", textTransform: "uppercase" }}>{q.business_name}{q.city ? ` · ${String(q.city).trim()}` : ""}</div>
+              <div style={{ fontSize: 11, color: EARTH, letterSpacing: "0.08em", textTransform: "uppercase" }}>{q.business_name}{splitPlace(q.city).city ? ` · ${splitPlace(q.city).city}` : ""}</div>
             </div>
           </Reveal>
         ))}

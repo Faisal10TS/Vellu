@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "./supabase.js";
+import { salonJsonLd, jsonLdText } from "./salonSchema.js";
 import {
   useTheme, useSEO, useToast, ToastContainer, useConfirm, ConfirmModal, useFocusTrap,
   compressImage, ACCENT,
@@ -3203,8 +3204,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   // De weekdag van VANDAAG geeft de echte uren van vandaag (todayEffective):
   // de rij "vandaag" in beide urenkaarten en de open/dicht-status kloppen zo
   // ook op een blokkade- of vakantiedag. Andere dagen blijven het weekrooster.
-  const getWeeklyHours = (dayIdx) => {
-    if (dayIdx === todayDayIndex) return todayEffective;
+  // getRegularWeeklyHours = het gewone weekrooster (ook voor Google, zie
+  // salonLd hieronder); getWeeklyHours = idem, maar vandaag de echte uren.
+  const getWeeklyHours = (dayIdx) => dayIdx === todayDayIndex ? todayEffective : getRegularWeeklyHours(dayIdx);
+  const getRegularWeeklyHours = (dayIdx) => {
     if (initialSalon.account_type === "team") {
       const staffDays = (initialSalon.staff || [])
         .filter(s => s.active !== false)
@@ -3272,6 +3275,51 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   const avgRating = initialSalon.reviews?.length > 0
     ? (initialSalon.reviews.reduce((s, r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)
     : null;
+  // Gestructureerde gegevens voor Google (punt 7, 12-11-2026): één
+  // <script type="application/ld+json"> in de <head> met precies wat de pagina
+  // toont: naam, adres, uren (urenkaart), telefoon, prijsbereik (dienstenlijst)
+  // en de beoordeling. Weg zodra de pagina sluit. Zie salonSchema.js.
+  const salonLd = (() => {
+    let low = Infinity, high = 0;
+    for (const s of initialSalon.services || []) {
+      const vs = (s.variants || []).map(v => parseFloat(v.price)).filter(n => Number.isFinite(n) && n > 0);
+      const from = s.variants?.length > 0 ? variantFromPrice(s.variants) : parseFloat(s.price);
+      const top = s.variants?.length > 0 ? Math.max(0, ...vs) : parseFloat(s.price);
+      if (Number.isFinite(from) && from > 0) low = Math.min(low, from);
+      if (Number.isFinite(top) && top > 0) high = Math.max(high, top);
+    }
+    const priceRange = high > 0 && low < Infinity
+      ? (low >= high ? fmtAmt(cur, high) : `${fmtAmt(cur, low)} – ${fmtAmt(cur, high)}`)
+      : "";
+    return jsonLdText(salonJsonLd({
+      salon: {
+        name: initialSalon.name,
+        url: initialSalon.slug ? `https://www.vellu.cc/${initialSalon.slug}` : "",
+        city: initialSalon.city,
+        address: initialSalon.address,
+        countryCode: initialSalon.country_code,
+        phone: (initialSalon.salon_phone || "").trim() || (initialSalon.whatsapp_number || "").trim(),
+        email: initialSalon.salon_email,
+        instagram: initialSalon.salon_instagram,
+        coverUrl: initialSalon.cover_image_url,
+        logoUrl: initialSalon.logo_url,
+      },
+      weekly: [0, 1, 2, 3, 4, 5, 6].map(d => getRegularWeeklyHours(d)),
+      rating: avgRating ? { value: Number(avgRating), count: initialSalon.reviews.length } : null,
+      priceRange,
+    }));
+  })();
+  useEffect(() => {
+    let el = document.getElementById("vl-salon-ld");
+    if (!el) {
+      el = document.createElement("script");
+      el.type = "application/ld+json";
+      el.id = "vl-salon-ld";
+      document.head.appendChild(el);
+    }
+    el.textContent = salonLd;
+    return () => { el.remove(); };
+  }, [salonLd]);
   const ratingBreakdown = [5, 4, 3, 2, 1].map(r => ({
     stars: r,
     count: (initialSalon.reviews || []).filter(rv => rv.rating === r).length,

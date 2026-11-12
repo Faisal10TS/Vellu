@@ -14,6 +14,24 @@
 
 export const RELEASES = [
   {
+    // 12-11: boekingspagina-ronde, punt 7. Gestructureerde gegevens (JSON-LD,
+    // salonSchema.js). De opgeschoonde plaats bovenaan (splitPlace) zit in
+    // dezelfde deploy maar bewust NIET in deze notes (Faisal 12-11).
+    id: "2026-11-12a",
+    date: "2026-11-12",
+    title: { nl: "Je boekingspagina in Google", en: "Your booking page in Google", es: "Tu página de reservas en Google" },
+    items: [
+      {
+        kind: "improved", audience: ["owner"],
+        text: {
+          nl: "Google krijgt nu je adres, openingstijden, telefoonnummer, prijzen en beoordeling in zijn eigen vorm mee. Zo begrijpt Google je pagina beter en kan het die gegevens bij zoekresultaten tonen.",
+          en: "Google now gets your address, opening hours, phone number, prices and rating in its own format. That helps Google understand your page and lets it show those details in search results.",
+          es: "Google recibe ahora tu dirección, horario, teléfono, precios y valoración en su propio formato. Así entiende mejor tu página y puede mostrar esos datos en los resultados de búsqueda.",
+        },
+      },
+    ],
+  },
+  {
     // 11-11 (achtste): boekingspagina-ronde, punten 4-5. Stap Gegevens zonder
     // rood vooraf, naam eerst, labels boven de velden; compactere kop in de
     // telefoon-boekflow.

@@ -6,6 +6,7 @@ import {
   AT, AT_COLORS, AT_RADIUS, AtelierSkin, salonNow, ToastContainer
 } from "./shared.jsx";
 import { planIsActive } from "./autopay.js";
+import { splitPlace } from "./salonSchema.js";
 
 // ─── LAZY ROUTE CHUNKS ────────────────────────────────────────
 // Op deze branch (landing-atelier) draait de "Atelier"-richting: ivoor
@@ -892,10 +893,11 @@ function SalonRoute({ lang, setLang }) {
         id: data.slug,
         slug: data.slug,
         owner_id: data.id,
-        name: data.business_name || data.owner_name || "Studio",
-        city: data.city || "Nederland",
+        // Naam en plaats zonder spaties eromheen, en een straat die in het
+        // plaatsveld stond naar het adres (splitPlace, salonSchema.js).
+        name: (data.business_name || data.owner_name || "Studio").trim() || "Studio",
+        ...(() => { const p = splitPlace(data.city, data.address); return { city: p.city || "Nederland", address: p.address }; })(),
         country_code: data.country_code || "NL",
-        address: data.address || "",
         accent: data.accent_color || "#c9a96e",
         // NOTE: the owner's login email is deliberately NOT exposed here. The
         // public page only ever shows `salon_email` (a separate, owner-chosen
