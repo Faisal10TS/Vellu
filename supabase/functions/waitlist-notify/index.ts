@@ -183,7 +183,7 @@ serve(async (req) => {
   // Resolve the salon. If it doesn't exist, do nothing (can't leak anything).
   const { data: salon } = await supabase
     .from("profiles")
-    .select("business_name, accent_color, logo_url, slug, salon_email, email, country_code, staff_view_revenue, staff_view_client_contact, waitlist_enabled, phone_required, max_advance_days, min_advance_hours, business_hours, day_overrides, account_type, deactivated_at")
+    .select("business_name, accent_color, logo_url, slug, salon_email, email, country_code, salon_lang, staff_view_revenue, staff_view_client_contact, waitlist_enabled, phone_required, max_advance_days, min_advance_hours, business_hours, day_overrides, account_type, deactivated_at")
     .eq("id", ownerId)
     .maybeSingle();
   if (!salon) return json(404, { error: "salon_not_found" }, origin);
@@ -249,7 +249,9 @@ serve(async (req) => {
   }
   if (dates.length === 0) return json(400, { error: "invalid_dates" }, origin);
 
-  const salonLang = DUTCH_COUNTRIES.has(salon.country_code || "NL") ? "nl" : "en";
+  // Zelf gekozen salontaal (profiles.salon_lang, sinds 12-11-2026), anders het land.
+  const salonLang = ["nl", "en", "es"].includes(salon.salon_lang) ? salon.salon_lang
+    : (DUTCH_COUNTRIES.has(salon.country_code || "NL") ? "nl" : "en");
   const salonEmail = salon.salon_email || salon.email || "";
 
   // Behandelingen: alleen zichtbare diensten van deze salon, in de volgorde
@@ -259,13 +261,13 @@ serve(async (req) => {
   if (serviceIdsIn.length) {
     const { data: svcs } = await supabase
       .from("services")
-      .select("id, name, name_nl, name_en")
+      .select("id, name, name_nl, name_en, name_es")
       .in("id", serviceIdsIn)
       .eq("owner_id", ownerId)
       .eq("visible", true);
     if (svcs?.length) {
       // Preserve the order the client picked them in.
-      const byId = new Map(svcs.map((s: any) => [s.id, (salonLang === "nl" ? s.name_nl : s.name_en) || s.name_nl || s.name_en || s.name || ""]));
+      const byId = new Map(svcs.map((s: any) => [s.id, (salonLang === "nl" ? s.name_nl : salonLang === "es" ? (s.name_es || s.name_en) : s.name_en) || s.name_nl || s.name_en || s.name || ""]));
       serviceIds = [...new Set(serviceIdsIn.filter((id) => byId.has(id)))];
       serviceName = serviceIds.map((id) => byId.get(id)).filter(Boolean).join(" + ");
     }

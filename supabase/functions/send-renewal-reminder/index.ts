@@ -63,7 +63,14 @@ const PROEF_DAGEN_VOORAF = 3;    // proef: eerste mail
 const PROEF_VENSTER_NA_DAGEN = 7; // proef afgelopen: tot een week terug (gemiste run, of de eerste run na deze uitbreiding)
 
 const DUTCH = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
-const langOf = (cc: unknown) => DUTCH.has(String(cc || "NL").toUpperCase()) ? "nl" : "en";
+// Taal van de salon: zelf gekozen (profiles.salon_lang, sinds 12-11-2026),
+// anders het land. Mails kennen ook Spaans; de pushteksten hieronder zijn NL of
+// EN en geven een Spaanstalige salon Engels.
+const langOf = (s: any): string => {
+  const own = String(s?.salon_lang || "").toLowerCase();
+  if (own === "nl" || own === "en" || own === "es") return own;
+  return DUTCH.has(String(s?.country_code || "NL").toUpperCase()) ? "nl" : "en";
+};
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Maandprijzen, kopie van PLAN_PRICES in create-subscription: het bedrag van de
@@ -191,7 +198,7 @@ serve(async (req) => {
     const grens = new Date(nu.getTime() + DAGEN_VOORAF * DAY_MS);
     const { data: jaar, error: e1 } = await supabase
       .from("profiles")
-      .select("id, business_name, email, country_code, plan, billing_interval, plan_expires_at, subscription_status, mollie_subscription_id, cancel_at_period_end")
+      .select("id, business_name, email, country_code, salon_lang, plan, billing_interval, plan_expires_at, subscription_status, mollie_subscription_id, cancel_at_period_end")
       .eq("billing_interval", "yearly")
       .eq("subscription_status", "active")
       .is("mollie_subscription_id", null)   // alleen eenmalige jaarbetalers, geen machtiging
@@ -207,7 +214,7 @@ serve(async (req) => {
       if (!(await claim(s.id, s.plan_expires_at, "renewal"))) continue;
       try {
         await mail("renewal_reminder", {
-          owner_email: s.email, owner_id: s.id, owner_lang: langOf(s.country_code), country_code: s.country_code || "NL",
+          owner_email: s.email, owner_id: s.id, owner_lang: langOf(s), country_code: s.country_code || "NL",
           business_name: s.business_name, salon_name: s.business_name,
           plan: s.plan || "professional", plan_expires_at: s.plan_expires_at,
         });
@@ -219,7 +226,7 @@ serve(async (req) => {
     const proefGrens = new Date(nu.getTime() + PROEF_DAGEN_VOORAF * DAY_MS);
     const { data: bijna, error: e2 } = await supabase
       .from("profiles")
-      .select("id, business_name, email, country_code, plan, trial_ends_at, subscription_status, mollie_subscription_id")
+      .select("id, business_name, email, country_code, salon_lang, plan, trial_ends_at, subscription_status, mollie_subscription_id")
       .eq("subscription_status", "trialing")
       .is("mollie_subscription_id", null)
       .not("trial_ends_at", "is", null)
@@ -233,7 +240,7 @@ serve(async (req) => {
       const daysLeft = Math.max(1, Math.ceil((new Date(s.trial_ends_at).getTime() - nu.getTime()) / DAY_MS));
       try {
         await mail("trial_ending", {
-          owner_email: s.email, owner_id: s.id, owner_lang: langOf(s.country_code), country_code: s.country_code || "NL",
+          owner_email: s.email, owner_id: s.id, owner_lang: langOf(s), country_code: s.country_code || "NL",
           business_name: s.business_name, salon_name: s.business_name,
           plan: s.plan || "starter", trial_ends_at: s.trial_ends_at, days_left: daysLeft,
         });
@@ -246,7 +253,7 @@ serve(async (req) => {
     // dan dekt sectie 3b die dag.
     const { data: apBijna, error: e2b } = await supabase
       .from("profiles")
-      .select("id, business_name, email, country_code, plan, trial_ends_at, subscription_status, mollie_subscription_id, referral_credit_days")
+      .select("id, business_name, email, country_code, salon_lang, plan, trial_ends_at, subscription_status, mollie_subscription_id, referral_credit_days")
       .eq("subscription_status", "trialing")
       .not("mollie_subscription_id", "is", null)
       .not("trial_ends_at", "is", null)
@@ -258,7 +265,7 @@ serve(async (req) => {
       if (!s.email) continue;
       if (autopayChargeDayReached(s.trial_ends_at, nu)) continue;
       if (!(await claim(s.id, s.trial_ends_at, "trial_autopay_ending"))) continue;
-      const lang = langOf(s.country_code);
+      const lang = langOf(s);
       const plan = PLAN_PRICES[String(s.plan || "")] ? String(s.plan) : "starter";
       const chargeYmd = autopayChargeYmd(s.trial_ends_at, nu);
       const amount = PLAN_PRICES[plan].monthly;
@@ -298,7 +305,7 @@ serve(async (req) => {
     const proefTerug = new Date(nu.getTime() - PROEF_VENSTER_NA_DAGEN * DAY_MS);
     const { data: voorbij, error: e3 } = await supabase
       .from("profiles")
-      .select("id, business_name, email, country_code, plan, trial_ends_at, subscription_status, mollie_subscription_id")
+      .select("id, business_name, email, country_code, salon_lang, plan, trial_ends_at, subscription_status, mollie_subscription_id")
       .eq("subscription_status", "trialing")
       .is("mollie_subscription_id", null)
       .not("trial_ends_at", "is", null)
@@ -309,7 +316,7 @@ serve(async (req) => {
     for (const s of voorbij || []) {
       if (!s.email) continue;
       if (!(await claim(s.id, s.trial_ends_at, "trial_expired"))) continue;
-      const lang = langOf(s.country_code);
+      const lang = langOf(s);
       try {
         await mail("trial_expired", {
           owner_email: s.email, owner_id: s.id, owner_lang: lang, country_code: s.country_code || "NL",
@@ -363,7 +370,7 @@ serve(async (req) => {
     // actief en krijgt alleen de factuurmail; zo bedoeld.
     const { data: apVandaag, error: e3b } = await supabase
       .from("profiles")
-      .select("id, business_name, email, country_code, plan, trial_ends_at, subscription_status, mollie_subscription_id, referral_credit_days")
+      .select("id, business_name, email, country_code, salon_lang, plan, trial_ends_at, subscription_status, mollie_subscription_id, referral_credit_days")
       .eq("subscription_status", "trialing")
       .not("mollie_subscription_id", "is", null)
       .not("trial_ends_at", "is", null)
@@ -377,7 +384,7 @@ serve(async (req) => {
       const end = new Date(String(s.trial_ends_at));
       if (isNaN(end.getTime()) || autopayFirstYmd(end) !== vandaagAms) continue;
       if (!(await claim(s.id, s.trial_ends_at, "trial_autopay_today"))) continue;
-      const lang = langOf(s.country_code);
+      const lang = langOf(s);
       const plan = PLAN_PRICES[String(s.plan || "")] ? String(s.plan) : "starter";
       const amount = PLAN_PRICES[plan].monthly;
       try {

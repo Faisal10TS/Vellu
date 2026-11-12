@@ -18,7 +18,7 @@ import {
   getToday, fmt, parseDate, getDays,
   TIMES, genTimes, SLOT_INTERVALS, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, PlanCompareTable,
-  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, fmtAmt, variantFromPrice, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, ownerLangFor, isSaleRow,
+  PAGE_FONTS, getPageFont, ensurePageFontLoaded, curSym, fmtAmt, variantFromPrice, taxForCountry, resolveTax, TAX_REGIONS_BY_COUNTRY, taxRuleFor, currencyForCountry, COUNTRIES, salonLangOf, isSaleRow,
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf, staffScopedRow, partLabelOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, isOpenReceivable, receivableKeyOf, ageLabel, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
   useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars, fetchAllRows,
@@ -6859,6 +6859,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           name: data.business_name || prev.name,
           city: data.city || prev.city,
           country_code: data.country_code || "NL",
+          // Zelf gekozen salontaal (12-11-2026); leeg = landregel, zie salonLangOf.
+          salon_lang: data.salon_lang || null,
           accent: data.accent_color || prev.accent,
           address: data.address || "",
           kvk_number: data.kvk_number || "",
@@ -8291,7 +8293,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           payment: "prepaid", price: a.service_price,
           salon_name: salonData.name, owner_email: null, salon_email: salonData.salon_email || "",
           salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "",
-          lang: a.lang || ownerLangFor(salonData.country_code), currency: cur,
+          lang: a.lang || salonLangOf(salonData), currency: cur,
           cancel_url: cancelUrl, cancel_deadline_hours: salonData.cancel_deadline_hours ?? 0,
         }).catch(e => console.error("bevestiging na vooruitbetaling:", e));
       }
@@ -8334,7 +8336,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           price, amount_paid: paidBefore, refund,
           salon_name: salonData.name, salon_email: salonData.salon_email || "",
           salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "",
-          lang: a.lang || ownerLangFor(salonData.country_code), currency: cur,
+          lang: a.lang || salonLangOf(salonData), currency: cur,
         }).catch(e => console.error("refund_sent:", e));
       }
     } finally { setProcessingApptId(null); }
@@ -8545,7 +8547,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // De taal waarin de klant zich inschreef (waitlist.lang); oudere rijen
         // zonder taal krijgen de markttaal van de salon, zoals
         // cancel-appointment.
-        lang: entry.lang || ownerLangFor(salonData.country_code),
+        lang: entry.lang || salonLangOf(salonData),
       });
       // sendEmails GOOIT niet bij een mislukte verzending, hij geeft
       // { success: false } terug. Zonder deze controle meldt de toast "X van de
@@ -8604,7 +8606,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       // Bericht in de taal van de KLANT (op de afspraak vastgelegd bij het
       // boeken), niet in de schermtaal van de eigenaar — op Bonaire is die
       // Nederlands terwijl veel klanten Engelstalig zijn.
-      const clientLang = a.lang || ownerLangFor(salonData.country_code);
+      const clientLang = a.lang || salonLangOf(salonData);
       const payload = {
         // Mail én SMS: de server haalt ontvanger, telefoon en salongegevens bij
         // deze afspraak uit de database (R-01/R-05).
@@ -8773,7 +8775,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // op Bonaire Nederlands, terwijl een groot deel van de klanten Engelstalig
   // is. Beste bron is de taal van de vorige afspraak van diezelfde klant.
   const APPT_LANGS = ["nl", "en", "es"];
-  const defaultApptLang = ownerLangFor(salonData.country_code);
+  const defaultApptLang = salonLangOf(salonData);
   const langOfClient = (email) => {
     const key = (email || "").toLowerCase().trim();
     if (!key) return null;
@@ -9310,7 +9312,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (orig.date !== payload.date || (orig.time || "").slice(0, 5) !== payload.time) payload.reminder_sent = false;
     // Taal van de KLANT (vastgelegd bij het boeken), niet de schermtaal van de
     // eigenaar: de mail en SMS hieronder én de nieuwe behandelingsnaam.
-    const clientLang = orig.lang || ownerLangFor(salonData.country_code);
+    const clientLang = orig.lang || salonLangOf(salonData);
     // Service change: when the owner picks a different treatment, replace the
     // whole service the same shape a fresh booking uses — primary service_id,
     // a rolled-up name (keeping the assigned stylist), a single-entry
@@ -10595,7 +10597,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           // terugbetalen. Op Bonaire boekt een groot deel in het Engels.
           // Een kassaverkoop heeft geen boekingstaal: dan de taal van het
           // scherm aan de balie (zoals de verkoopregel zelf), niet altijd NL.
-          lang: a.lang || (a.is_sale ? lang : ownerLangFor(salonData.country_code)),
+          lang: a.lang || (a.is_sale ? lang : salonLangOf(salonData)),
         });
         // Mislukt de mail, dan is de factuur NIET verstuurd: niet als verzonden
         // markeren (anders verdween de verstuurknop en stond er "Verzonden"
@@ -17340,6 +17342,46 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     {/* tax_region moet mee: zonder regio valt taxForCountry op de
                         landdefault terug en zou een Saba-salon hier "Bonaire" zien. */}
                     {(() => { const m = currencyForCountry(salonData.country_code); const tx = taxForCountry(salonData.country_code, salonData.tax_region); return `${lang === "nl" ? "Valuta" : lang === "es" ? "Moneda" : "Currency"}: ${m.symbol.trim()} · ${lang === "nl" ? "Belasting" : lang === "es" ? "Impuesto" : "Tax"}: ${tx.label}`; })()}
+                  </div>
+                </div>
+
+                {/* Taal van de salon (profiles.salon_lang, 12-11-2026). Voorheen
+                    volgde die uit het land, waardoor Curaçao Nederlandse mails
+                    kreeg terwijl die salons in het Engels werken. Schrijft direct
+                    weg, net als het accounttype: een taalkeuze die pas na Opslaan
+                    telt, wordt vergeten. Staat er niets, dan geldt de landregel
+                    (salonLangOf) en is die knop gekozen. */}
+                <div data-salon-lang style={{ marginTop: 18 }}>
+                  <SL>{lang === "nl" ? "Taal van je salon" : lang === "es" ? "Idioma de tu salón" : "Salon language"}</SL>
+                  <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 10, lineHeight: 1.5 }}>
+                    {lang === "nl"
+                      ? "In deze taal mailt Vellu je, en klanten van afspraken die je zelf invoert krijgen hun mails in deze taal. Wie online boekt, krijgt zijn eigen taal."
+                      : lang === "es"
+                      ? "Vellu te escribe en este idioma, y los clientes de las citas que añades tú reciben sus correos en este idioma. Quien reserva en línea recibe su propio idioma."
+                      : "Vellu emails you in this language, and clients of appointments you add yourself get their emails in it. Clients who book online get their own language."}
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {[["nl", "Nederlands"], ["en", "English"], ["es", "Español"]].map(([code, label]) => {
+                      const on = salonLangOf(salonData) === code;
+                      return (
+                        <button key={code} type="button" data-salon-lang-option={code} aria-pressed={on}
+                          onClick={async () => {
+                            if (salonData.salon_lang === code) return;
+                            const { error } = await supabase.from("profiles").update({ salon_lang: code }).eq("id", salonData.owner_id);
+                            if (error) { toast.show(t.somethingWrong, "error"); return; }
+                            update(d => { d.salon_lang = code; return d; });
+                            toast.show(lang === "nl" ? "Taal opgeslagen" : lang === "es" ? "Idioma guardado" : "Language saved");
+                          }}
+                          style={{
+                            flex: 1, padding: "10px 8px", borderRadius: 8, cursor: "pointer", textAlign: "center",
+                            fontSize: 13, fontWeight: on ? 600 : 500, fontFamily: "inherit", color: c.text, transition: "all 0.2s",
+                            background: on ? `${accent}12` : "transparent",
+                            border: `1px solid ${on ? accent : c.inputBorder}`,
+                          }}>
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -24471,7 +24513,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         service_name: apptData.service_name, date: addApptForm.date, time: addApptForm.time,
                         price: totalPrice, salon_name: salonData.name,
                         salon_accent: salonData.accent || "", salon_logo: salonData.logo_url || "", lang, currency: cur,
-                        owner_lang: ownerLangFor(salonData.country_code)
+                        owner_lang: salonLangOf(salonData)
                       });
                     }
                     setAddApptDone(true);

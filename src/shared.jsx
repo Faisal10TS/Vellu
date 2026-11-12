@@ -1135,6 +1135,16 @@ function ownerLangFor(countryCode) {
   const country = COUNTRIES.find((c) => c.code === (countryCode || "NL"));
   return (country && country.defaultLang) || "nl";
 }
+// De taal van de salon: wat de eigenaar zelf koos (profiles.salon_lang, bij het
+// aanmelden en in Instellingen, sinds 12-11-2026), anders de landregel hierboven.
+// Daarin krijgt de eigenaar haar mails van Vellu, en het is de standaardtaal voor
+// afspraken die de salon zelf invoert. Curaçao viel zo op Nederlands terwijl die
+// salons in het Engels werken. Zelfde regel als salonLangOf in de edge functions.
+const SALON_LANGS = ["nl", "en", "es"];
+function salonLangOf(profile) {
+  const own = profile && profile.salon_lang;
+  return SALON_LANGS.includes(own) ? own : ownerLangFor(profile && profile.country_code);
+}
 // Resolve a salon's currency from its country_code (fallback EUR for anything
 // unknown/missing, so existing behaviour is preserved).
 function currencyForCountry(countryCode) {
@@ -4037,7 +4047,7 @@ export {
   DEFAULT_HOURS,
   T,
   LANGUAGES, COUNTRIES,
-  CURRENCIES, currencyForCountry, curSym, fmtMoney, fmtAmt, fmtPrice, taxForCountry, ownerLangFor,
+  CURRENCIES, currencyForCountry, curSym, fmtMoney, fmtAmt, fmtPrice, taxForCountry, ownerLangFor, salonLangOf, SALON_LANGS,
   TAX_RULES, TAX_REGIONS_BY_COUNTRY, taxRuleFor, resolveTax,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded,
   makeCSS,

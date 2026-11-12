@@ -56,10 +56,14 @@ function esc(s: unknown): string {
 // Taal: die van de afspraak (de klant koos hem bij het boeken), anders het
 // salonland — zelfde regel als send-followups.
 const DUTCH_COUNTRIES = ["NL", "BE", "AW", "CW", "BQ", "SX"];
-const langFor = (apptLang: unknown, country: unknown) => {
-  const l = String(apptLang || "").toLowerCase();
-  if (l === "nl" || l === "en" || l === "es") return l;
-  return DUTCH_COUNTRIES.includes(String(country || "NL").toUpperCase()) ? "nl" : "en";
+// Zonder afspraaktaal eerst de taal die de salon zelf koos (profiles.salon_lang,
+// sinds 12-11-2026).
+const langFor = (apptLang: unknown, salon: any) => {
+  for (const cand of [apptLang, salon?.salon_lang]) {
+    const l = String(cand || "").toLowerCase();
+    if (l === "nl" || l === "en" || l === "es") return l;
+  }
+  return DUTCH_COUNTRIES.includes(String(salon?.country_code || "NL").toUpperCase()) ? "nl" : "en";
 };
 const txt = (lang: string, nl: string, en: string, es: string) => lang === "en" ? en : lang === "es" ? es : nl;
 const VALID_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -73,7 +77,7 @@ serve(async (req) => {
     // Get all salons with rebook nudge enabled (days > 0)
     const { data: salons, error: salonError } = await supabase
       .from("profiles")
-      .select("id, business_name, slug, rebook_nudge_days, country_code")
+      .select("id, business_name, slug, rebook_nudge_days, country_code, salon_lang")
       .gt("rebook_nudge_days", 0)
       // Gedeactiveerde salon (23-10-2026): geen "tijd om te boeken"-mail. Op
       // salonniveau overgeslagen, dus rebook_nudge_sent wordt nooit gezet.
@@ -151,7 +155,7 @@ serve(async (req) => {
         const rebookUrl = `https://vellu.cc/${slug}`;
         const firstName = appt.client_name?.split(" ")[0] || "";
         const weeksAgo = Math.round(nudgeDays / 7);
-        const lang = langFor(appt.lang, salon.country_code);
+        const lang = langFor(appt.lang, salon);
         const eSalon = esc(salonName);
         const eFirst = esc(firstName);
         const weeksTxt = txt(lang,

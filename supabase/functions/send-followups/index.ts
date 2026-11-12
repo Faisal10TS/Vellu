@@ -83,10 +83,14 @@ const shiftDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() +
 // De klant leest de mail in de taal waarin hij geboekt heeft; valt die weg, dan
 // de taal van het land van de salon (zelfde regel als de rest van de mails).
 const DUTCH_COUNTRIES = ["NL", "BE", "AW", "CW", "BQ", "SX"];
-const langFor = (apptLang: string | null, country: string | null) => {
-  const l = String(apptLang || "").toLowerCase();
-  if (l === "nl" || l === "en" || l === "es") return l;
-  return DUTCH_COUNTRIES.includes(String(country || "NL").toUpperCase()) ? "nl" : "en";
+// Zonder afspraaktaal: de taal die de salon zelf koos (profiles.salon_lang,
+// sinds 12-11-2026), anders het land.
+const langFor = (apptLang: string | null, salon: any) => {
+  for (const cand of [apptLang, salon?.salon_lang]) {
+    const l = String(cand || "").toLowerCase();
+    if (l === "nl" || l === "en" || l === "es") return l;
+  }
+  return DUTCH_COUNTRIES.includes(String(salon?.country_code || "NL").toUpperCase()) ? "nl" : "en";
 };
 
 const T = {
@@ -158,7 +162,7 @@ serve(async (req) => {
 
     const { data: appointments, error } = await supabase
       .from("appointments")
-      .select("id, owner_id, date, time, service_name, client_name, client_email, lang, status, is_sale, service_id, service_duration, products, staff_id, service_breakdown, profiles(business_name, slug, accent_color, country_code, google_place_id, loyalty_enabled, loyalty_visits, loyalty_discount_pct, loyalty_since, loyalty_per_staff, deactivated_at)")
+      .select("id, owner_id, date, time, service_name, client_name, client_email, lang, status, is_sale, service_id, service_duration, products, staff_id, service_breakdown, profiles(business_name, slug, accent_color, country_code, salon_lang, google_place_id, loyalty_enabled, loyalty_visits, loyalty_discount_pct, loyalty_since, loyalty_per_staff, deactivated_at)")
       // IS NOT TRUE: de kolom mag NULL zijn (default false).
       .not("followup_sent", "is", true)
       .gte("date", fromStr)
@@ -204,7 +208,7 @@ serve(async (req) => {
       const eSalon = esc(salonName);
       const slug = p.slug || "";
       const accent = /^#[0-9a-f]{6}$/i.test(String(p.accent_color || "")) ? p.accent_color : "#c9a96e";
-      const lang = langFor(appt.lang, p.country_code);
+      const lang = langFor(appt.lang, p);
       const t = T[lang as keyof typeof T];
 
       // ?review=true kón nooit werken: de app geeft bewust een leeg e-mailadres

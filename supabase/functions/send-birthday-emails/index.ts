@@ -83,8 +83,12 @@ function txt(lang: string, nl: string, en: string, es: string) {
 // een salon op Bonaire Nederlands, terwijl bij Eydy driekwart in het Engels boekt.
 // NL/BE/AW/CW/BQ is de vaste DUTCH_COUNTRIES-lijst; SX doet hier mee.
 const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
-function langFor(countryCode: unknown): string {
-  return DUTCH_COUNTRIES.has(String(countryCode || "NL").toUpperCase()) ? "nl" : "en";
+// Sinds 12-11-2026 gaat de taal die de salon zelf koos (profiles.salon_lang)
+// vóór het land.
+function langFor(salon: any): string {
+  const own = String(salon?.salon_lang || "").toLowerCase();
+  if (own === "nl" || own === "en" || own === "es") return own;
+  return DUTCH_COUNTRIES.has(String(salon?.country_code || "NL").toUpperCase()) ? "nl" : "en";
 }
 
 // Elke run landt in cron_health; cron-watchdog bewaakt 'send-birthday-emails'
@@ -405,7 +409,7 @@ serve(async (req) => {
   // beslissen wat er per salon gebeurt.
   const { data: salons, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, accent_color, logo_url, slug, birthday_email_enabled, birthday_email_discount_pct, birthday_email_code_prefix, birthday_code_days, birthday_notify_owner, subscription_status, discount_codes, country_code")
+    .select("id, business_name, email, salon_email, accent_color, logo_url, slug, birthday_email_enabled, birthday_email_discount_pct, birthday_email_code_prefix, birthday_code_days, birthday_notify_owner, subscription_status, discount_codes, country_code, salon_lang")
     // Hoofdschakelaar: staat de verjaardagsactie uit, dan doet deze functie
     // voor die salon niets — ook niet als de deelvlaggen nog aan staan.
     .eq("birthday_feature_enabled", true)
@@ -436,8 +440,8 @@ serve(async (req) => {
     const logo = safeImg(salon.logo_url);
     const replyTo = String(salon.salon_email || salon.email || "") || undefined;
     const slug = String(salon.slug || "");
-    // Terugvaltaal (salon-land) voor jarigen zonder afspraak met een taal. Zie langFor.
-    const countryLang = langFor(salon.country_code);
+    // Terugvaltaal (salontaal of salon-land) voor jarigen zonder afspraak met een taal. Zie langFor.
+    const countryLang = langFor(salon);
 
     // Collect all birthday-matching client contacts this salon has ever seen.
     // Manual clients live under manual_clients; appointment-derived contacts
@@ -539,7 +543,7 @@ serve(async (req) => {
     // als book-appointment); geen abonnement = de functie doet gewoon niets.
     if (salon.birthday_notify_owner === true) {
       const names = targets.map((t) => t.name || t.email).join(", ");
-      const nlOwner = DUTCH_COUNTRIES.has(String(salon.country_code || "NL").toUpperCase());
+      const nlOwner = countryLang === "nl";
       try {
         await fetch(`${SUPABASE_URL}/functions/v1/send-push-notification`, {
           method: "POST",

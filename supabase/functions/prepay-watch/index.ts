@@ -63,12 +63,18 @@ function localToUtc(dateStr: string, timeStr: string, tz: string) {
 // Spiegelt shared.jsx CURRENCIES. CW/SX = Caribische gulden; Vellu toont de
 // ISO-code "XCG", niet het CBCS-symbool "Cg" (Faisal, 24-09-2026).
 const CUR: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£" };
-const clientLang = (apptLang: unknown, country: unknown) => {
+// Taal van de salon: zelf gekozen (profiles.salon_lang, sinds 12-11-2026),
+// anders de landregel.
+const ownerLang = (p: any) => {
+  const own = String(p?.salon_lang || "").toLowerCase();
+  if (own === "nl" || own === "en" || own === "es") return own;
+  return DUTCH_COUNTRIES.has(String(p?.country_code || "NL").toUpperCase()) ? "nl" : "en";
+};
+const clientLang = (apptLang: unknown, p: any) => {
   const l = String(apptLang || "").toLowerCase();
   if (l === "nl" || l === "en" || l === "es") return l;
-  return DUTCH_COUNTRIES.has(String(country || "NL").toUpperCase()) ? "nl" : "en";
+  return ownerLang(p);
 };
-const ownerLang = (country: unknown) => DUTCH_COUNTRIES.has(String(country || "NL").toUpperCase()) ? "nl" : "en";
 const fmtDue = (iso: string, l: string, tz: string) => {
   try {
     return new Date(iso).toLocaleString(l === "es" ? "es-ES" : l === "en" ? "en-GB" : "nl-NL",
@@ -92,7 +98,7 @@ const sendMail = (type: string, booking: Record<string, unknown>) =>
     .then(async (r) => { if (!r.ok) console.error(`send-emails ${type} → ${r.status}`, await r.text().catch(() => "")); })
     .catch((e) => console.error(`send-emails ${type} failed:`, e));
 
-const SELECT = "id, owner_id, date, time, service_name, service_price, service_duration, client_name, client_email, client_phone, lang, payment_due_at, created_at, staff_id, staff_assignments, service_breakdown, profiles(business_name, slug, accent_color, logo_url, salon_email, email, country_code, iban, iban_holder, payment_link, staff_view_client_contact, waitlist_enabled, deactivated_at)";
+const SELECT = "id, owner_id, date, time, service_name, service_price, service_duration, client_name, client_email, client_phone, lang, payment_due_at, created_at, staff_id, staff_assignments, service_breakdown, profiles(business_name, slug, accent_color, logo_url, salon_email, email, country_code, salon_lang, iban, iban_holder, payment_link, staff_view_client_contact, waitlist_enabled, deactivated_at)";
 
 // Betaalgegevens van een reservering (Esther/TTNB 25-09-2026): staat er precies
 // één teamlid op en heeft zij eigen IBAN/betaallink, dan haar rekening — anders
@@ -113,10 +119,10 @@ async function payDetailsFor(a: any, p: any) {
 function baseOf(a: any) {
   const p = a.profiles || {};
   const cc = p.country_code || "NL";
-  const lang = clientLang(a.lang, cc);
+  const lang = clientLang(a.lang, p);
   return {
     lang,
-    oLang: ownerLang(cc),
+    oLang: ownerLang(p),
     tz: tzFor(cc),
     booking: {
       client_name: a.client_name,
@@ -133,7 +139,7 @@ function baseOf(a: any) {
       salon_slug: p.slug || "",
       currency: CUR[cc] || "€",
       lang,
-      owner_lang: ownerLang(cc),
+      owner_lang: ownerLang(p),
       staff_view_client_contact: p.staff_view_client_contact,
     },
     ownerEmail: p.salon_email || p.email || null,

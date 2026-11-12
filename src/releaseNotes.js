@@ -14,6 +14,23 @@
 
 export const RELEASES = [
   {
+    // 12-11 (zevende): salontaal zelf kiezen (profiles.salon_lang). Bij het
+    // aanmelden en in Instellingen → Salon; voorheen volgde de taal uit het land.
+    id: "2026-11-12g",
+    date: "2026-11-12",
+    title: { nl: "Kies de taal van je salon", en: "Choose your salon's language", es: "Elige el idioma de tu salón" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "In Instellingen → Salon kies je nu de taal van je salon: Nederlands, Engels of Spaans. Daarin mailt Vellu je, en klanten van afspraken die je zelf invoert krijgen hun mails in die taal.",
+          en: "In Settings → Salon you can now choose your salon's language: Dutch, English or Spanish. Vellu emails you in it, and clients of appointments you add yourself get their emails in it.",
+          es: "En Ajustes → Salón ahora eliges el idioma de tu salón: neerlandés, inglés o español. Vellu te escribe en ese idioma, y los clientes de las citas que añades tú reciben sus correos en él.",
+        },
+      },
+    ],
+  },
+  {
     // 12-11 (zesde): codes verhuizen mee (move_client_codes), inloopklanten met
     // alleen een voornaam op een eigen kaart (los:<id>), "." / "none" telt niet
     // als e-mailadres, samenvoegen van twee kaarten zonder e-mailadres.

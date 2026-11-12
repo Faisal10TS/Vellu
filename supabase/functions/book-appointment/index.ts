@@ -258,7 +258,7 @@ serve(async (req) => {
   // ---------- 1. Look up salon ----------
   const { data: salon, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, iban_holder, payment_link, prepay_enabled, prepay_term_hours, country_code, plan, staff_view_revenue, staff_view_client_contact, auto_block_no_show_threshold, cancel_deadline_hours, deactivated_at")
+    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, iban_holder, payment_link, prepay_enabled, prepay_term_hours, country_code, salon_lang, plan, staff_view_revenue, staff_view_client_contact, auto_block_no_show_threshold, cancel_deadline_hours, deactivated_at")
     .eq("slug", salon_slug)
     .maybeSingle();
   if (salonErr || !salon) return err(404, "salon_not_found", origin);
@@ -529,7 +529,11 @@ serve(async (req) => {
   // De eigenaar leest haar melding (mail + push) in de taal van de SALON, niet
   // in die van de klant (zelfde regel als owner_lang verderop). De opgeslagen
   // service_name en alle klantmails blijven in de klanttaal.
-  const ownerLang = ["NL", "BE", "AW", "CW", "BQ", "SX"].includes(salon.country_code || "NL") ? "nl" : "en";
+  // Sinds 12-11-2026 kiest de salon die taal zelf (profiles.salon_lang, bij het
+  // aanmelden en in Instellingen); zonder keuze geldt nog de landregel.
+  const ownSalonLang = String(salon.salon_lang || "");
+  const ownerLang = ["nl", "en", "es"].includes(ownSalonLang) ? ownSalonLang
+    : (["NL", "BE", "AW", "CW", "BQ", "SX"].includes(salon.country_code || "NL") ? "nl" : "en");
   const nmSalon = (o: any) => nmIn(o, ownerLang);
   const ownerNameParts: string[] = [];
 
@@ -1485,7 +1489,8 @@ serve(async (req) => {
     // functie doet niets als de eigenaar geen abonnement heeft; fire-and-forget
     // net als de mails — een mislukte push mag de boeking nooit raken.
     {
-      const ownerNl = ["NL", "BE", "AW", "CW", "BQ", "SX"].includes(salon.country_code || "NL");
+      // Pushteksten bestaan in NL en EN; een Spaanstalige salon krijgt Engels.
+      const ownerNl = ownerLang === "nl";
       // Zelfde opmaak als de app (shared.jsx fmtAmt): altijd een komma
       // ("€45,00", "XCG 45,00" — Faisal 24-09-2026), duizendtallen met een
       // punt ("$1.500,00" — 28-09-2026). Totaal is hier nooit negatief.

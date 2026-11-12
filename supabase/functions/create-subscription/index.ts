@@ -260,7 +260,7 @@ serve(async (req) => {
     if (method !== "creditcard" && method !== "ideal") return err(400, "invalid_method", origin);
     const { data: tp, error: tpErr } = await supabase
       .from("profiles")
-      .select("id, business_name, email, country_code, plan, subscription_status, trial_ends_at, mollie_customer_id, mollie_subscription_id, referral_credit_days, deactivated_at")
+      .select("id, business_name, email, country_code, salon_lang, plan, subscription_status, trial_ends_at, mollie_customer_id, mollie_subscription_id, referral_credit_days, deactivated_at")
       .eq("id", userId)
       .maybeSingle();
     if (tpErr || !tp) return err(404, "no_profile", origin);
@@ -278,7 +278,10 @@ serve(async (req) => {
 
     const amountNow = method === "ideal" ? 0.01 : 0;
     const planLabel = tPlan === "professional" ? "Professional" : "Starter";
-    const dutch = DUTCH_COUNTRIES.has(String(tp.country_code || "NL").toUpperCase());
+    // Zelf gekozen salontaal (profiles.salon_lang, sinds 12-11-2026) gaat voor
+    // de landregel; de omschrijving bestaat in NL en EN.
+    const dutch = tp.salon_lang ? tp.salon_lang === "nl"
+      : DUTCH_COUNTRIES.has(String(tp.country_code || "NL").toUpperCase());
     const tDescription = dutch
       ? `Vellu ${planLabel}: automatisch betalen na proef`
       : `Vellu ${planLabel}: automatic payment after trial`;

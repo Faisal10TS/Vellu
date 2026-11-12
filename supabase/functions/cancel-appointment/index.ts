@@ -456,7 +456,7 @@ serve(async (req) => {
   if (appt.owner_id) {
     const { data: owner } = await supabase
       .from("profiles")
-      .select("email, salon_email, business_name, accent_color, logo_url, slug, waitlist_enabled, country_code, staff_view_revenue, staff_view_client_contact, deactivated_at")
+      .select("email, salon_email, business_name, accent_color, logo_url, slug, waitlist_enabled, country_code, salon_lang, staff_view_revenue, staff_view_client_contact, deactivated_at")
       .eq("id", appt.owner_id)
       .maybeSingle();
     if (owner) {
@@ -468,9 +468,11 @@ serve(async (req) => {
       notify.owner_id = appt.owner_id;
       notify.staff_view_revenue = owner.staff_view_revenue;
       notify.staff_view_client_contact = owner.staff_view_client_contact;
-      // Dutch for the Dutch-language markets, English elsewhere. Falls back to
-      // Dutch when country_code is unset (old rows), matching send-reminders.
-      notify.lang = DUTCH_COUNTRIES.has(owner.country_code || "NL") ? "nl" : "en";
+      // De taal die de salon zelf koos (profiles.salon_lang, sinds 12-11-2026).
+      // Zonder keuze: Nederlands voor de Nederlandstalige markten, anders
+      // Engels; Nederlands als country_code leeg is (oude rijen).
+      notify.lang = ["nl", "en", "es"].includes(owner.salon_lang) ? owner.salon_lang
+        : (DUTCH_COUNTRIES.has(owner.country_code || "NL") ? "nl" : "en");
       salonSlug = owner.slug || "";
       waitlistEnabled = owner.waitlist_enabled !== false;
     }

@@ -15,6 +15,13 @@ const ADMIN_ALERT_EMAIL = Deno.env.get("ADMIN_ALERT_EMAIL") || "mirahventures@ve
 // verzameling als in cancel-appointment en send-reminders; hier gekopieerd
 // omdat edge functions geen gedeelde module hebben.
 const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
+// Sinds 12-11-2026 kiest de salon haar taal zelf (profiles.salon_lang, bij het
+// aanmelden en in Instellingen); zonder keuze geldt de landregel hierboven.
+const ownerLangOf = (p: Record<string, unknown>) => {
+  const own = String(p.salon_lang || "");
+  if (own === "nl" || own === "en" || own === "es") return own;
+  return DUTCH_COUNTRIES.has(String(p.country_code || "NL")) ? "nl" : "en";
+};
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 // Maandprijzen, kopie van PLAN_PRICES in create-subscription / change-plan.
@@ -305,7 +312,7 @@ async function notifyPaymentFailed(
           owner_email: p.email,
           owner_id: ownerId,
           // Salon-taal, niet klant-taal: dit is een bericht aan de eigenaar.
-          owner_lang: DUTCH_COUNTRIES.has(String(p.country_code || "NL")) ? "nl" : "en",
+          owner_lang: ownerLangOf(p),
           // Zodat send-emails datums in de tijdzone van de salon schrijft.
           country_code: p.country_code || "NL",
           business_name: p.business_name,
@@ -790,7 +797,7 @@ async function processEvent(
   const meta = payment.metadata as { plan?: string; billing_interval?: string; kind?: string } | null;
   const { data: profile, error: profErr } = await supabase
     .from("profiles")
-    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, cancel_at_period_end, cancelled_at, referral_credit_days, referral_credit_days_redeemed, email, business_name, country_code, btw_id, trial_ends_at, deactivated_at")
+    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, cancel_at_period_end, cancelled_at, referral_credit_days, referral_credit_days_redeemed, email, business_name, country_code, salon_lang, btw_id, trial_ends_at, deactivated_at")
     .eq("id", ownerId)
     .maybeSingle();
   if (profErr) {
@@ -1170,7 +1177,7 @@ async function processEvent(
               booking: {
                 owner_email: profile.email,
                 owner_id: ownerId,
-                owner_lang: DUTCH_COUNTRIES.has(String(country || "NL")) ? "nl" : "en",
+                owner_lang: ownerLangOf(profile as Record<string, unknown>),
                 country_code: country || "NL",
                 business_name: profile.business_name,
                 salon_name: profile.business_name,

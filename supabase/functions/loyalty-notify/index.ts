@@ -42,10 +42,17 @@ function safeImg(url: unknown): string | null {
   try { const u = new URL(url); return (u.protocol === "https:" || u.protocol === "http:") ? u.toString() : null; } catch { return null; }
 }
 const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
-const langFor = (apptLang: unknown, country: unknown) => {
+// Taal van de salon: zelf gekozen (profiles.salon_lang, sinds 12-11-2026),
+// anders de landregel.
+const salonLangOf = (salon: any) => {
+  const own = String(salon?.salon_lang || "").toLowerCase();
+  if (own === "nl" || own === "en" || own === "es") return own;
+  return DUTCH_COUNTRIES.has(String(salon?.country_code || "NL").toUpperCase()) ? "nl" : "en";
+};
+const langFor = (apptLang: unknown, salon: any) => {
   const l = String(apptLang || "").toLowerCase();
   if (l === "nl" || l === "en" || l === "es") return l;
-  return DUTCH_COUNTRIES.has(String(country || "NL").toUpperCase()) ? "nl" : "en";
+  return salonLangOf(salon);
 };
 const txt = (lang: string, nl: string, en: string, es: string) => lang === "en" ? en : lang === "es" ? es : nl;
 const ordinal = (lang: string, n: number) => lang === "en" ? `${n}${[, "st", "nd", "rd"][(n % 10 > 3 || Math.floor(n % 100 / 10) === 1) ? 0 : n % 10] || "th"}` : lang === "es" ? `${n}.ª` : `${n}e`;
@@ -157,7 +164,7 @@ serve(async (req) => {
     let salon = salonCache.get(row.owner_id);
     if (!salon) {
       const { data } = await supabase.from("profiles")
-        .select("id, business_name, slug, accent_color, logo_url, country_code, email, salon_email, loyalty_visits, loyalty_discount_pct")
+        .select("id, business_name, slug, accent_color, logo_url, country_code, salon_lang, email, salon_email, loyalty_visits, loyalty_discount_pct")
         .eq("id", row.owner_id).maybeSingle();
       salon = data; salonCache.set(row.owner_id, data);
     }
@@ -168,7 +175,7 @@ serve(async (req) => {
       .eq("owner_id", row.owner_id).ilike("client_email", row.client_email.replace(/[\\%_]/g, (m: string) => `\\${m}`))
       .eq("status", "completed").order("date", { ascending: false }).order("time", { ascending: false }).limit(1);
     const appt: any = appts?.[0] || {};
-    const lang = langFor(appt.lang, salon.country_code);
+    const lang = langFor(appt.lang, salon);
     const salonName = String(salon.business_name || "de salon");
     const accent = /^#[0-9a-fA-F]{6}$/.test(String(salon.accent_color || "")) ? String(salon.accent_color) : "#c9a96e";
     const firstName = String(appt.client_name || "").split(/\s+/)[0] || "";
@@ -205,7 +212,7 @@ serve(async (req) => {
     }
 
     // Eigenaar melden (push; geen abonnement = de functie doet niets).
-    const nlOwner = DUTCH_COUNTRIES.has(String(salon.country_code || "NL").toUpperCase());
+    const nlOwner = salonLangOf(salon) === "nl";
     const who = appt.client_name || row.client_email;
     try {
       await fetch(`${SUPABASE_URL}/functions/v1/send-push-notification`, {

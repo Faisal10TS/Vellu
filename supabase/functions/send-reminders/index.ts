@@ -82,6 +82,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 // Curacao and Bonaire are Dutch-language markets too. Unset country = Dutch.
 const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 const langFor = (code?: string | null) => (DUTCH_COUNTRIES.has(code || "NL") ? "nl" : "en");
+// Taal van de salon: zelf gekozen (profiles.salon_lang, sinds 12-11-2026),
+// anders het land.
+const salonLangOf = (p: any): string => (["nl", "en", "es"].includes(p?.salon_lang) ? p.salon_lang : langFor(p?.country_code));
 
 // Currency symbol per country (mirrors shared.jsx CURRENCIES). Unset = €.
 // CW/SX = "XCG " (Caribische gulden): die verving op 31 maart 2025 de
@@ -420,7 +423,7 @@ serve(async (req) => {
 
     const { data: appointments, error } = await supabase
       .from("appointments")
-      .select("*, profiles!owner_id(business_name, slug, accent_color, logo_url, email, salon_email, country_code, reminder_hours, deactivated_at)")
+      .select("*, profiles!owner_id(business_name, slug, accent_color, logo_url, email, salon_email, country_code, salon_lang, reminder_hours, deactivated_at)")
       .gte("date", todayStr)
       .lte("date", horizonStr)
       .eq("status", "confirmed")
@@ -495,7 +498,7 @@ serve(async (req) => {
 
       // Prefer the client's chosen booking language (stored on the appointment);
       // fall back to the salon's country language for older/legacy rows.
-      const lang = ["nl", "en", "es"].includes(apt.lang) ? apt.lang : langFor(p.country_code);
+      const lang = ["nl", "en", "es"].includes(apt.lang) ? apt.lang : salonLangOf(p);
       const booking = {
         client_name: apt.client_name,
         client_email: apt.client_email,
@@ -606,7 +609,7 @@ serve(async (req) => {
       const todayUtcStr = now.toISOString().split("T")[0];
       const { data: dayAppts } = await supabase
         .from("appointments")
-        .select("owner_id, time, client_name, service_name, staff_name, profiles!owner_id(business_name, email, salon_email, country_code, reminder_hours, deactivated_at)")
+        .select("owner_id, time, client_name, service_name, staff_name, profiles!owner_id(business_name, email, salon_email, country_code, salon_lang, reminder_hours, deactivated_at)")
         .eq("date", tomorrowStr)
         .eq("status", "confirmed")
         .is("cancelled_at", null);
@@ -641,7 +644,9 @@ serve(async (req) => {
         const ok = await sendOwnerDigest({
           email: p.salon_email || p.email || "",
           salon_name: p.business_name || "je salon",
-          lang: langFor(p.country_code),
+          // Het overzicht bestaat in NL en EN (sendOwnerDigest: alles behalve
+          // "en" wordt Nederlands), dus een Spaanstalige salon krijgt Engels.
+          lang: salonLangOf(p) === "nl" ? "nl" : "en",
           date: tomorrowStr,
           reminderHours: Number(p.reminder_hours) || 0,
           appts,

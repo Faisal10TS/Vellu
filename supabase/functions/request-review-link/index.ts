@@ -118,12 +118,14 @@ const isSaleRow = (a: any) =>
 const likeEscape = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
 
 const DUTCH_COUNTRIES = ["NL", "BE", "AW", "CW", "BQ", "SX"];
-const langFor = (reqLang: unknown, apptLang: string | null, country: string | null) => {
-  for (const cand of [reqLang, apptLang]) {
+// Laatste terugval: de taal die de salon zelf koos (profiles.salon_lang, sinds
+// 12-11-2026), anders de landregel.
+const langFor = (reqLang: unknown, apptLang: string | null, salon: any) => {
+  for (const cand of [reqLang, apptLang, salon?.salon_lang]) {
     const l = String(cand || "").toLowerCase();
     if (l === "nl" || l === "en" || l === "es") return l;
   }
-  return DUTCH_COUNTRIES.includes(String(country || "NL").toUpperCase()) ? "nl" : "en";
+  return DUTCH_COUNTRIES.includes(String(salon?.country_code || "NL").toUpperCase()) ? "nl" : "en";
 };
 
 const T = {
@@ -184,7 +186,7 @@ serve(async (req) => {
 async function verwerk(slug: string, email: string, reqLang: unknown) {
   const { data: salon } = await supabase
     .from("profiles")
-    .select("id, business_name, slug, accent_color, country_code, deactivated_at")
+    .select("id, business_name, slug, accent_color, country_code, salon_lang, deactivated_at")
     .eq("slug", slug)
     .maybeSingle();
   if (!salon) return;
@@ -277,7 +279,7 @@ async function verwerk(slug: string, email: string, reqLang: unknown) {
   const salonName = String(salon.business_name || "de salon");
   const eSalon = esc(salonName);
   const accent = /^#[0-9a-f]{6}$/i.test(String(salon.accent_color || "")) ? String(salon.accent_color) : "#c9a96e";
-  const lang = langFor(reqLang, appt.lang, salon.country_code) as keyof typeof T;
+  const lang = langFor(reqLang, appt.lang, salon) as keyof typeof T;
   const t = T[lang];
   const reviewUrl = `https://vellu.cc/${encodeURIComponent(String(salon.slug || ""))}?review=${token}`;
   const firstName = esc(String(appt.client_name || "").split(/\s+/)[0] || "");

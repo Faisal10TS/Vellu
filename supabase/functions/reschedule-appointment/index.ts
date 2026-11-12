@@ -244,7 +244,7 @@ serve(async (req) => {
 
   const { data: salon } = await supabase
     .from("profiles")
-    .select("business_hours, day_overrides, break_minutes, business_name, account_type, country_code, logo_url, accent_color, salon_email, email, slug, prepay_term_hours")
+    .select("business_hours, day_overrides, break_minutes, business_name, account_type, country_code, salon_lang, logo_url, accent_color, salon_email, email, slug, prepay_term_hours")
     .eq("id", callerId).maybeSingle();
   if (!salon) return err(404, "salon_not_found", origin);
 
@@ -595,8 +595,11 @@ serve(async (req) => {
       salon_slug: salon.slug || "",
       owner_id: callerId,
       currency: CUR[cc] || "€",
-      // De taal waarin de klant boekte; oude rijen zonder taal: de markttaal.
-      lang: ["nl", "en", "es"].includes(updated.lang) ? updated.lang : (DUTCH_COUNTRIES.has(cc) ? "nl" : "en"),
+      // De taal waarin de klant boekte; oude rijen zonder taal: de taal die de
+      // salon koos (salon_lang, sinds 12-11-2026), anders de markttaal.
+      lang: ["nl", "en", "es"].includes(updated.lang) ? updated.lang
+        : ["nl", "en", "es"].includes(salon.salon_lang) ? salon.salon_lang
+        : (DUTCH_COUNTRIES.has(cc) ? "nl" : "en"),
       cancel_url: cancelUrl,
     });
   }

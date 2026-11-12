@@ -168,7 +168,7 @@ serve(async (req) => {
   let staff: { id: string; name: string } | null = null;
   let { data: salon } = await supabase
     .from("profiles")
-    .select("id, business_name, country_code, staff_view_client_contact, deactivated_at")
+    .select("id, business_name, country_code, salon_lang, staff_view_client_contact, deactivated_at")
     .eq("calendar_feed_token", token)
     .maybeSingle();
   if (!salon) {
@@ -181,7 +181,7 @@ serve(async (req) => {
       staff = { id: st.id, name: st.name };
       const { data: ownerProfile } = await supabase
         .from("profiles")
-        .select("id, business_name, country_code, staff_view_client_contact, deactivated_at")
+        .select("id, business_name, country_code, salon_lang, staff_view_client_contact, deactivated_at")
         .eq("id", st.owner_id)
         .maybeSingle();
       salon = ownerProfile;
@@ -228,7 +228,11 @@ serve(async (req) => {
     appts.push(...(page || []));
     if (!page || page.length < PAGE) break;
   }
-  const L = LABELS[DUTCH_COUNTRIES.has(salon.country_code || "NL") ? "nl" : "en"];
+  // Zelf gekozen salontaal (profiles.salon_lang, sinds 12-11-2026) gaat voor;
+  // de labels bestaan in NL en EN, dus Spaans krijgt Engels.
+  const L = LABELS[salon.salon_lang === "nl" ? "nl"
+    : (salon.salon_lang === "en" || salon.salon_lang === "es") ? "en"
+    : (DUTCH_COUNTRIES.has(salon.country_code || "NL") ? "nl" : "en")];
 
   // De tijdzone van de salon bepaalt zowel de TZID op elk event als het
   // VTIMEZONE-blok in de kop; die twee moeten per definitie hetzelfde zijn,

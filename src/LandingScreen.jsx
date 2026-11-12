@@ -1696,6 +1696,8 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         slug: slug,
         city: form.city || "Nederland",
         country_code: form.countryCode || "NL",
+        // De taal die de salon in het formulier koos (= de paginataal).
+        salon_lang: ["nl", "en", "es"].includes(lang) ? lang : null,
         accent_color: "#c9a96e",
         account_type: form.accountType || "joint"
       });
@@ -1900,6 +1902,32 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                       : lang === "es"
                       ? <>Define tu <strong style={{ color: c.text }}>moneda e impuestos</strong>: {currencyForCountry(form.countryCode).symbol.trim()} · {taxForCountry(form.countryCode).label}. Puedes cambiarlo después en Ajustes.</>
                       : <>Sets your <strong style={{ color: c.text }}>currency and tax</strong>: {currencyForCountry(form.countryCode).symbol.trim()} · {taxForCountry(form.countryCode).label}. Changeable later in Settings.</>}
+                  </div>
+                </div>
+                {/* Taal (12-11-2026): de salon kiest zelf. Dezelfde keuze als de
+                    taalknop rechtsboven, dus de pagina schakelt mee; bij het
+                    aanmelden gaat hij als profiles.salon_lang mee. Voorheen volgde
+                    de taal van Vellu's mails uit het land, en kreeg Curaçao
+                    Nederlands terwijl die salons in het Engels werken. */}
+                <div data-signup-lang>
+                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Taal" : lang === "es" ? "Idioma" : "Language"}</div>
+                  <div role="group" aria-label={lang === "nl" ? "Taal" : lang === "es" ? "Idioma" : "Language"} style={{ display: "flex", gap: 8 }}>
+                    {[["nl", "Nederlands"], ["en", "English"], ["es", "Español"]].map(([code, label]) => (
+                      <button key={code} type="button" data-signup-lang-option={code} aria-pressed={lang === code} onClick={() => setLang(code)} style={{
+                        flex: 1, padding: "11px 6px", borderRadius: 8, cursor: "pointer", textAlign: "center", transition: "all 0.2s",
+                        fontSize: 13, fontWeight: lang === code ? 600 : 500, fontFamily: "inherit",
+                        background: lang === code ? `${AT.EARTH}12` : c.inputBg,
+                        border: `1.5px solid ${lang === code ? AT.EARTH : c.inputBorder}`,
+                        color: lang === code ? AT.EARTH : c.text,
+                      }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>
+                    {lang === "nl" ? "Hierin mailt Vellu je. Later te wijzigen in Instellingen."
+                      : lang === "es" ? "Vellu te escribe en este idioma. Puedes cambiarlo después en Ajustes."
+                      : "Vellu emails you in this language. Changeable later in Settings."}
                   </div>
                 </div>
                 <div style={{ position: "relative" }}>

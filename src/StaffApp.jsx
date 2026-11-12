@@ -9,7 +9,7 @@ import {
   getPaymentLinkWithAmount,
   fmt, parseDate, getDays,
   TIMES, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
-  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, fmtAmt, variantFromPrice, taxForCountry, resolveTax, ownerLangFor, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
+  DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header, isSaleRow, curSym, fmtAmt, variantFromPrice, taxForCountry, resolveTax, salonLangOf, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, getWhatsAppRefundMsg, partPricesOf, partLabelOf, useDashboardScrollbars,
   salonNow, tzFor, localToUtc, fetchAllRows,
   EmailTypoHint,
@@ -205,7 +205,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const [showAddAppt, setShowAddAppt] = useState(false);
   // lang = taal van de KLANT (bevestiging en latere mails), standaard de
   // markttaal van de salon — niet de schermtaal van de medewerker (S1-21).
-  const [addApptForm, setAddApptForm] = useState(() => ({ service_id: "", variant_id: "", date: fmt(salonToday()), time: "", client_name: "", client_email: "", client_phone: "", client_birthday: "", notify_client: true, lang: ownerLangFor(salonProfile.country_code) }));
+  const [addApptForm, setAddApptForm] = useState(() => ({ service_id: "", variant_id: "", date: fmt(salonToday()), time: "", client_name: "", client_email: "", client_phone: "", client_birthday: "", notify_client: true, lang: salonLangOf(salonProfile) }));
   const [addApptLoading, setAddApptLoading] = useState(false);
   const [addApptDone, setAddApptDone] = useState(false);
   const [newSvc, setNewSvc] = useState({ name_nl: "", name_en: "", price: "", duration: "60" });
@@ -687,7 +687,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           payment: "prepaid", ...(showMoney ? { price: a.service_price } : {}),
           salon_name: salonProfile.business_name, owner_email: null, salon_email: salonProfile.salon_email || "",
           salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "",
-          lang: a.lang || ownerLangFor(salonProfile.country_code), currency: cur,
+          lang: a.lang || salonLangOf(salonProfile), currency: cur,
           cancel_url: cancelUrl, cancel_deadline_hours: salonProfile.cancel_deadline_hours ?? 0,
         }).catch(e => console.error("bevestiging na vooruitbetaling:", e));
       }
@@ -727,7 +727,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           price: newPrice, old_price: oldPrice,
           salon_name: salonProfile.business_name, salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "",
           salon_slug: salonProfile.slug || "", salon_email: salonProfile.salon_email || "", owner_id: salonProfile.id,
-          currency: cur, lang: a.lang || ownerLangFor(salonProfile.country_code),
+          currency: cur, lang: a.lang || salonLangOf(salonProfile),
           amount_paid: paidAmountOf(a),
           payment_link: invoiceForm.payment_link || salonProfile.payment_link || "",
           salon_iban: invoiceForm.iban || salonProfile.iban || "",
@@ -768,7 +768,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           price, amount_paid: paidBefore, refund,
           salon_name: salonProfile.business_name, salon_email: salonProfile.salon_email || "",
           salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "",
-          lang: a.lang || ownerLangFor(salonProfile.country_code), currency: cur,
+          lang: a.lang || salonLangOf(salonProfile), currency: cur,
         }).catch(e => console.error("refund_sent:", e));
       }
     } finally { setProcessingApptId(null); }
@@ -1068,7 +1068,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         currency: cur, tax_label: tax.label, tax_id_label: tax.idLabel,
         // Taal van de KLANT (vastgelegd bij het boeken), niet de schermtaal
         // van de medewerker (audit S1-21).
-        lang: a.lang || ownerLangFor(salonProfile.country_code),
+        lang: a.lang || salonLangOf(salonProfile),
       });
       // sendEmails gooit niet maar geeft { success: false }: zonder deze
       // controle stond een mislukte factuur op Verstuurd (audit S1-07). Het
@@ -1133,7 +1133,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
         salon_slug: salonProfile.slug || "",
         date: a.date,
         // Taal van de inschrijving; oudere rijen hebben er geen.
-        lang: entry.lang || ownerLangFor(salonProfile.country_code),
+        lang: entry.lang || salonLangOf(salonProfile),
       });
       if (!mail?.success) { console.error("wachtlijstmail niet verstuurd:", mail?.error); return null; }
       return entry.client_name || "";
@@ -1182,7 +1182,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           salon_slug: salonProfile.slug || "",
           cancelled_by: "salon",
           owner_id: salonProfile.id,
-          lang: a.lang || ownerLangFor(salonProfile.country_code),
+          lang: a.lang || salonLangOf(salonProfile),
         });
         if (!mail?.success) console.error("booking_cancelled bericht mislukt:", mail?.error);
       }
@@ -1668,7 +1668,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   }, [canInvoice, canEditServices, view, staffSettingsTab]);
 
   // Nieuwe afspraak: kop-knop op desktop en snelle-actie-tegel (restyle 16-09).
-  const openAddAppt = () => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(salonToday()), time: "", client_name: "", client_email: "", client_phone: "", client_birthday: "", notify_client: true, lang: ownerLangFor(salonProfile.country_code) }); };
+  const openAddAppt = () => { setShowAddAppt(true); setAddApptDone(false); setAddApptForm({ service_id: "", variant_id: "", date: fmt(salonToday()), time: "", client_name: "", client_email: "", client_phone: "", client_birthday: "", notify_client: true, lang: salonLangOf(salonProfile) }); };
 
   const navItems = [
     ["dashboard", "dashboard", t.dashboard],
@@ -3665,7 +3665,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <span style={{ fontSize: 12, color: c.textSub }}>{L3("Taal van de klant", "Client's language", "Idioma del cliente")}</span>
                       <div role="radiogroup" aria-label={L3("Taal van de klant", "Client's language", "Idioma del cliente")} style={{ display: "flex", gap: 4, padding: 3, background: c.inputBg, borderRadius: 8, border: `1px solid ${c.inputBorder}` }}>
                         {[["nl", "NL"], ["en", "EN"], ["es", "ES"]].map(([code, label]) => {
-                          const on = (addApptForm.lang || ownerLangFor(salonProfile.country_code)) === code;
+                          const on = (addApptForm.lang || salonLangOf(salonProfile)) === code;
                           return (
                             <button key={code} type="button" role="radio" aria-checked={on} onClick={() => setAddApptForm(f => ({ ...f, lang: code }))}
                               style={{ padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", fontFamily: "'Jost',sans-serif", background: on ? accent : "transparent", color: on ? c.btnOnDark : c.textSub }}>{label}</button>
@@ -3683,7 +3683,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     const svcLabel = svc ? svcNameOf(svc) + (variant ? " — " + variant.name_nl : "") + ` (${myStaff.name})` : "";
                     // Haar teamprijs als de eigenaar die heeft ingesteld (S1-14).
                     const price = svc ? myPriceOf(svc, variant) : 0;
-                    const apptLang = addApptForm.lang || ownerLangFor(salonProfile.country_code);
+                    const apptLang = addApptForm.lang || salonLangOf(salonProfile);
                     const duration = variant ? variant.duration : (svc?.duration || 60);
                     const email = addApptForm.client_email.toLowerCase().trim();
                     // Vorm-check: een "." of "geen" als adres ging tot nu toe door
@@ -3746,7 +3746,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       service_name: svcLabel, date: addApptForm.date, time: addApptForm.time,
                       price, salon_name: salonProfile.business_name,
                       salon_accent: salonProfile.accent_color || "", salon_logo: salonProfile.logo_url || "", lang, currency: cur,
-                      owner_lang: ownerLangFor(salonProfile.country_code)
+                      owner_lang: salonLangOf(salonProfile)
                     });
                     setAddApptDone(true);
                     setAddApptLoading(false);
