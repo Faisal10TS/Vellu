@@ -7,7 +7,7 @@
 // Lazy-loaded from App.jsx so the ~10KB of admin-only code isn't in the
 // bundle a regular owner or customer downloads.
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
 import { useTheme, ACCENT, Layout, NavIcon, ThemeToggle, LangToggle, useDashboardScrollbars, currencyForCountry } from "./shared.jsx";
@@ -30,6 +30,8 @@ function totalsByCurrency(rows, amountOf) {
   return [...m.values()].sort((a, b) => (b.code === "EUR") - (a.code === "EUR") || b.total - a.total);
 }
 const localIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+// Spiegel van NO_BOOKINGS_AFTER_DAYS in supabase/functions/send-activation-nudges.
+const NO_BOOKINGS_AFTER_DAYS = 4;
 
 // Cron health: na hoeveel uur zonder hartslag een job als "gestopt" telt.
 // Spiegel van MONITORED in supabase/functions/cron-watchdog/index.ts (daar
@@ -164,6 +166,9 @@ function statusBadge(classification, churning, c, accent, everPaid = false) {
 }
 // Zelfde woorden als statusBadge, voor een kale subscription_status.
 const statusText = (status, everPaid) => status === "past_due" ? (everPaid ? "payment failed" : "trial ended") : status === "trialing" ? "trial" : status || "no trial";
+function StatusPill({ badge }) {
+  return <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: badge.color, background: `${badge.color}1a`, borderRadius: 6, padding: "3px 10px", whiteSpace: "nowrap" }}>{badge.label}</span>;
+}
 
 function StatCard({ label, value, sub, accent, c }) {
   return (
@@ -187,6 +192,9 @@ export default function AdminDashboard({ onLogout }) {
   const [isAdmin, setIsAdmin] = useState(null); // null = loading, false = denied, true = ok
   const [loadErrors, setLoadErrors] = useState([]); // [{ fn, message }] van RPC's die faalden
   const [loaded, setLoaded] = useState(false); // alle RPC's teruggekomen (goed of fout)
+  const [loadedAt, setLoadedAt] = useState(null); // tijdstip van de laatste volledige lading
+  const [refreshing, setRefreshing] = useState(false);
+  const loadSeq = useRef(0);
   const [overview, setOverview] = useState(null);
   const [salons, setSalons] = useState([]);
   // Salon deactiveren / verwijderen (23-10-2026): { kind, salon } of null.
@@ -240,17 +248,16 @@ export default function AdminDashboard({ onLogout }) {
   // andere lijst kon opleveren.
   const [now, setNow] = useState(() => Date.now());
 
-  // Gate on is_admin() + load everything in parallel on mount.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { data: adminCheck, error: adminErr } = await supabase.rpc("is_admin");
-      if (cancelled) return;
-      if (adminErr || !adminCheck) {
-        setIsAdmin(false);
-        return;
-      }
-      setIsAdmin(true);
+  // Alle cijfers in één keer (parallel) ophalen. Bij het openen en via de knop
+  // Refresh (12-11-2026: daarvoor laadde de pagina alleen bij openen, dus wie
+  // hem de hele dag open had keek naar cijfers van vanochtend). Een RPC die
+  // faalt laat zijn vorige gegevens staan en komt in de foutbalk; alleen bij
+  // de eerste lading is dat deel dan leeg. loadSeq: een latere lading (of het
+  // sluiten van de pagina) maakt het antwoord van een eerdere ongeldig.
+  const loadAll = useCallback(async () => {
+    const seq = ++loadSeq.current;
+    setRefreshing(true);
+    try {
       const calls = [
         ["admin_overview"],
         ["admin_salons_list"],
@@ -267,30 +274,50 @@ export default function AdminDashboard({ onLogout }) {
         ["admin_onboarding"],
         ["admin_price_list_imports"],
       ];
-      const results = await Promise.all(calls.map(([fn, args]) => supabase.rpc(fn, args)));
+      const results = await Promise.all(calls.map(([fn, args]) => supabase.rpc(fn, args).then(r => r, e => ({ data: null, error: { message: String(e?.message || e) } }))));
+      if (seq !== loadSeq.current) return;
       const [ov, sl, rs, cr, tl, bo, sb, ar, ai, sv, sr, sc, ob, pi] = results;
-      if (cancelled) return;
       // Een kapotte RPC gaf vroeger alleen een lege tab (augustus 2026: drie
       // tabs wekenlang leeg zonder melding). Nu staat bovenaan wat niet laadde.
       setLoadErrors(results.map((r, i) => r.error ? { fn: calls[i][0], message: r.error.message || String(r.error.code || "error") } : null).filter(Boolean));
-      setOverview(ov.data?.[0] || null);
-      setSalons(sl.data || []);
-      setRecent(rs.data || []);
-      setCron(cr.data || []);
-      setTimeline(tl.data || []);
-      setBilling(bo.data?.[0] || null);
-      setSubs(sb.data || []);
-      setSubInvoices(sr.data || []);
-      setCancellations(sc.data || []);
-      setRatings(ar.data || []);
-      setInvites(ai.data || []);
-      setSiteOn(!!sv.data);
-      setOnboarding(ob.data || []);
-      setPriceImports(pi.data || []);
+      const put = (r, set, pick = (d) => d || []) => { if (!r.error) set(pick(r.data)); };
+      put(ov, setOverview, d => d?.[0] || null);
+      put(sl, setSalons);
+      put(rs, setRecent);
+      put(cr, setCron);
+      put(tl, setTimeline);
+      put(bo, setBilling, d => d?.[0] || null);
+      put(sb, setSubs);
+      put(sr, setSubInvoices);
+      put(sc, setCancellations);
+      put(ar, setRatings);
+      put(ai, setInvites);
+      put(sv, setSiteOn, d => !!d);
+      put(ob, setOnboarding);
+      put(pi, setPriceImports);
       setLoaded(true);
-    })();
-    return () => { cancelled = true; };
+      setLoadedAt(Date.now());
+      setNow(Date.now());
+    } finally {
+      if (seq === loadSeq.current) setRefreshing(false);
+    }
   }, []);
+
+  // Gate on is_admin(), dan alles laden.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: adminCheck, error: adminErr } = await supabase.rpc("is_admin");
+      if (cancelled) return;
+      if (adminErr || !adminCheck) {
+        setIsAdmin(false);
+        return;
+      }
+      setIsAdmin(true);
+      loadAll();
+    })();
+    return () => { cancelled = true; loadSeq.current++; };
+  }, [loadAll]);
 
   // Het peilmoment één keer vastzetten bij het laden zou een dashboard dat de
   // hele dag openstaat laten stilstaan: een trial die vanmiddag de
@@ -299,7 +326,8 @@ export default function AdminDashboard({ onLogout }) {
   // ruim fijn genoeg voor een venster van veertien dagen. Geen renderlus: de
   // dependency-array is leeg, dus setNow zet dit effect niet opnieuw op.
   //
-  // Bewust géén her-fetch van de RPC's bij die tik. Gevolg: de lijst hieronder
+  // Bewust géén her-fetch van de RPC's bij die tik (daarvoor is er sinds
+  // 12-11-2026 de knop Refresh, die ook `now` bijzet). Gevolg: de lijst hieronder
   // loopt na een paar uur openstaan vóór op de statkaart "N ending in 14 days",
   // die uit admin_billing_overview komt en bij het laden bevroor. Dat verschil
   // bestond al — de oude inline Date.now() dreef bij élke re-render weg — en is
@@ -368,10 +396,8 @@ export default function AdminDashboard({ onLogout }) {
         ? `${name} is active again. If their paid period is over, they choose a plan in the app.${warn}`
         : `${name} is deleted: ${res?.removed?.appointments ?? 0} appointments, ${res?.removed?.services ?? 0} services, ${res?.removed?.files ?? 0} files, ${res?.removed?.staff_logins ?? 0} staff logins. Kept: ${res?.invoices_kept ?? 0} invoice(s) for your bookkeeping.${warn}`);
       setSalonAction(null); setSalonReason(""); setSalonConfirm("");
-      const [{ data: sl }, { data: sb }, { data: bo }] = await Promise.all([
-        supabase.rpc("admin_salons_list"), supabase.rpc("admin_subscriptions_list"), supabase.rpc("admin_billing_overview"),
-      ]);
-      setSalons(sl || []); setSubs(sb || []); setBilling(bo?.[0] || null);
+      // Alles opnieuw: de salon verdwijnt ook uit onboarding, aandacht e.d.
+      await loadAll();
     } finally { setSalonActionBusy(false); }
   };
 
@@ -451,9 +477,14 @@ export default function AdminDashboard({ onLogout }) {
     : salons;
 
   // Onboarding: wie loopt vast? Geen zichtbare diensten (boekingspagina leeg),
-  // of na drie dagen nog geen enkele afspraak. Nieuwste aanmelding bovenaan.
+  // of vier dagen na aanmelden hooguit één afspraak: dezelfde regel als de
+  // activatiemail (send-activation-nudges, NO_BOOKINGS_AFTER_DAYS). Tot
+  // 12-11-2026 stond hier "0 afspraken na drie dagen", zodat Aura Glow Nails
+  // en Bee Bare de mail kregen maar hier niet als vastgelopen stonden.
+  // Verschil dat blijft: de mail telt kassaverkopen niet mee, appts wel (op
+  // 12-11 scheelde dat voor geen enkele salon onder de grens).
   const stuck = onboarding
-    .map(o => ({ ...o, why: !o.visible_services ? "no_services" : (!o.appts && now - new Date(o.created_at).getTime() > 3 * 864e5) ? "no_bookings" : null }))
+    .map(o => ({ ...o, why: !o.visible_services ? "no_services" : ((o.appts || 0) <= 1 && now - new Date(o.created_at).getTime() >= NO_BOOKINGS_AFTER_DAYS * 864e5) ? "no_bookings" : null }))
     .filter(o => o.why);
   // Getekende link (10 min) naar een geüploade prijslijst in de privébucket.
   const openPriceFile = async (path) => {
@@ -475,6 +506,25 @@ export default function AdminDashboard({ onLogout }) {
   const liveSalons = salons.filter(s => !s.deactivated_at);
   const trialEnded = liveSalons.filter(s => s.subscription_status === "past_due" && !paidOwners.has(s.id));
   const paymentFailed = liveSalons.filter(s => s.subscription_status === "past_due" && paidOwners.has(s.id));
+  // Stand van een salon in de aanmeldlijsten (12-11-2026): daar stond het
+  // plan, en sinds de automatische proef heeft iedereen "professional".
+  // Bron = admin_subscriptions_list (betalend vs. comped), anders de kale
+  // subscription_status uit de salonlijst.
+  const subById = new Map(subs.map(s => [s.id, s]));
+  const salonById = new Map(salons.map(s => [s.id, s]));
+  const signupStatus = (id) => {
+    const everPaid = paidOwners.has(id);
+    if (salonById.get(id)?.deactivated_at) return { badge: { label: "deactivated", color: c.textMuted }, note: null };
+    const s = subById.get(id);
+    if (s) {
+      const note = s.churning ? (s.plan_expires_at ? `ends ${fmtDate(s.plan_expires_at)}` : null)
+        : s.classification === "trialing" ? (s.trial_ends_at ? `until ${fmtDate(s.trial_ends_at)}` : null)
+        : s.classification === "past_due" && !everPaid ? (s.trial_ends_at ? `ended ${fmtDate(s.trial_ends_at)}` : null)
+        : null;
+      return { badge: statusBadge(s.classification, s.churning, c, accent, everPaid), note };
+    }
+    return { badge: { label: statusText(salonById.get(id)?.subscription_status, everPaid), color: c.textMuted }, note: null };
+  };
   // Omzet van salons (voltooide afspraken), per munt.
   const salonRevenue = totalsByCurrency(salons, s => s.total_revenue).filter(t => Math.round(t.total) !== 0);
 
@@ -489,6 +539,35 @@ export default function AdminDashboard({ onLogout }) {
   ].map(j => ({ ...j, st: cronState(j, now) }))
     .sort((a, b) => cronRank[a.st.level] - cronRank[b.st.level] || a.job_name.localeCompare(b.job_name));
   const cronDown = cronRows.filter(j => j.st.level === "down").length;
+
+  // "Needs attention" (12-11-2026): alles waar een actie bij hoort op één
+  // plek bovenaan Overview, ernstigste eerst. Elke regel verwijst naar de tab
+  // met de details. Een salon met een afgelopen proef of mislukte betaling
+  // staat niet nóg eens onder "stuck in onboarding".
+  const nameOf = (s) => String(s.business_name || s.slug || "").trim() || "(no name)";
+  const dayOf = (iso) => new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+  const within = (iso, days) => !!iso && new Date(iso).getTime() <= now + days * 864e5;
+  const listedBilling = new Set([...trialEnded, ...paymentFailed].map(s => s.id));
+  const subsLive = subs.filter(s => !salonById.get(s.id)?.deactivated_at);
+  const attention = [
+    { key: "cron", tone: "danger", tab: "cron", tabLabel: "Cron health", title: "Cron job stopped or failing",
+      items: cronRows.filter(j => j.st.level === "down").map(j => j.job_name) },
+    { key: "payment_failed", tone: "danger", tab: "billing", tabLabel: "Revenue", title: "Payment failed",
+      items: paymentFailed.map(s => `${nameOf(s)}${s.plan_expires_at ? ` (unpaid since ${dayOf(s.plan_expires_at)})` : ""}`) },
+    { key: "leaving", tone: "warning", tab: "billing", tabLabel: "Revenue", title: "Cancelled, access still running",
+      items: subsLive.filter(s => s.churning).map(s => `${nameOf(s)}${s.plan_expires_at ? ` (ends ${dayOf(s.plan_expires_at)})` : ""}`) },
+    { key: "trial_ended", tone: "warning", tab: "billing", tabLabel: "Revenue", title: "Trial ended without a plan",
+      items: trialEnded.map(s => { const t = subById.get(s.id)?.trial_ends_at; return `${nameOf(s)}${t ? ` (${dayOf(t)})` : ""}`; }) },
+    { key: "stuck", tone: "warning", tab: "onboarding", tabLabel: "Onboarding", title: "Stuck in onboarding",
+      items: stuck.filter(o => !listedBilling.has(o.id)).map(o => `${nameOf(o)} (${o.why === "no_services" ? "no services" : o.appts ? "1 booking" : "no bookings"})`) },
+    { key: "trial_ending", tone: "info", tab: "billing", tabLabel: "Revenue", title: "Trial ends within 7 days",
+      items: subsLive.filter(s => s.classification === "trialing" && within(s.trial_ends_at, 7)).map(s => `${nameOf(s)} (${dayOf(s.trial_ends_at)})`) },
+    { key: "renewing", tone: "quiet", tab: "billing", tabLabel: "Revenue", title: "Renews within 7 days",
+      items: subsLive.filter(s => s.classification === "paying" && !s.churning && within(s.plan_expires_at, 7))
+        .sort((a, b) => new Date(a.plan_expires_at) - new Date(b.plan_expires_at))
+        .map(s => `${nameOf(s)} (${dayOf(s.plan_expires_at)}${s.billing_interval === "yearly" ? ", yearly: pays by link" : ""})`) },
+  ].filter(a => a.items.length);
+  const toneColor = { danger: c.danger, warning: c.warning, info: accent, quiet: c.textSub };
 
   // Omzet van salons per dag, één lijn per munt (bedragen niet omgerekend).
   // Vaste as van 30 dagen t/m vandaag; dagen zonder afspraken tellen als 0.
@@ -534,7 +613,15 @@ export default function AdminDashboard({ onLogout }) {
             <div style={{ fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", color: accent, marginBottom: 6 }}>Vellu Admin</div>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 32, fontWeight: 300 }}>Platform overview</div>
           </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <span data-admin-updated style={{ fontSize: 11, color: c.textMuted, whiteSpace: "nowrap" }} title={loadedAt ? new Date(loadedAt).toLocaleString("nl-NL") : undefined}>
+              {refreshing ? "Loading…" : loadedAt ? `Updated ${new Date(loadedAt).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}` : ""}
+            </span>
+            <button type="button" data-admin-refresh className="btn-ghost" onClick={() => loadAll()} disabled={refreshing} aria-label="Refresh all numbers" style={{ display: "inline-flex", alignItems: "center", gap: 7, opacity: refreshing ? 0.6 : 1 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={refreshing ? { animation: "vlAdminSpin 0.9s linear infinite" } : undefined}><path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" /></svg>
+              Refresh
+            </button>
+            <style>{"@keyframes vlAdminSpin{to{transform:rotate(360deg)}}"}</style>
             <ThemeToggle />
             {onLogout && <button className="btn-ghost" onClick={onLogout}>Logout</button>}
           </div>
@@ -543,10 +630,10 @@ export default function AdminDashboard({ onLogout }) {
         {loadErrors.length > 0 && (
           <div data-admin-load-errors role="alert" style={{ background: `${c.danger}14`, border: `1px solid ${c.danger}55`, borderRadius: 12, padding: "12px 14px", marginBottom: 18, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: c.danger }}>Some data did not load, so parts of this page may be empty or wrong.</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: c.danger }}>Some data did not load, so parts of this page may be empty or out of date.</div>
               <div style={{ fontFamily: "monospace", fontSize: 11, color: c.textSub, marginTop: 6, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{loadErrors.map(e => `${e.fn}: ${e.message}`).join("\n")}</div>
             </div>
-            <button type="button" className="btn-ghost" onClick={() => window.location.reload()} style={{ fontSize: 11, padding: "7px 12px" }}>Reload</button>
+            <button type="button" className="btn-ghost" onClick={() => loadAll()} disabled={refreshing} style={{ fontSize: 11, padding: "7px 12px" }}>{refreshing ? "Loading…" : "Try again"}</button>
           </div>
         )}
 
@@ -579,6 +666,29 @@ export default function AdminDashboard({ onLogout }) {
         {/* ── OVERVIEW TAB ── */}
         {tab === "overview" && (
           <>
+            {/* Needs attention: pas na de eerste lading, anders flitst "niets" */}
+            {loaded && (
+              <div data-needs-attention style={{ background: c.bgCard, border: `1px solid ${attention.some(a => a.tone === "danger") ? `${c.danger}66` : c.border}`, borderRadius: 16, padding: "16px 20px", marginBottom: 16 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>Needs attention{attention.length ? ` — ${attention.length}` : ""}</div>
+                {attention.length === 0 && <div style={{ fontSize: 12, color: c.textSub, marginTop: 8 }}>Nothing right now: no failed payments, stuck salons or stopped jobs.</div>}
+                {attention.map((a, i) => (
+                  <div key={a.key} data-attention={a.key} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 0 10px", borderTop: i ? `1px solid ${c.border}` : "none", marginTop: i ? 0 : 4 }}>
+                    <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 2, background: toneColor[a.tone], marginTop: 6, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>
+                        {a.title} <span style={{ color: toneColor[a.tone], fontWeight: 600 }}>{a.items.length}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: c.textSub, marginTop: 3, lineHeight: 1.55, overflowWrap: "anywhere" }}>{a.items.join(" · ")}</div>
+                    </div>
+                    <button type="button" onClick={() => setTab(a.tab)} style={{ fontSize: 11, color: accent, background: "none", border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", padding: "3px 0", flexShrink: 0, fontFamily: "inherit" }}>
+                      {a.tabLabel}
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Stat cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
               {/* "on paid plans" telde iedereen met een plan (13), ook proef
@@ -644,14 +754,14 @@ export default function AdminDashboard({ onLogout }) {
                   <button style={{ fontSize: 11, color: accent, background: "none", border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={() => setTab("signups")}>See all <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg></button>
                 </div>
                 {recent.slice(0, 5).map(s => (
-                  <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${c.border}`, fontSize: 13 }}>
-                    <div>
+                  <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${c.border}`, fontSize: 13 }}>
+                    <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>
                       <div style={{ fontWeight: 500 }}>{s.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</div>
                       <div style={{ fontSize: 11, color: c.textMuted }}>{s.email} · {s.city || "—"}{s.referred_by_name ? ` · via ${s.referred_by_name}` : ""}</div>
                     </div>
-                    <div style={{ fontSize: 11, color: c.textSub, textAlign: "right" }}>
+                    <div data-signup-status style={{ fontSize: 11, color: c.textSub, textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
+                      <StatusPill badge={signupStatus(s.id).badge} />
                       <div>{relTime(s.created_at)}</div>
-                      <div style={{ color: s.plan ? accent : c.textMuted, fontWeight: s.plan ? 600 : 400 }}>{s.plan || "no plan"}</div>
                     </div>
                   </div>
                 ))}
@@ -910,7 +1020,7 @@ export default function AdminDashboard({ onLogout }) {
                           </td>
                           <td style={{ padding: "12px 14px", color: c.textSub, textTransform: "capitalize" }}>{s.plan || "—"}</td>
                           <td style={{ padding: "12px 14px" }}>
-                            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: badge.color, background: `${badge.color}1a`, borderRadius: 20, padding: "3px 10px" }}>{badge.label}</span>
+                            <StatusPill badge={badge} />
                           </td>
                           <td style={{ padding: "12px 14px", color: c.textMuted, fontSize: 11 }}>{s.billing_interval || "—"}</td>
                           <td style={{ padding: "12px 14px", color: Number(s.mrr_eur) > 0 ? accent : c.textMuted, fontFamily: "'Cormorant Garamond',serif", fontSize: 15 }}>{fmtEur(s.mrr_eur)}</td>
@@ -1153,18 +1263,24 @@ export default function AdminDashboard({ onLogout }) {
               <div style={{ color: c.textMuted, fontSize: 12, padding: 20, textAlign: "center" }}>No signups yet.</div>
             )}
             {recent.map(s => (
-              <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: `1px solid ${c.border}` }}>
-                <div>
+              <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${c.border}` }}>
+                <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>
                   <div style={{ fontWeight: 500, fontSize: 13 }}>{s.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</div>
                   <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
                     {s.email} · {s.city || "—"} · /{s.slug}
                     {s.referred_by_name && <span style={{ color: accent }}> · referred by {s.referred_by_name}</span>}
                   </div>
                 </div>
-                <div style={{ textAlign: "right", fontSize: 11 }}>
-                  <div style={{ color: s.plan ? accent : c.textMuted, fontWeight: s.plan ? 600 : 400 }}>{s.plan || "no plan"}</div>
-                  <div style={{ color: c.textMuted }}>{fmtDateTime(s.created_at)}</div>
-                </div>
+                {(() => {
+                  const st = signupStatus(s.id);
+                  return (
+                    <div data-signup-status style={{ textAlign: "right", fontSize: 11, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
+                      <StatusPill badge={st.badge} />
+                      {st.note && <div style={{ color: c.textSub, fontSize: 10 }}>{st.note}</div>}
+                      <div style={{ color: c.textMuted }}>{fmtDateTime(s.created_at)}</div>
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>
@@ -1175,14 +1291,14 @@ export default function AdminDashboard({ onLogout }) {
           <>
             <div data-onboarding-stuck style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "18px 20px", marginBottom: 16 }}>
               <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>Needs a nudge — {stuck.length}</div>
-              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12 }}>Salons with an empty booking page, or no bookings at all three days after signing up. Deactivated salons and the demo are left out.</div>
+              <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12 }}>Salons with an empty booking page, or at most one booking four days after signing up (the same rule as the activation email). Deactivated salons and the demo are left out.</div>
               {stuck.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: 16, textAlign: "center" }}>Everyone is up and running.</div>}
               {stuck.length > 0 && (
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                       <tr style={{ borderBottom: `1px solid ${c.border}` }}>
-                        {["Salon", "Missing", "Signed up", "Last seen", "Plan", "Services", "Bookings", "Price list"].map(h => (
+                        {["Salon", "Missing", "Signed up", "Last seen", "Status", "Services", "Bookings", "Price list"].map(h => (
                           <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, whiteSpace: "nowrap" }}>{h}</th>
                         ))}
                       </tr>
@@ -1194,12 +1310,11 @@ export default function AdminDashboard({ onLogout }) {
                             <a href={`/${o.slug}`} target="_blank" rel="noreferrer" style={{ color: c.text, textDecoration: "none", fontWeight: 500 }}>{o.business_name || <em style={{ color: c.textMuted }}>(no name)</em>}</a>
                             <div style={{ fontSize: 10, color: c.textMuted }}><a href={`mailto:${o.email}`} style={{ color: "inherit" }}>{o.email}</a> · {o.country_code || "—"}</div>
                           </td>
-                          <td style={{ padding: "10px", color: c.warning, whiteSpace: "nowrap" }}>{o.why === "no_services" ? "No services" : "No bookings yet"}</td>
+                          <td style={{ padding: "10px", color: c.warning, whiteSpace: "nowrap" }}>{o.why === "no_services" ? "No services" : o.appts ? "Only 1 booking" : "No bookings yet"}</td>
                           <td style={{ padding: "10px", color: c.textMuted, whiteSpace: "nowrap" }}>{fmtDate(o.created_at)}</td>
                           <td style={{ padding: "10px", color: c.textMuted, whiteSpace: "nowrap" }} title={o.last_seen ? fmtDateTime(o.last_seen) : undefined}>{relTime(o.last_seen)}</td>
                           <td style={{ padding: "10px", whiteSpace: "nowrap", fontSize: 11 }}>
-                            {statusText(o.subscription_status, paidOwners.has(o.id))}
-                            {o.subscription_status === "trialing" && o.trial_ends_at && <div style={{ fontSize: 10, color: c.textMuted }}>until {fmtDate(o.trial_ends_at)}</div>}
+                            {(() => { const st = signupStatus(o.id); return <><StatusPill badge={st.badge} />{st.note && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{st.note}</div>}</>; })()}
                           </td>
                           <td style={{ padding: "10px", color: c.textSub }}>{o.visible_services}{o.services !== o.visible_services ? ` (${o.services})` : ""}</td>
                           <td style={{ padding: "10px", color: c.textSub }}>{o.appts}</td>
