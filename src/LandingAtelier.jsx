@@ -148,7 +148,7 @@ function AtThemeVisual({ id, lang }) {
           {avatar("B")}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13.5, fontWeight: 600 }}>Bloom Studio</div>
-            <div style={{ fontSize: 11, color: sub, marginTop: 1 }}>{L("BIAB nieuwe set", "BIAB new set", "BIAB set nuevo")} · 75 min · €52,00</div>
+            <div style={{ fontSize: 11, color: sub, marginTop: 1 }}>{L("BIAB nieuwe set", "BIAB new set", "BIAB set nuevo")} · 75 min · €52</div>
           </div>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10.5, color: EARTH, border: `1px solid ${PUTTY}`, borderRadius: 8, padding: "6px 9px", background: BONE }}><NavIcon name="link" size={12} color={EARTH} />vellu.cc/bloomstudio</span>
         </div>
@@ -344,7 +344,7 @@ function AtStepVisual({ n, lang }) {
             <div key={nm} style={{ ...chip, padding: "5px 8px" }}>
               <NavIcon name="check" size={11} color={EARTH} />
               <span style={{ fontSize: 10.5, fontWeight: 600, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nm}</span>
-              <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 13 }}>€{p},00</span>
+              <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 13 }}>€{p}</span>
             </div>
           ))}
         </div>
@@ -577,10 +577,10 @@ function AtFooter({ lang, t, maxW, pad, onScrollTo, onFinder, onNavigate, onOpen
 function AtHeroPhone({ lang, ready }) {
   const L = (nl, en, es) => (lang === "nl" ? nl : lang === "es" ? es : en);
   const services = [
-    { icon: "sparkle", name: L("Gel manicure", "Gel manicure", "Manicura en gel"), min: 45, price: "€38,00" },
-    { icon: "diamond", name: L("BIAB nieuwe set", "BIAB new set", "BIAB set nuevo"), min: 75, price: "€52,00" },
-    { icon: "eye", name: "Lash lift", min: 60, price: "€49,00" },
-    { icon: "star2", name: L("Brow shaping", "Brow shaping", "Diseño de cejas"), min: 20, price: "€18,00" },
+    { icon: "sparkle", name: L("Gel manicure", "Gel manicure", "Manicura en gel"), min: 45, price: "€38" },
+    { icon: "diamond", name: L("BIAB nieuwe set", "BIAB new set", "BIAB set nuevo"), min: 75, price: "€52" },
+    { icon: "eye", name: "Lash lift", min: 60, price: "€49" },
+    { icon: "star2", name: L("Brow shaping", "Brow shaping", "Diseño de cejas"), min: 20, price: "€18" },
   ];
   const book = L("Boek", "Book", "Reservar");
   const scale = HERO_PHONE_INNER / HERO_SCREEN_W;
@@ -1040,8 +1040,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
   // krijgt alleen naam/e-mail/telefoon, ClientApp kent geen login).
   const faqs = lang === "es" ? [
     ["¿Qué es Vellu y para quién es?", "Vellu te da tu propia página de reservas en vellu.cc/tu-nombre. Los clientes reservan directamente contigo, sin intermediarios, y tú gestionas todo desde tu panel. Hecho para profesionales independientes de la belleza: manicuristas, artistas de pestañas, especialistas en cejas, peluquerías y salones, solos o con equipo."],
-    ["¿Cuánto cuesta y por qué sin comisión?", "Starter cuesta €19 al mes y Professional €35 al mes. Precio fijo, 0% de comisión, sin costes ocultos: nunca pagas por reserva ni por cliente nuevo, y con Professional todo tu equipo está incluido. Además tienes tu propia página con tu marca en lugar de un perfil en un buscador: tus clientes siguen siendo tus clientes."],
-    ["¿Puedo probarlo primero?", "Sí. Cada salón nuevo empieza con 14 días de prueba gratis. Configura tu página, recibe reservas y después decide si sigues con Starter o Professional."],
+    ["¿Cuánto cuesta y por qué sin comisión?", "Starter cuesta €19 al mes y Professional €35 al mes. Precio fijo, 0% de comisión, sin costes ocultos: nunca pagas por reserva ni por cliente nuevo, y con Professional todo tu equipo está incluido. Además tienes tu propia página con tu marca en lugar de un perfil en un buscador: tus clientes siguen siendo tus clientes. Los precios de Vellu son en euros; en tu página de reservas tus clientes ven tus precios en la moneda de tu país."],
+    ["¿Puedo probarlo primero, y qué pasa después?", "Sí. Cada salón nuevo empieza con 14 días de prueba gratis. Configura tu página, recibe reservas y después decide si sigues con Starter o Professional. Recibes un recordatorio tres días antes del final y otro el último día. Si no eliges nada, la prueba termina sin más; tu cuenta y tus datos se conservan, así que puedes seguir más adelante."],
     ["¿Puedo cancelar cuando quiera?", "Sí, directamente desde tu panel. No se te vuelve a cobrar y tu plan sigue activo hasta el final del periodo que ya has pagado."],
     ["¿Puede mi equipo gestionar su propia agenda?", "Sí. Con el plan Professional cada miembro del equipo tiene su propio acceso. Solo ve sus propias citas y gestiona sus propios servicios y horarios."],
     ["¿Reciben recordatorios los clientes y cómo cancelan?", "Sí, automáticamente: una confirmación al reservar, un recordatorio 24 horas antes y, después de la visita, un seguimiento que pide una reseña. Cancelan con el enlace de su correo de confirmación; tú decides hasta cuándo se puede."],
@@ -1049,8 +1049,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     ["¿Puedo traer mis clientes y citas de otro sistema?", "Sí. Exporta tus clientes y próximas citas de tu sistema actual como Excel o CSV e impórtalos en tu panel. Lo ves todo antes de guardar y tus clientes no reciben una segunda confirmación. ¿No lo consigues? Contáctanos y te ayudamos gratis."],
   ] : lang === "nl" ? [
     ["Wat is Vellu, en voor wie is het?", "Vellu geeft jou je eigen boekingspagina op vellu.cc/jouw-naam. Klanten boeken direct bij jou, zonder tussenpartij, en jij beheert alles vanuit je dashboard. Gemaakt voor onafhankelijke beauty professionals: nail techs, lash artists, brow specialists, kappers en salons, solo of met een team."],
-    ["Wat kost het, en waarom geen commissie?", "Starter is €19 per maand, Professional €35 per maand. Vast tarief, 0% commissie, geen verborgen kosten: je betaalt nooit per boeking of per nieuwe klant, en bij Professional is je hele team inbegrepen. Bovendien krijg je je eigen merkpagina in plaats van een profiel in een zoekplatform: jouw klanten blijven jouw klanten."],
-    ["Kan ik het eerst uitproberen?", "Ja. Elke nieuwe salon start met 14 dagen gratis proberen. Zet je pagina op, ontvang boekingen en kies daarna of je doorgaat met Starter of Professional."],
+    ["Wat kost het, en waarom geen commissie?", "Starter is €19 per maand, Professional €35 per maand. Vast tarief, 0% commissie, geen verborgen kosten: je betaalt nooit per boeking of per nieuwe klant, en bij Professional is je hele team inbegrepen. Bovendien krijg je je eigen merkpagina in plaats van een profiel in een zoekplatform: jouw klanten blijven jouw klanten. De prijzen van Vellu zijn in euro's; op je boekingspagina zien je klanten jouw prijzen in de valuta van je land."],
+    ["Kan ik het eerst uitproberen, en wat gebeurt er daarna?", "Ja. Elke nieuwe salon start met 14 dagen gratis proberen. Zet je pagina op, ontvang boekingen en kies daarna of je doorgaat met Starter of Professional. Drie dagen voor het einde en op de laatste dag krijg je een herinnering. Kies je niets, dan stopt de proef vanzelf; je account en gegevens blijven bewaard, dus je kunt later alsnog verder."],
     ["Kan ik op elk moment opzeggen?", "Ja, gewoon vanuit je dashboard. Je wordt daarna niet meer afgeschreven en je abonnement blijft actief tot het einde van de periode die je al hebt betaald."],
     ["Kunnen mijn medewerkers hun eigen agenda beheren?", "Ja. Met het Professional-plan krijgt elke medewerker een eigen login. Ze zien alleen hun eigen afspraken en beheren hun eigen diensten en werktijden."],
     ["Krijgen klanten herinneringen, en hoe annuleren ze?", "Ja, automatisch: een bevestiging bij het boeken, een herinnering 24 uur van tevoren en na het bezoek een follow-up voor een review. Annuleren gaat via de link in hun bevestigingsmail; jij bepaalt tot wanneer dat kan."],
@@ -1058,8 +1058,8 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
     ["Kan ik mijn klanten en afspraken meenemen van een ander systeem?", "Ja. Exporteer je klanten en komende afspraken uit je huidige systeem als Excel of CSV en importeer ze in je dashboard. Je ziet alles voordat het wordt opgeslagen, en je klanten krijgen geen tweede bevestiging. Lukt het niet? Neem contact op en we helpen je gratis."],
   ] : [
     ["What is Vellu, and who is it for?", "Vellu gives you your own booking page at vellu.cc/your-name. Clients book directly with you, no middleman, and you manage everything from your dashboard. Built for independent beauty professionals: nail techs, lash artists, brow specialists, hairdressers and salons, solo or with a team."],
-    ["What does it cost, and why no commission?", "Starter is €19 a month, Professional €35 a month. Fixed price, 0% commission, no hidden fees: you never pay per booking or per new client, and on Professional your whole team is included. And you get your own branded page instead of a profile in a marketplace: your clients stay your clients."],
-    ["Can I try it first?", "Yes. Every new salon starts with a 14-day free trial. Set up your page, take bookings and then decide whether to continue with Starter or Professional."],
+    ["What does it cost, and why no commission?", "Starter is €19 a month, Professional €35 a month. Fixed price, 0% commission, no hidden fees: you never pay per booking or per new client, and on Professional your whole team is included. And you get your own branded page instead of a profile in a marketplace: your clients stay your clients. Vellu's prices are in euros; on your booking page your clients see your prices in your country's currency."],
+    ["Can I try it first, and what happens after?", "Yes. Every new salon starts with a 14-day free trial. Set up your page, take bookings and then decide whether to continue with Starter or Professional. You get a reminder three days before the end and on the last day. If you don't choose, the trial simply stops; your account and data are kept, so you can continue later."],
     ["Can I cancel anytime?", "Yes, straight from your dashboard. You won't be charged again, and your plan stays active until the end of the period you've already paid for."],
     ["Can my staff manage their own agenda?", "Yes. With the Professional plan, each staff member gets their own login. They only see their own appointments and manage their own services and hours."],
     ["Do clients get reminders, and how do they cancel?", "Yes, automatically: a confirmation when they book, a reminder 24 hours before, and a follow-up after the visit asking for a review. Cancelling goes through the link in their confirmation email; you set the cancellation deadline."],
@@ -1481,8 +1481,13 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
             hun eigen categorieën. */}
         <div id="find-salon-section" style={{ background: PUTTY, position: "relative", zIndex: 10 }}>
           <div style={{ maxWidth: maxW, margin: "0 auto", padding: `clamp(40px, 6vw, 64px) ${pad} clamp(40px, 6vw, 64px)` }}>
-            <AtHead title={lang === "nl" ? "Salons in de spotlight" : lang === "es" ? "Salones destacados" : "Salons in the spotlight"} accent={lang === "es" ? "destacados" : "spotlight"}
-              sub={lang === "nl" ? "Getalenteerde salons waar je meteen kunt boeken, elk op hun eigen pagina. Neem een kijkje en boek je volgende afspraak." : lang === "es" ? "Salones con talento donde puedes reservar al momento, cada uno en su propia página. Échales un vistazo y reserva tu próxima cita." : "Talented salons you can book with right away, each on their own page. Take a look and book your next appointment."} tone="putty" />
+            {/* Kop voor de salon-eigenaar (kopersblik 12-11, Faisal: "do 4"):
+                de vorige tekst sprak klanten aan ("boek je volgende afspraak"),
+                waardoor een eigenaar dit bewijs oversloeg. De salons blijven
+                in het licht staan (naam, specialiteit, boekknop), zonder op te
+                scheppen over aantallen. */}
+            <AtHead title={lang === "nl" ? "Echte salons, echte pagina's" : lang === "es" ? "Salones reales, páginas reales" : "Real salons, real pages"} accent={lang === "nl" ? "echte pagina's" : lang === "es" ? "páginas reales" : "real pages"}
+              sub={lang === "nl" ? "Zo ziet jouw pagina eruit: je eigen naam, kleuren, foto's en behandelingen. Neem een kijkje bij deze salons, of boek meteen bij ze." : lang === "es" ? "Así se ve tu página: tu nombre, tus colores, tus fotos y tus tratamientos. Echa un vistazo a estos salones o reserva con ellos al momento." : "This is what your page looks like: your own name, colours, photos and treatments. Take a look at these salons, or book with them right away."} tone="putty" />
             <div className="at-show-row">
               {[
                 // bar = kleur van de bovenrand van de screenshot (de statusbalk
