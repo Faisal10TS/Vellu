@@ -112,6 +112,16 @@ function autopayChargeYmd(trialEndsAt: unknown, now = new Date()): string {
   if (isNaN(end.getTime())) return today;
   const d = autopayFirstYmd(end); return d > today ? d : today;
 }
+// Weer doorgaan na een opzegging: de eerste afschrijving valt op dezelfde dag
+// als het gestopte abonnement had, namelijk de dag waarop de betaalde periode
+// afloopt (mollie-webhook rekent bij de eerste betaling net zo). Nooit vóór
+// vandaag: Mollie weigert een startdatum in het verleden.
+function resumeStartYmd(expiresAt: unknown, now = new Date()): string {
+  const end = new Date(String(expiresAt || "")); const today = ymdIn(AMS, now);
+  if (isNaN(end.getTime())) return today;
+  const d = end.toISOString().slice(0, 10);
+  return d > today ? d : today;
+}
 // Vanaf het begin van de eerste afschrijvingsdag kan Mollie de betaling al
 // hebben aangemaakt: uitzetten/wisselen kan dan niet meer.
 function autopayChargeDayReached(trialEndsAt: unknown, now = new Date()): boolean {
@@ -247,6 +257,121 @@ serve(async (req) => {
       }
     }
     return ok({ status: status && KNOWN.includes(status) ? status : null }, origin);
+  }
+
+  // ── Weer doorgaan na een opzegging (sinds 13-11-2026) ───────────────────
+  // Zegt een salon op, dan stopt cancel-subscription het Mollie-abonnement
+  // meteen, maar blijft de toegang tot het einde van de al betaalde periode.
+  // Wie zich daarna bedacht kwam alleen terug via een nieuwe eerste betaling:
+  // meteen het volle bedrag, terwijl die maand al betaald was. Tammy Taylor
+  // Bonaire betaalde op 11-11, zegde op 12-11 en kreeg op 13-11 bij "Opnieuw
+  // abonneren" meteen EUR 35 te zien terwijl haar toegang tot 11-12 liep.
+  // De machtiging blijft na een opzegging geldig, dus zetten we het abonnement
+  // terug zoals het was: nu niets afschrijven, eerste afschrijving weer op de
+  // dag dat de betaalde periode afloopt. Een nieuwe eerste betaling blijft
+  // bestaan voor wie met een ANDERE rekening verder wil.
+  if (body.action === "resume") {
+    const { data: rp, error: rpErr } = await supabase
+      .from("profiles")
+      .select("id, business_name, plan, billing_interval, subscription_status, cancel_at_period_end, plan_expires_at, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, deactivated_at")
+      .eq("id", userId)
+      .maybeSingle();
+    if (rpErr || !rp) return err(404, "no_profile", origin);
+    if (rp.deactivated_at) return err(403, "salon_deactivated", origin);
+    // Loopt er al een abonnement, dan valt er niets te hervatten.
+    if (rp.mollie_subscription_id) return err(409, "already_subscribed", origin);
+    if (rp.cancel_at_period_end !== true) return err(409, "not_cancelled", origin);
+    // Alleen binnen de betaalde periode. Is de toegang al voorbij (cancelled of
+    // past_due), dan is er niets om op voort te bouwen en hoort de gewone
+    // eerste betaling erbij.
+    if (rp.subscription_status !== "active") return err(409, "not_active", origin);
+    const endMs = rp.plan_expires_at ? new Date(String(rp.plan_expires_at)).getTime() : NaN;
+    if (!Number.isFinite(endMs) || endMs <= Date.now()) return err(409, "access_ended", origin);
+    const rPlan = String(rp.plan || "");
+    const rInterval = rp.billing_interval === "yearly" ? "yearly" : "monthly";
+    if (!PLAN_PRICES[rPlan]) return err(409, "no_plan", origin);
+    const rCustomer = String(rp.mollie_customer_id || "");
+    const rMandate = String(rp.mollie_mandate_id || "");
+    // Zonder machtiging kan Mollie niet afschrijven; de app toont dan de knop
+    // voor een nieuwe eerste betaling.
+    if (!rCustomer || !rMandate) return err(409, "no_mandate", origin);
+    const manRes = await mollieFetch(`/customers/${rCustomer}/mandates/${rMandate}`);
+    const manStatus = manRes.ok && manRes.data && typeof manRes.data === "object"
+      ? String((manRes.data as { status?: string }).status || "") : "";
+    if (manStatus !== "valid" && manStatus !== "pending") return err(409, "mandate_invalid", origin);
+
+    const rAmount = PLAN_PRICES[rPlan][rInterval as "monthly" | "yearly"];
+    const startDate = resumeStartYmd(rp.plan_expires_at);
+
+    // Staat er bij Mollie toch nog een abonnement (opzegging half gelukt, of
+    // twee keer tikken), neem dat dan over in plaats van een tweede aan te
+    // maken: dubbel afschrijven is erger dan een dag verschil in de datum.
+    let subscriptionId = "";
+    const listRes = await mollieFetch(`/customers/${rCustomer}/subscriptions?limit=50`);
+    if (listRes.ok && listRes.data && typeof listRes.data === "object") {
+      type SubList = { _embedded?: { subscriptions?: Array<{ id?: string; status?: string }> } };
+      const found = ((listRes.data as SubList)._embedded?.subscriptions || [])
+        .find((s) => s.status === "active" || s.status === "pending");
+      if (found?.id) subscriptionId = found.id;
+    }
+
+    // De opzegging terugdraaien vóór de Mollie-aanroep, met de oude stand als
+    // voorwaarde: twee tikken tegelijk laten er zo maar één door, en dat
+    // voorkomt twee abonnementen op dezelfde klant.
+    const { data: claimed, error: claimErr } = await supabase
+      .from("profiles")
+      .update({ cancel_at_period_end: false, cancelled_at: null })
+      .eq("id", userId)
+      .eq("cancel_at_period_end", true)
+      .is("mollie_subscription_id", null)
+      .select("id");
+    if (claimErr) return err(500, "db_error", origin);
+    if (!claimed?.length) return err(409, "resume_in_progress", origin);
+
+    if (!subscriptionId) {
+      const planLabel = rPlan === "professional" ? "Professional" : "Starter";
+      const subRes = await mollieFetch(`/customers/${rCustomer}/subscriptions`, {
+        method: "POST",
+        body: JSON.stringify({
+          amount: { currency: "EUR", value: rAmount.toFixed(2) },
+          interval: rInterval === "yearly" ? "12 months" : "1 month",
+          startDate,
+          description: `Vellu ${planLabel} (${rInterval})`,
+          mandateId: rMandate,
+          webhookUrl: `${SUPABASE_URL}/functions/v1/mollie-webhook`,
+          metadata: { owner_id: userId, plan: rPlan, billing_interval: rInterval, kind: "resume" },
+        }),
+      });
+      if (!subRes.ok || !subRes.data || typeof subRes.data !== "object") {
+        console.error("resume subscription create failed:", userId, subRes.status, subRes.raw);
+        // Terugdraaien: anders staat de salon als "loopt door" terwijl er niets
+        // is dat afschrijft, en loopt de toegang stil af.
+        await supabase.from("profiles")
+          .update({ cancel_at_period_end: true, cancelled_at: new Date().toISOString() })
+          .eq("id", userId);
+        return err(502, "mollie_resume_failed", origin);
+      }
+      subscriptionId = (subRes.data as { id: string }).id;
+    }
+
+    const { error: setErr } = await supabase.from("profiles")
+      .update({ mollie_subscription_id: subscriptionId })
+      .eq("id", userId);
+    if (setErr) {
+      // Het abonnement staat bij Mollie, alleen het profiel niet: dat moet een
+      // mens rechtzetten, anders stopt cancel-subscription het later niet.
+      console.error("resume: subscription", subscriptionId, "not saved on profile", userId, setErr);
+      return err(500, "db_error", origin);
+    }
+    return ok({
+      success: true,
+      resumed: true,
+      subscription_id: subscriptionId,
+      next_charge_date: startDate,
+      amount: rAmount,
+      plan: rPlan,
+      billing_interval: rInterval,
+    }, origin);
   }
 
   // ── Automatisch betalen na de proef aanzetten (sinds 10-10-2026) ────────

@@ -6134,7 +6134,9 @@ const loadedWindowFrom = () => new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).t
 // Eén lijst voor elke plek die hem ophaalt: referral_credit_days kwam er op
 // 10-10-2026 bij (tegoedzin bij automatisch betalen) en ontbrak anders na een
 // verversing.
-const BILLING_COLS = "plan, billing_interval, subscription_status, trial_ends_at, plan_expires_at, current_period_start, cancel_at_period_end, mollie_subscription_id, referral_credit_days, referral_credit_days_redeemed";
+// mollie_mandate_id kwam er 13-11-2026 bij: zonder geldige machtiging kan een
+// opzegging niet gratis worden teruggedraaid en hoort er een nieuwe betaling bij.
+const BILLING_COLS = "plan, billing_interval, subscription_status, trial_ends_at, plan_expires_at, current_period_start, cancel_at_period_end, mollie_subscription_id, mollie_mandate_id, referral_credit_days, referral_credit_days_redeemed";
 
 // Opzegreden (14-10-2026): optionele vraag in het opzegvenster. De sleutels
 // staan ook in cancel-subscription (CANCEL_REASONS) en in de check op
@@ -6818,6 +6820,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const [billingProfile, setBillingProfile] = useState(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [resumeBusy, setResumeBusy] = useState(false);
   const [cancelReason, setCancelReason] = useState(null); // sleutel uit CANCEL_REASON_OPTIONS of null
   const [cancelNote, setCancelNote] = useState("");
   const [upgradeConfirm, setUpgradeConfirm] = useState(false);
@@ -22194,6 +22197,12 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 const planLabel = bp.plan === "professional" ? t.planProfessional : (bp.plan === "starter" ? t.planStarter : (lang === "nl" ? "Geen abonnement" : lang === "es" ? "Sin suscripción" : "No subscription"));
                 const intervalLabel = bp.billing_interval === "yearly" ? (lang === "nl" ? "jaarlijks" : lang === "es" ? "anual" : "yearly") : (lang === "nl" ? "maandelijks" : lang === "es" ? "mensual" : "monthly");
                 const expires = bp.plan_expires_at ? new Date(bp.plan_expires_at) : null;
+                // Opzegging terugdraaien kan gratis zolang de betaalde periode
+                // nog loopt én de machtiging er nog is: het abonnement wordt dan
+                // teruggezet met de eerste afschrijving op de einddatum. Daarbuiten
+                // (toegang voorbij, machtiging weg) hoort een nieuwe eerste betaling.
+                const canResume = willCancel && !bp.mollie_subscription_id && !!bp.mollie_mandate_id
+                  && !!expires && expires.getTime() > Date.now();
                 // Kalenderdagen tot de datum die erboven staat, niet afgerond
                 // omhoog: 5 nov → 1 feb is 88 dagen, en Math.ceil op het
                 // tijdstip (11:45 UTC) maakte er 89 van (TTNB 05-11-2026).
@@ -22548,10 +22557,58 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           {lang === "nl" ? "Betaalmethode bijwerken" : lang === "es" ? "Actualizar método de pago" : "Update payment method"}
                         </button>
                       )}
-                      {willCancel && (
+                      {/* Opzegging terugdraaien zonder nu te betalen (13-11-2026).
+                          De lopende periode is al betaald; de machtiging staat er
+                          nog, dus zetten we het Mollie-abonnement terug met de
+                          eerste afschrijving op de dag dat de toegang afliep.
+                          Kan dat niet (machtiging weg), dan blijft de knop
+                          hieronder over: een nieuwe eerste betaling. */}
+                      {canResume && (
                         <button
                           className="btn-primary"
-                          style={{ width: "auto", flex: "0 0 auto" }}
+                          style={{ width: "auto", flex: "0 0 auto", opacity: resumeBusy ? 0.6 : 1 }}
+                          disabled={resumeBusy}
+                          onClick={async () => {
+                            if (resumeBusy) return;
+                            const amt = (bp.plan === "professional" ? 35 : 19) * (bp.billing_interval === "yearly" ? 10 : 1);
+                            const amountTxt = `€${amt.toFixed(2).replace(".", ",")}`;
+                            const msg = lang === "nl"
+                              ? `Je abonnement loopt gewoon door. Er wordt nu niets afgeschreven; de volgende betaling van ${amountTxt} is op ${fmtDate(expires)}.`
+                              : lang === "es"
+                              ? `Tu suscripción continúa. Ahora no se cobra nada; el próximo pago de ${amountTxt} es el ${fmtDate(expires)}.`
+                              : `Your subscription continues. Nothing is charged now; the next payment of ${amountTxt} is on ${fmtDate(expires)}.`;
+                            if (!(await showConfirm(msg, { tone: "primary" }))) return;
+                            setResumeBusy(true);
+                            try {
+                              const { data, error } = await supabase.functions.invoke("create-subscription", { body: { action: "resume" } });
+                              if (error || !data?.success) {
+                                const code = data?.error || "";
+                                // Geen bruikbare machtiging meer: dan is de knop
+                                // ernaast (nieuwe eerste betaling) de weg terug.
+                                toast.show(code === "no_mandate" || code === "mandate_invalid"
+                                  ? (lang === "nl" ? "Je machtiging is verlopen. Gebruik de andere knop om met een rekening te betalen." : lang === "es" ? "Tu mandato ha caducado. Usa el otro botón para pagar con una cuenta." : "Your mandate has expired. Use the other button to pay with an account.")
+                                  : (lang === "nl" ? "Het lukte niet, probeer het opnieuw." : lang === "es" ? "No funcionó, inténtalo de nuevo." : "That didn't work, please try again."), "error");
+                                setResumeBusy(false);
+                                return;
+                              }
+                              toast.show(lang === "nl" ? "Je abonnement loopt door" : lang === "es" ? "Tu suscripción continúa" : "Your subscription continues", "success");
+                              await refreshBillingProfile();
+                            } catch (e) {
+                              console.error("create-subscription (resume) error:", e);
+                              toast.show(t.somethingWrong, "error");
+                            }
+                            setResumeBusy(false);
+                          }}
+                        >
+                          {resumeBusy
+                            ? (lang === "nl" ? "Bezig…" : lang === "es" ? "Procesando…" : "Working…")
+                            : (lang === "nl" ? "Abonnement behouden" : lang === "es" ? "Mantener mi suscripción" : "Keep my subscription")}
+                        </button>
+                      )}
+                      {willCancel && (
+                        <button
+                          className={canResume ? "btn-ghost" : "btn-primary"}
+                          style={canResume ? { borderColor: `${accent}44`, color: accent } : { width: "auto", flex: "0 0 auto" }}
                           onClick={async () => {
                             // Restart billing after a soft cancel. The Mollie
                             // subscription is already deleted (cancel-subscription
@@ -22573,7 +22630,9 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             } catch { toast.show(t.somethingWrong, "error"); }
                           }}
                         >
-                          {lang === "nl" ? "Opnieuw abonneren" : lang === "es" ? "Volver a suscribirse" : "Resubscribe"}
+                          {canResume
+                            ? (lang === "nl" ? "Met een andere rekening betalen" : lang === "es" ? "Pagar con otra cuenta" : "Pay with a different account")
+                            : (lang === "nl" ? "Opnieuw abonneren" : lang === "es" ? "Volver a suscribirse" : "Resubscribe")}
                         </button>
                       )}
                       {willCancel && bp.plan === "starter" && (
@@ -22789,11 +22848,17 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
 
                     {willCancel && (
                       <div style={{ marginTop: 14, padding: 12, background: `${c.warning}11`, border: `1px solid ${c.warning}33`, borderRadius: 12, fontSize: 12, color: c.text }}>
-                        {lang === "nl"
-                          ? `Je abonnement loopt af op ${fmtDate(expires)}. Tot dan blijft alles werken en je gegevens blijven altijd bewaard. Opnieuw abonneren kan op elk moment — ook met een andere bankrekening.`
-                          : lang === "es"
-                          ? `Tu suscripción termina el ${fmtDate(expires)}. Hasta entonces todo sigue funcionando y tus datos se conservan siempre. Puedes volver a suscribirte cuando quieras — también con otra cuenta bancaria.`
-                          : `Your subscription ends on ${fmtDate(expires)}. Everything keeps working until then and your data is always kept. You can resubscribe at any time — with a different bank account too.`}
+                        {canResume
+                          ? (lang === "nl"
+                            ? `Je abonnement loopt af op ${fmtDate(expires)}. Tot dan blijft alles werken en je gegevens blijven altijd bewaard. Bedenk je je? Met “Abonnement behouden” loopt het gewoon door: je betaalt nu niets, de volgende betaling is pas op ${fmtDate(expires)}.`
+                            : lang === "es"
+                            ? `Tu suscripción termina el ${fmtDate(expires)}. Hasta entonces todo sigue funcionando y tus datos se conservan siempre. ¿Cambiaste de idea? Con «Mantener mi suscripción» continúa sin más: ahora no pagas nada y el próximo pago es el ${fmtDate(expires)}.`
+                            : `Your subscription ends on ${fmtDate(expires)}. Everything keeps working until then and your data is always kept. Changed your mind? "Keep my subscription" carries on as before: you pay nothing now and the next payment is on ${fmtDate(expires)}.`)
+                          : (lang === "nl"
+                            ? `Je abonnement loopt af op ${fmtDate(expires)}. Tot dan blijft alles werken en je gegevens blijven altijd bewaard. Opnieuw abonneren kan op elk moment — ook met een andere bankrekening.`
+                            : lang === "es"
+                            ? `Tu suscripción termina el ${fmtDate(expires)}. Hasta entonces todo sigue funcionando y tus datos se conservan siempre. Puedes volver a suscribirte cuando quieras — también con otra cuenta bancaria.`
+                            : `Your subscription ends on ${fmtDate(expires)}. Everything keeps working until then and your data is always kept. You can resubscribe at any time — with a different bank account too.`)}
                       </div>
                     )}
                   </div>
