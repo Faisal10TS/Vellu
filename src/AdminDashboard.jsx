@@ -45,9 +45,14 @@ const CRON_MAX_AGE_H = {
 // Stand van één job: "down" (rood: laatste run faalde, te lang stil of nooit
 // gedraaid), "recovered" (oranje: fout of gedeeltelijk mislukt in de laatste 7
 // dagen, laatste run ok) of "ok".
-function cronState(j, now) {
+// `at` = het moment waarop de cijfers zijn opgehaald, NIET de klok van nu.
+// 13-11-2026: een dashboard dat sinds 10:30 openstond kleurde om 14:30 vier
+// jobs rood ("no run for 3 hours") terwijl ze elk uur gewoon draaiden: de
+// klok liep door, de cijfers niet. Oude cijfers kunnen alleen zeggen wat er
+// op het moment van ophalen waar was.
+function cronState(j, at) {
   const maxH = CRON_MAX_AGE_H[j.job_name] ?? 25;
-  const ageH = j.last_ran_at ? (now - new Date(j.last_ran_at).getTime()) / 3_600_000 : Infinity;
+  const ageH = j.last_ran_at ? Math.max(0, at - new Date(j.last_ran_at).getTime()) / 3_600_000 : Infinity;
   const stale = ageH > maxH;
   const failed = j.last_status === "error";
   const level = j.missing || stale || failed ? "down" : (j.last_status === "degraded" || j.errors_last_7d > 0) ? "recovered" : "ok";
@@ -134,9 +139,11 @@ function downloadInvoicesCsv(invoices, fileKey) {
 }
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" }) : "—";
 const fmtDateTime = (iso) => iso ? new Date(iso).toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
-const relTime = (iso) => {
+// `base`: waartegen "geleden" gerekend wordt (standaard nu; de cron-tab geeft
+// het ophaalmoment mee). Nooit negatief bij een paar seconden klokverschil.
+const relTime = (iso, base = Date.now()) => {
   if (!iso) return "—";
-  const ms = Date.now() - new Date(iso).getTime();
+  const ms = Math.max(0, base - new Date(iso).getTime());
   const h = ms / 3_600_000;
   if (h < 1) return `${Math.round(h * 60)}m ago`;
   if (h < 24) return `${Math.round(h)}h ago`;
@@ -230,8 +237,12 @@ export default function AdminDashboard({ onLogout }) {
   const [loadErrors, setLoadErrors] = useState([]); // [{ fn, message }] van RPC's die faalden
   const [loaded, setLoaded] = useState(false); // alle RPC's teruggekomen (goed of fout)
   const [loadedAt, setLoadedAt] = useState(null); // tijdstip van de laatste volledige lading
+  // Wanneer de cron-cijfers zijn opgevraagd (alleen als admin_cron_summary
+  // lukte; anders blijven de vorige cijfers mét hun eigen tijdstip staan).
+  const [cronAt, setCronAt] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const loadSeq = useRef(0);
+  const lastLoadStart = useRef(0); // voor het automatisch herladen hieronder
   const [overview, setOverview] = useState(null);
   const [salons, setSalons] = useState([]);
   // Salon deactiveren / verwijderen (23-10-2026): { kind, salon } of null.
@@ -302,6 +313,10 @@ export default function AdminDashboard({ onLogout }) {
   // sluiten van de pagina) maakt het antwoord van een eerdere ongeldig.
   const loadAll = useCallback(async () => {
     const seq = ++loadSeq.current;
+    // Het verzendmoment, niet het antwoordmoment: de cijfers zijn op z'n
+    // vroegst van nu, dus een job is daartegen nooit "te lang stil" gerekend.
+    const sentAt = Date.now();
+    lastLoadStart.current = sentAt;
     setRefreshing(true);
     try {
       const calls = [
@@ -333,6 +348,7 @@ export default function AdminDashboard({ onLogout }) {
       put(sl, setSalons);
       put(rs, setRecent);
       put(cr, setCron);
+      if (!cr.error) setCronAt(sentAt);
       put(tl, setTimeline);
       put(bo, setBilling, d => d?.[0] || null);
       put(sb, setSubs);
@@ -374,21 +390,33 @@ export default function AdminDashboard({ onLogout }) {
   // 14-dagengrens binnenkomt verschijnt dan pas na F5 — precies de
   // conversiekans die het blok hieronder moet opvangen. Vandaar een uurtik,
   // ruim fijn genoeg voor een venster van veertien dagen. Geen renderlus: de
-  // dependency-array is leeg, dus setNow zet dit effect niet opnieuw op.
+  // dependencies (isAdmin, loadAll) veranderen niet door setNow.
   //
-  // Bewust géén her-fetch van de RPC's bij die tik (daarvoor is er sinds
-  // 12-11-2026 de knop Refresh, die ook `now` bijzet). Gevolg: de lijst hieronder
-  // loopt na een paar uur openstaan vóór op de statkaart "N ending in 14 days",
-  // die uit admin_billing_overview komt en bij het laden bevroor. Dat verschil
-  // bestond al — de oude inline Date.now() dreef bij élke re-render weg — en is
-  // nu alleen voorspelbaar; zeven RPC's per uur per open dashboard wegen niet
-  // op tegen die ene eenheid. De relTime-labels elders op de pagina liften mee
-  // op deze re-render, maar reken daar niet op: op uurbasis blijft "12m ago"
-  // tot een uur staan.
+  // Sinds 13-11-2026 haalt die tik ook alles opnieuw op, en ook bij terugkomen
+  // op de pagina (ander tabblad of ander venster). Daarvoor bleef een open
+  // dashboard op de cijfers van het openen staan terwijl de klok doorliep — de
+  // Cron health-tab zag daardoor 's middags vier jobs "gestopt" die gewoon
+  // elk uur draaiden. Alleen als de pagina zichtbaar is (een tabblad op de
+  // achtergrond vraagt niets op) en de laatste lading minstens 10 minuten oud
+  // is (geen dubbele lading vlak na Refresh of na een ander venster).
+  // Zestien RPC's per uur per open dashboard: verwaarloosbaar.
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 3_600_000);
-    return () => clearInterval(id);
-  }, []);
+    if (!isAdmin) return;
+    const STALE_MS = 10 * 60_000;
+    const reloadIfStale = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastLoadStart.current < STALE_MS) return;
+      loadAll();
+    };
+    const id = setInterval(() => { setNow(Date.now()); reloadIfStale(); }, 3_600_000);
+    document.addEventListener("visibilitychange", reloadIfStale);
+    window.addEventListener("focus", reloadIfStale);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", reloadIfStale);
+      window.removeEventListener("focus", reloadIfStale);
+    };
+  }, [isAdmin, loadAll]);
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setMe(data?.user?.email || null)).catch(() => {});
   }, []);
@@ -598,7 +626,7 @@ export default function AdminDashboard({ onLogout }) {
   const cronRows = [
     ...cron,
     ...(cronLoaded ? Object.keys(CRON_MAX_AGE_H).filter(n => !cron.some(j => j.job_name === n)).map(n => ({ job_name: n, missing: true, runs_last_7d: 0, errors_last_7d: 0, total_items_processed_7d: 0 })) : []),
-  ].map(j => ({ ...j, st: cronState(j, now) }))
+  ].map(j => ({ ...j, st: cronState(j, cronAt ?? now) }))
     .sort((a, b) => cronRank[a.st.level] - cronRank[b.st.level] || a.job_name.localeCompare(b.job_name));
   const cronDown = cronRows.filter(j => j.st.level === "down").length;
 
@@ -1671,8 +1699,15 @@ export default function AdminDashboard({ onLogout }) {
         {/* ── CRON HEALTH TAB ── */}
         {tab === "cron" && (
           <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 16, padding: "18px 20px" }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel, marginBottom: 6 }}>
-              Cron jobs — runs in last 7 days
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: c.textLabel }}>
+                Cron jobs — runs in last 7 days
+              </div>
+              {cronAt && (
+                <span data-cron-checked style={{ fontSize: 11, color: c.textMuted }} title="Times on this tab are counted from this moment. The page reloads every hour and when you come back to it.">
+                  Checked {new Date(cronAt).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
             </div>
             <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
               Red: the last run failed, or the job stopped (no run within its interval: 3 hours for the hourly payment checks, 25 hours for the rest, the same limits as the watchdog email). Orange: an error in the last 7 days, but the latest run succeeded.
@@ -1697,7 +1732,7 @@ export default function AdminDashboard({ onLogout }) {
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, display: "inline-block" }} />
                       <span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 500 }}>{j.job_name}</span>
                     </div>
-                    <span style={{ fontSize: 11, color: stale ? c.danger : c.textMuted }}>{j.missing ? "never ran" : `last ran ${relTime(j.last_ran_at)}`}</span>
+                    <span style={{ fontSize: 11, color: stale ? c.danger : c.textMuted }}>{j.missing ? "never ran" : `last ran ${relTime(j.last_ran_at, cronAt ?? now)}`}</span>
                   </div>
                   {!j.missing && (
                     <div style={{ display: "flex", gap: 16, fontSize: 11, color: c.textSub, marginTop: 8, flexWrap: "wrap" }}>
@@ -1723,7 +1758,7 @@ export default function AdminDashboard({ onLogout }) {
                       oranje stip zichzelf verklaart zonder database-duik. */}
                   {lastOk && j.errors_last_7d > 0 && j.last_error_7d && (
                     <div style={{ marginTop: 8, fontSize: 10, color: c.warning, background: `${c.warning}14`, border: `1px solid ${c.warning}33`, borderRadius: 8, padding: "8px 10px", fontFamily: "monospace" }}>
-                      recovered — latest run succeeded · last error {relTime(j.last_error_at_7d)}: {j.last_error_7d}
+                      recovered — latest run succeeded · last error {relTime(j.last_error_at_7d, cronAt ?? now)}: {j.last_error_7d}
                     </div>
                   )}
                 </div>
