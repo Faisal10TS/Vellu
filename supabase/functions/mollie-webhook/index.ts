@@ -952,6 +952,8 @@ async function processEvent(
               period_end: accessEnd.toISOString(),
               business_name: (profile as Record<string, unknown>).business_name,
               credits_used: creditsUsed || 0,
+              // Land van de eigenaar: send-emails schrijft de factuur dan in VS-opmaak.
+              country_code: country || "NL",
               ...invoiceFields,
             },
           }),
@@ -1407,6 +1409,8 @@ async function processEvent(
               period_end: firstEnd.toISOString(),
               business_name: (profile as Record<string, unknown>).business_name,
               credits_used: firstCreditsUsed || 0,
+              // Land van de eigenaar: send-emails schrijft de factuur dan in VS-opmaak.
+              country_code: country || "NL",
               ...invoiceFields,
             },
           }),
@@ -1451,6 +1455,8 @@ async function processEvent(
               amount: parseFloat(payment.amount.value),
               period_end: periodEnd.toISOString(),
               business_name: (profile as Record<string, unknown>).business_name,
+              // Land van de eigenaar: send-emails schrijft de factuur dan in VS-opmaak.
+              country_code: country || "NL",
               ...invoiceFields,
             },
           }),
@@ -1662,6 +1668,8 @@ async function processEvent(
               period_end: extraEnd.toISOString(),
               business_name: (profile as Record<string, unknown>).business_name,
               credits_used: creditsUsed || 0,
+              // Land van de eigenaar: send-emails schrijft de factuur dan in VS-opmaak.
+              country_code: country || "NL",
               ...invoiceFields,
             },
           }),

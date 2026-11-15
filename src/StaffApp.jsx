@@ -13,6 +13,8 @@ import {
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, getWhatsAppRefundMsg, partPricesOf, partLabelOf, useDashboardScrollbars,
   salonNow, tzFor, localToUtc, fetchAllRows,
   EmailTypoHint,
+  setFormatRegion, fmtTime, fmtTimesIn, dateLocale, fmtNumDate, fmtPrice,
+  formatRegion,
 } from "./shared.jsx";
 import WhatsNewModal from "./WhatsNewModal.jsx";
 import { unseenReleases, LATEST_RELEASE_ID, seenKey } from "./releaseNotes.js";
@@ -28,6 +30,8 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const t = T[lang];
   const DAY = lang === "nl" ? DAY_NL : lang === "es" ? DAY_ES : DAY_EN;
   const { staffMember, profile: salonProfile } = staffUser;
+  // VS fase 2: schrijfwijze van het land van de salon (zie shared.setFormatRegion).
+  setFormatRegion(salonProfile.country_code);
   // "Wat is er nieuw" — zelfde regels als in OwnerApp (releaseNotes.js), met
   // de punten voor medewerkers. Sleutel per account, per apparaat.
   const [whatsNew, setWhatsNew] = useState(null);
@@ -528,7 +532,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   const calAppts = scopedAppts.filter(a => a.status !== "cancelled" && a.date === calDate);
   // Hele bedragen op de tegels en grafieken, maar wel via fmtAmt (duizendtallen-
   // punt, zelfde symbool als overal): "€1.234" i.p.v. "€1234" (audit S1-17).
-  const fmtWhole = (n) => fmtAmt(cur, Math.round(Number(n) || 0)).replace(/,00$/, "");
+  const fmtWhole = (n) => fmtPrice(cur, Math.round(Number(n) || 0));
   // Pijltjes als inline SVG: tekens als ↑ ↓ → ▲ ▼ ↻ tekent iOS als emoji (S1-20).
   const glyph = (kind, size = 10) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "inline-block", verticalAlign: "-0.1em", flexShrink: 0 }}>
@@ -597,7 +601,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     : s === "pending_payment" ? (lang === "nl" ? "Wacht op betaling" : lang === "es" ? "Pendiente de pago" : "Awaiting payment")
     : s;
   const fmtDueShort = (iso) => {
-    try { return new Date(iso).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: tzFor(salonProfile) }); }
+    try { return new Date(iso).toLocaleString(dateLocale(lang), { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: tzFor(salonProfile) }); }
     catch { return String(iso || ""); }
   };
   // Alle wijzigingen aan afspraken lopen via de server (staff_update_appointment
@@ -1389,7 +1393,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
             </div>
           )}
           {slots.map((s, i) => (
-            <div key={i} style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{s.time} · {s.label}{showMoney && s.price != null && slots.length > 1 ? <span style={{ color: c.text, fontWeight: 600, whiteSpace: "nowrap" }}> · {fmtAmt(cur, s.price)}</span> : null}</div>
+            <div key={i} style={{ fontSize: 11, color: c.textLabel, marginTop: 3 }}>{fmtTime(s.time)} · {s.label}{showMoney && s.price != null && slots.length > 1 ? <span style={{ color: c.text, fontWeight: 600, whiteSpace: "nowrap" }}> · {fmtAmt(cur, s.price)}</span> : null}</div>
           ))}
           {showContact && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2, wordBreak: "break-word" }}>{a.client_email}</div>}
           {showContact && a.client_phone && (
@@ -2191,7 +2195,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
               const we = fmt(weekEnd);
               periodAppts = filteredAppts.filter(a => a.date >= ws && a.date <= we);
               const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
-              periodLabel = sameMonth
+              // VS fase 2: maand eerst ("Nov 9 – 15, 2026").
+              periodLabel = formatRegion() === "US"
+                ? (sameMonth
+                  ? `${MON_SHORT[weekStart.getMonth()]} ${weekStart.getDate()} – ${weekEnd.getDate()}, ${weekEnd.getFullYear()}`
+                  : `${MON_SHORT[weekStart.getMonth()]} ${weekStart.getDate()} – ${MON_SHORT[weekEnd.getMonth()]} ${weekEnd.getDate()}, ${weekEnd.getFullYear()}`)
+                : sameMonth
                 ? `${weekStart.getDate()} – ${weekEnd.getDate()} ${MON_SHORT[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`
                 : `${weekStart.getDate()} ${MON_SHORT[weekStart.getMonth()]} – ${weekEnd.getDate()} ${MON_SHORT[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`;
             } else if (calViewMode === "month") {
@@ -2361,7 +2370,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                             {timeBlocks.map(b => (
                               <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 3, padding: isMobile ? "3px 4px" : "4px 6px", background: `${c.danger}14`, border: `1px solid ${c.danger}33`, borderRadius: 4 }}>
                                 <svg width={isMobile ? 8 : 10} height={isMobile ? 8 : 10} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
-                                <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: c.danger, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.block_time_start}–{b.block_time_end}</div>
+                                <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: c.danger, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmtTime(b.block_time_start)}–{fmtTime(b.block_time_end)}</div>
                               </div>
                             ))}
                             {dayAppts.length === 0 && !fullDayBlock && timeBlocks.length === 0 ? (
@@ -2372,7 +2381,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                   const statusColor = a.status === "completed" ? c.success : accent;
                                   return (
                                     <div key={ai} style={{ padding: isMobile ? "2px 3px" : "3px 5px", borderRadius: 4, background: `${statusColor}14`, borderLeft: `2.5px solid ${statusColor}`, overflow: "hidden" }}>
-                                      <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums" }}>{a.time}</div>
+                                      <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums" }}>{fmtTime(a.time)}</div>
                                       <div style={{ fontSize: isMobile ? 8 : 9, color: c.textSub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.client_name?.split(" ")[0] || ""}</div>
                                     </div>
                                   );
@@ -2479,7 +2488,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                                       borderLeft: `2px solid ${accent}`,
                                       whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
                                     }}>
-                                      {a.time} {a.client_name?.split(" ")[0] || ""}
+                                      {fmtTime(a.time)} {a.client_name?.split(" ")[0] || ""}
                                     </div>
                                   ))}
                                   {count > 3 && <div style={{ fontSize: 9, color: c.textMuted, paddingLeft: 2 }}>+{count - 3}</div>}
@@ -2565,10 +2574,10 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
                           {svcLabel
                             ? (isTimeBlock
-                                ? (lang === "nl" ? `Geen ${svcLabel} ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `Sin ${svcLabel} ${b.block_time_start}–${b.block_time_end}` : `No ${svcLabel} ${b.block_time_start}–${b.block_time_end}`)
+                                ? (lang === "nl" ? `Geen ${svcLabel} ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}` : lang === "es" ? `Sin ${svcLabel} ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}` : `No ${svcLabel} ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}`)
                                 : (lang === "nl" ? `Geen ${svcLabel} ${dayLbl}` : lang === "es" ? `Sin ${svcLabel} ${dayLbl}` : `No ${svcLabel} ${dayLbl}`))
                             : isTimeBlock
-                            ? (lang === "nl" ? `Geblokkeerd ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `Bloqueado ${b.block_time_start}–${b.block_time_end}` : `Blocked ${b.block_time_start}–${b.block_time_end}`)
+                            ? (lang === "nl" ? `Geblokkeerd ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}` : lang === "es" ? `Bloqueado ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}` : `Blocked ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}`)
                             : (lang === "nl" ? "Dag geblokkeerd" : lang === "es" ? "Día bloqueado" : "Day blocked")}
                         </div>
                         {b.weekday != null && (
@@ -2605,7 +2614,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     </div>
                     <div style={{ flex: 1, minWidth: 180 }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
-                        {lang === "nl" ? `Extra werkdag ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `Día extra ${b.block_time_start}–${b.block_time_end}` : `Extra workday ${b.block_time_start}–${b.block_time_end}`}
+                        {lang === "nl" ? `Extra werkdag ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}` : lang === "es" ? `Día extra ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}` : `Extra workday ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}`}
                       </div>
                       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
                         {lang === "nl" ? "Klanten kunnen je op deze tijden boeken." : lang === "es" ? "Los clientes pueden reservar contigo en este horario." : "Clients can book you during these hours."}
@@ -2753,7 +2762,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           <div style={{ textAlign: "right" }}>
                             {cl.next ? (
                               <div style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, background: `${accent}18`, color: accent, fontWeight: 600, whiteSpace: "nowrap" }}>
-                                {fmtDate(cl.next.date)} · {cl.next.time}
+                                {fmtDate(cl.next.date)} · {fmtTime(cl.next.time)}
                               </div>
                             ) : (
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={c.textMuted} strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
@@ -2809,7 +2818,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                           .map(a => (
                             <div key={a.id} style={{ padding: "10px 12px", background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                               <div style={{ minWidth: 0 }}>
-                                <div style={{ fontSize: 12, color: c.text }}>{fmtDate(a.date)} · {a.time}</div>
+                                <div style={{ fontSize: 12, color: c.text }}>{fmtDate(a.date)} · {fmtTime(a.time)}</div>
                                 <div style={{ fontSize: 11, color: c.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.service_name}</div>
                               </div>
                               <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -3137,11 +3146,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                         {isOn ? (
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
                             <select value={openTime} onChange={e => setWhForm(wh => ({...wh, [day]: {...wh[day], closed: false, open: e.target.value}}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
-                              {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                              {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{fmtTime(tt)}</option>)}
                             </select>
                             <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
                             <select value={closeTime} onChange={e => setWhForm(wh => ({...wh, [day]: {...wh[day], closed: false, close: e.target.value}}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif", cursor: "pointer" }}>
-                              {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                              {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{fmtTime(tt)}</option>)}
                             </select>
                           </div>
                         ) : (
@@ -3635,7 +3644,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       <input type="date" className="input-field" value={addApptForm.date} onChange={e => setAddApptForm(f => ({...f, date: e.target.value}))} style={{ fontSize: 12, flex: 1 }} />
                       <select className="input-field" value={addApptForm.time} onChange={e => setAddApptForm(f => ({...f, time: e.target.value}))} style={{ fontSize: 12, flex: 1 }}>
                         <option value="" style={{ background: c.selectBg }}>—</option>
-                        {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                        {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{fmtTime(tt)}</option>)}
                       </select>
                     </div>
                   </div>
@@ -3828,12 +3837,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                       <div><label style={lbl}>{lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From"}</label>
                         <select className="input-field" value={blockForm.time_start} onChange={e => setBlockForm(f => ({ ...f, time_start: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
-                          {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                          {TIMES.map(tt => <option key={tt} value={tt}>{fmtTime(tt)}</option>)}
                         </select>
                       </div>
                       <div><label style={lbl}>{lang === "nl" ? "Tot" : lang === "es" ? "Hasta" : "To"}</label>
                         <select className="input-field" value={blockForm.time_end} onChange={e => setBlockForm(f => ({ ...f, time_end: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
-                          {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                          {TIMES.map(tt => <option key={tt} value={tt}>{fmtTime(tt)}</option>)}
                         </select>
                       </div>
                     </div>
@@ -3929,12 +3938,12 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <div><label style={lbl}>{lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From"}</label>
                     <select className="input-field" value={excForm.open} onChange={e => setExcForm(f => ({ ...f, open: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
-                      {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                      {TIMES.map(tt => <option key={tt} value={tt}>{fmtTime(tt)}</option>)}
                     </select>
                   </div>
                   <div><label style={lbl}>{lang === "nl" ? "Tot" : lang === "es" ? "Hasta" : "To"}</label>
                     <select className="input-field" value={excForm.close} onChange={e => setExcForm(f => ({ ...f, close: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
-                      {TIMES.map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                      {TIMES.map(tt => <option key={tt} value={tt}>{fmtTime(tt)}</option>)}
                     </select>
                   </div>
                 </div>

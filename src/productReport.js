@@ -16,6 +16,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { taxForSale } from "./taxEngine.js";
 import { productReportData, productReportFilename, pdfSafe, pdfSafeCells, companyNumberLabel, untaxedNote } from "./reportData.js";
+import { timeLabel, dateLocaleFor } from "./regionFormat.js";
 
 const ACCENT = [201, 169, 110]; // #c9a96e
 const s = (v) => (v === null || v === undefined ? "" : String(v));
@@ -294,7 +295,7 @@ export function generateProductReportPDF({
       T("Bedrag", "Amount", "Importe"),
     ]],
     body: lines.length
-      ? lines.map((l) => [fmtDate(l.date, lang), l.time, l.what, l.staff, l.pay, money(l.amount)])
+      ? lines.map((l) => [fmtDate(l.date, lang), timeLabel(l.time, salon.country_code), l.what, l.staff, l.pay, money(l.amount)])
       : [["", "", T("Geen verkopen in deze periode", "No sales in this period", "Sin ventas en este período"), "", "", ""]],
     foot: lines.length ? [["", "", "", "", T("Totaal", "Total", "Total"), money(totalRevenue)]] : undefined,
     columnStyles: { 5: { halign: "right", fontStyle: "bold" }, 2: { cellWidth: 150 } },
@@ -312,7 +313,7 @@ export function generateProductReportPDF({
     let fy = pageH - 32 - 12 * (footerLines.length - 1);
     for (const l of footerLines) { doc.text(l, margin, fy); fy += 12; }
     doc.text(
-      `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")}`,
+      `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(dateLocaleFor(lang, salon.country_code))}`,
       margin, pageH - 20
     );
     doc.text(`${p} / ${pages}`, pageW - margin, pageH - 20, { align: "right" });
@@ -430,7 +431,7 @@ export function generateReceiptPDF({
   const shortId = String(sale.id || "").replace(/-/g, "").slice(0, 8).toUpperCase();
   const docNo = receiptNumber != null ? String(receiptNumber).padStart(5, "0")
     : (sale.receipt_number != null ? String(sale.receipt_number).padStart(5, "0") : shortId);
-  pair(`${fmtDate(sale.date, lang)}  ${s(sale.time)}`, `${T("Bon", "Receipt", "Recibo")} ${docNo}`, 7.5, "normal", [125, 125, 125], 11);
+  pair(`${fmtDate(sale.date, lang)}  ${s(timeLabel(sale.time, salon.country_code))}`, `${T("Bon", "Receipt", "Recibo")} ${docNo}`, 7.5, "normal", [125, 125, 125], 11);
   if (sale.client_name) {
     doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(125, 125, 125);
     doc.text(ps(sale.client_name), m, y); y += 11;
@@ -582,7 +583,7 @@ export function receiptHTML({
   for (const h of head) b += `<div class="c sub">${escHtml(h)}</div>`;
   if (ids.length) b += `<div class="c sub klein">${escHtml(ids.join("   "))}</div>`;
   b += `<hr>`;
-  b += row(`${escHtml(fmtDate(sale.date, lang))}&nbsp;&nbsp;${escHtml(sale.time)}`, `${T("Bon", "Receipt", "Recibo")} ${escHtml(docNo)}`, "sub");
+  b += row(`${escHtml(fmtDate(sale.date, lang))}&nbsp;&nbsp;${escHtml(timeLabel(sale.time, salon.country_code))}`, `${T("Bon", "Receipt", "Recibo")} ${escHtml(docNo)}`, "sub");
   if (sale.client_name) b += `<div class="sub">${escHtml(sale.client_name)}</div>`;
   b += `<hr>`;
   for (const it of items) {

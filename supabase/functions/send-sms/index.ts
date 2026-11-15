@@ -31,6 +31,54 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// VS-opmaak (fase 2, 15-11-2026), gelijk aan src/regionFormat.js: alleen een
+// salon in de VS (country_code "US") schrijft $1,234.50, 2:30 PM, 11/19/2026
+// en de maand eerst. Elk ander land krijgt precies wat hier al stond, ook
+// Bonaire met de dollar. Zelfde helpers (isUsCc, usAmt, usTime, usTimesIn,
+// usDateLoc, usNumDate) in elke edge-functie; samen wijzigen.
+const isUsCc = (cc?: unknown) => String(cc || "").toUpperCase() === "US";
+// Bedrag met symbool: VS "$1,234.50" en "-$12.50"; anders "€1.234,50" en "€-12,50".
+const usAmt = (sym: string, n: unknown, cc?: unknown) => {
+  const v = Number(n) || 0;
+  const [i, d] = Math.abs(v).toFixed(2).split(".");
+  const neg = v < 0 && Number(Math.abs(v).toFixed(2)) !== 0;
+  if (isUsCc(cc)) return (neg ? "-" : "") + (sym || "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + d;
+  return (sym || "") + (neg ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + d;
+};
+// Kloktijd "14:30" (of "9:00", "14:30:00") -> VS "2:30 PM"; 12:00 = "12:00 PM",
+// 00:00 en 24:00 = "12:00 AM". Buiten de VS, of als het geen kale kloktijd is,
+// ongewijzigd terug, zodat dubbel opmaken niets kapotmaakt.
+const usTime = (hm: unknown, cc?: unknown) => {
+  const s = hm == null ? "" : String(hm);
+  if (!isUsCc(cc)) return s;
+  const m = /^\s*(\d{1,2})[:.](\d{2})(?::\d{2})?\s*$/.exec(s);
+  if (!m) return s;
+  const h = Number(m[1]);
+  if (h > 24 || Number(m[2]) > 59) return s;
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 && h < 24 ? "PM" : "AM"}`;
+};
+// Kloktijden IN een tekst ("10:00 - 17:30", "om 9:00") -> VS 12-uurs; alleen
+// losse HH:MM die nog niet door AM/PM gevolgd worden. Anders ongewijzigd.
+const usTimesIn = (text: unknown, cc?: unknown) => {
+  const s = text == null ? "" : String(text);
+  if (!isUsCc(cc)) return s;
+  return s.replace(/(^|[^\d:.,/])([01]?\d|2[0-4]):([0-5]\d)(?![\d:]|\s?[AaPp]\.?\s?[Mm]\b)/g,
+    (_all: string, pre: string, h: string, mm: string) => pre + usTime(`${h}:${mm}`, cc));
+};
+// Locale voor toLocale*String en Intl.DateTimeFormat: VS nl-NL / es-US / en-US,
+// anders nl-NL / es-ES / en-GB.
+const usDateLoc = (lang: string, cc?: unknown) => isUsCc(cc)
+  ? (lang === "nl" ? "nl-NL" : lang === "es" ? "es-US" : "en-US")
+  : (lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB");
+// Kale datum "2026-11-19" -> VS "11/19/2026". Buiten de VS ongewijzigd terug:
+// daar tonen de pushmeldingen al de ISO-datum, en dat blijft zo.
+const usNumDate = (ymd: unknown, cc?: unknown) => {
+  const s = ymd == null ? "" : String(ymd);
+  if (!isUsCc(cc)) return s;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : s;
+};
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -139,11 +187,13 @@ function txt(lang: string, nl: string, en: string, es: string) {
   return lang === "en" ? en : lang === "es" ? es : nl;
 }
 
-function fmtDate(ds: string, lang: string) {
+function fmtDate(ds: string, lang: string, cc?: unknown) {
   try {
     const d = new Date(ds + "T12:00:00");
     if (lang === "en") {
       const mo = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      // VS: maand eerst ("Nov 19").
+      if (isUsCc(cc)) return `${mo[d.getMonth()]} ${d.getDate()}`;
       return `${d.getDate()} ${mo[d.getMonth()]}`;
     }
     if (lang === "es") {
@@ -186,25 +236,29 @@ type Booking = {
 // van morgen oppakte, maar sinds send-reminders profiles.reminder_hours
 // respecteert (1, 2, 4, 12, 24 of 48 uur) gaat dezelfde SMS net zo goed over
 // vandaag of over overmorgen. Zie het appointment_reminder-blok hieronder.
-function buildMessage(type: string, b: Booking): string {
+// cc = land van de salon (profiles.country_code): alleen "US" verandert de
+// opmaak (12-uursklok, maand eerst, $1,500 en $22.50).
+function buildMessage(type: string, b: Booking, cc?: unknown): string {
   const lang = b.lang === "en" ? "en" : b.lang === "es" ? "es" : "nl";
   const salon = String(b.salon_name || "").slice(0, 30);
   const service = String(b.service_name || "").slice(0, 40);
-  const date = b.date ? fmtDate(String(b.date), lang) : "";
-  const time = (String(b.time || "").slice(0, 5)) || "";
+  const date = b.date ? fmtDate(String(b.date), lang, cc) : "";
+  const time = usTime((String(b.time || "").slice(0, 5)) || "", cc);
   // Het euroteken stond hier hardgecodeerd, maar een Bonaire-salon rekent in
   // dollars. De aanroeper (book-appointment) leidt het symbool af uit het
   // salon-land en stuurt het mee, exact zoals bij send-emails; ontbreekt het
   // veld (een oudere aanroeper), dan blijft € de terugval.
   // Alleen vooraan trimmen, net als send-emails: "XCG " en "Afl. " houden hun
   // spatie ("XCG 45", niet "XCG45").
-  const cur = (typeof b.currency === "string" && b.currency.trim()) ? b.currency.replace(/^\s+/, "") : "€";
+  const cur = (typeof b.currency === "string" && b.currency.trim()) ? b.currency.replace(/^\s+/, "") : (isUsCc(cc) ? "$" : "€");
   // Hele bedragen zonder decimalen (kort voor een SMS), duizendtallen met een
   // punt ("$1.500", 28-09-2026). Centen blijven staan ("$22,50"), anders stond
   // er een afgerond en dus verkeerd bedrag in de bevestiging.
   const priceNum = parseFloat(String(b.price));
   const priceStr = b.price != null && Number.isFinite(priceNum) ? (() => {
     const [i, d] = Math.abs(priceNum).toFixed(2).split(".");
+    // VS: komma voor duizendtallen, punt voor centen ("$1,500", "$22.50").
+    if (isUsCc(cc)) return `${cur}${i.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${d === "00" ? "" : "." + d}`;
     return `${cur}${i.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}${d === "00" ? "" : "," + d}`;
   })() : "";
   if (type === "booking_confirmation") {
@@ -399,7 +453,7 @@ serve(async (req) => {
   const to = normalisePhone(b.client_phone, profile.country_code || "NL");
   if (!to) return ok({ success: true, sent: false, skipped_reason: "no_valid_phone" }, origin);
 
-  const message = buildMessage(type, b);
+  const message = buildMessage(type, b, profile.country_code);
   if (!message) return ok({ success: true, sent: false, skipped_reason: "empty_message" }, origin);
 
   const result = await dispatch(to, message);

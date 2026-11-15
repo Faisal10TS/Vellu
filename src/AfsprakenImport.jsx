@@ -12,7 +12,9 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { NavIcon, salonNow, fmt, fmtAmt } from "./shared.jsx";
+import { NavIcon, salonNow, fmt, fmtAmt,
+  dateLocale, isUsCountry, fmtTime,
+} from "./shared.jsx";
 import {
   readTableFile, ImportError, findHeaderRow, detectColumns, detectDateOrder, hasNumericDates,
   buildAppointments, suggestService, suggestStaff, norm, parseDateIn,
@@ -30,7 +32,7 @@ export default function AfsprakenImport({ supabase, ownerId, lang = "nl", c, acc
   const [rows, setRows] = useState([]);
   const [headerIdx, setHeaderIdx] = useState(0);
   const [map, setMap] = useState(null);
-  const [order, setOrder] = useState("dmy");
+  const [order, setOrder] = useState(isUsCountry(countryCode) ? "mdy" : "dmy");
   const [orderAsk, setOrderAsk] = useState(false);
   const [svcPick, setSvcPick] = useState({});   // norm(tekst) → dienst-id of "" (zo laten)
   const [staffPick, setStaffPick] = useState({}); // norm(tekst) → medewerker-id of ""
@@ -82,7 +84,7 @@ export default function AfsprakenImport({ supabase, ownerId, lang = "nl", c, acc
       const dateVals = table.slice(h + 1).flatMap((r) => [r[m.date], r[m.time]]).filter(Boolean);
       const known = detectDateOrder(dateVals);
       setRows(table); setHeaderIdx(h); setMap(m);
-      setOrder(known || "dmy");
+      setOrder(known || (isUsCountry(countryCode) ? "mdy" : "dmy"));
       setOrderAsk(!known && hasNumericDates(dateVals));
       setSvcPick({}); setStaffPick({}); setStaffAll("");
       setFileName(file.name);
@@ -172,7 +174,7 @@ export default function AfsprakenImport({ supabase, ownerId, lang = "nl", c, acc
 
   const dayLabel = (ymd, withYear = false) => {
     const d = new Date(`${ymd}T12:00:00`);
-    return d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short", ...(withYear || ymd.slice(0, 4) !== todayYmd.slice(0, 4) ? { year: "numeric" } : {}) });
+    return d.toLocaleDateString(dateLocale(lang), { weekday: "short", day: "numeric", month: "short", ...(withYear || ymd.slice(0, 4) !== todayYmd.slice(0, 4) ? { year: "numeric" } : {}) });
   };
 
   const doImport = async () => {
@@ -464,7 +466,7 @@ export default function AfsprakenImport({ supabase, ownerId, lang = "nl", c, acc
                     {resolved.slice(0, PREVIEW).map((a, i) => (
                       <div key={a.key} data-appt-row style={{ padding: "9px 12px", borderTop: i ? `1px solid ${c.border}` : "none", fontSize: 12, lineHeight: 1.45 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                          <span style={{ fontWeight: 600 }}>{dayLabel(a.date)} · {a.time} <span style={{ fontWeight: 400, color: c.textMuted }}>· {a.total} min</span></span>
+                          <span style={{ fontWeight: 600 }}>{dayLabel(a.date)} · {fmtTime(a.time)} <span style={{ fontWeight: 400, color: c.textMuted }}>· {a.total} min</span></span>
                           <span style={{ color: c.textSub, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, a.price)}</span>
                         </div>
                         <div style={{ color: c.textSub, overflowWrap: "anywhere" }}>

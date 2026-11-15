@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, createContext, useContext, useRef } from "react";
 import { supabase } from "./supabase.js";
+import { isUsCountry, dateLocaleFor, moneyLocaleFor, amountLabel, timeLabel, timesInText, numDateLabel } from "./regionFormat.js";
 
 // ─── THEME SYSTEM ─────────────────────────────────────────────
 const THEMES = {
@@ -218,7 +219,7 @@ function rewardLabel(days, lang) {
 }
 // "5 oktober" — einddatum van de actie in Nederlandse tijd.
 function promoEndLabel(endsAt, lang) {
-  try { return new Date(endsAt).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }); }
+  try { return new Date(endsAt).toLocaleDateString(dateLocale(lang), { day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }); }
   catch { return ""; }
 }
 
@@ -862,6 +863,7 @@ function waDateLabel(lang, date) {
 }
 
 function getWhatsAppBookingMsg(lang, { clientName, salonName, date, time, serviceName, price, countryCode }) {
+  time = timeLabel(time, countryCode);
   if (lang === "nl") {
     return `Hoi ${clientName}! ✨\n\nJe afspraak bij ${salonName} is bevestigd:\n📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 ${fmtMoney(price, countryCode)}\n\nTot dan! 🙏`;
   }
@@ -878,6 +880,7 @@ function getWhatsAppBookingMsg(lang, { clientName, salonName, date, time, servic
 // gericht was, en bij TTNB leek het alsof zíj de bevestiging kregen in plaats
 // van verstuurden. getWhatsAppBookingMsg blijft voor salon → klant (OwnerApp).
 function getWhatsAppClientBookedMsg(lang, { clientName, salonName, date, time, serviceName, price, countryCode }) {
+  time = timeLabel(time, countryCode);
   const lines = `📅 ${date}\n🕐 ${time}\n💅 ${serviceName}\n💰 ${fmtMoney(price, countryCode)}`;
   const who = String(clientName || "").trim();
   if (lang === "nl") return `Hoi ${salonName}! Ik heb zojuist online een afspraak geboekt:\n${lines}${who ? `\n\nGroetjes, ${who}` : ""}`;
@@ -922,6 +925,7 @@ function getPaymentLinkWithAmount(link, price) {
 //                    de afspraak al is afgerond.
 // `date` is de ISO-datum van de afspraak (alleen prepay/remainder).
 function getWhatsAppPaymentMsg(lang, { clientName, salonName, price, paymentLink, iban, ibanHolder, countryCode, kind = "visit", date, time, paid, visited }) {
+  time = timeLabel(time, countryCode);
   const firstName = (clientName || "").split(" ")[0] || clientName || "";
   const amount = fmtMoney(price, countryCode);
   const linkWithAmount = getPaymentLinkWithAmount(paymentLink, price);
@@ -1028,7 +1032,7 @@ function getWhatsAppReminderMsg(lang, { clientName, salonName, date, time, servi
     return lang === "nl" ? `Hoi ${firstName}! ` : lang === "es" ? `¡Hola ${firstName}! ` : `Hi ${firstName}! `;
   }
   const when = iso === today ? "today" : iso === tomorrow ? "tomorrow" : "date";
-  const details = `📅 ${waDateLabel(lang, date)}\n🕐 ${time}\n💅 ${serviceName}`;
+  const details = `📅 ${waDateLabel(lang, date)}\n🕐 ${timeLabel(time, countryCode)}\n💅 ${serviceName}`;
   if (lang === "nl") {
     const zin = when === "today" ? `je hebt vandaag een afspraak bij ${salonName}` : when === "tomorrow" ? `je hebt morgen een afspraak bij ${salonName}` : `je hebt een afspraak bij ${salonName}`;
     return `Hoi ${firstName}! 👋\n\nHerinnering: ${zin}.\n${details}\n\n${when === "today" ? "Tot straks!" : when === "tomorrow" ? "Tot morgen!" : "Tot dan!"} ✨`;
@@ -1169,6 +1173,25 @@ const COUNTRIES = [
 // of a ." — dus "$1.234,50" op Bonaire en "XCG 1.234,50" op Curaçao, niet de
 // Amerikaanse schrijfwijze. In de app zelf: fmtAmt hieronder (komma, zonder
 // duizendtalpunt).
+// ─── REGIO-OPMAAK (VS fase 2, 15-11-2026) ─────────────────────
+// Eén schakelaar per scherm: het land van de salon waar het scherm over gaat
+// (boekingspagina, eigenaars- en medewerkersapp zetten hem bij het tekenen;
+// landingspagina en admin zetten hem leeg). fmtAmt, fmtPrice, fmtTime,
+// dateLocale en fmtNumDate volgen hem, zodat de ~170 bestaande fmtAmt-aanroepen
+// niets hoeven mee te geven. Alleen "US" schrijft Amerikaans; de regels staan
+// in regionFormat.js.
+let FORMAT_REGION = "";
+function setFormatRegion(countryCode) { FORMAT_REGION = isUsCountry(countryCode) ? "US" : ""; }
+const formatRegion = () => FORMAT_REGION;
+// "14:30" → "2:30 PM" in de VS, anders ongewijzigd.
+const fmtTime = (hm) => timeLabel(hm, FORMAT_REGION);
+// Kloktijden in een tekst ("10:00 – 17:30") → 12-uurs in de VS.
+const fmtTimesIn = (text) => timesInText(text, FORMAT_REGION);
+// Locale voor toLocaleDateString: de taal kiest de woorden, het land de volgorde.
+const dateLocale = (lang) => dateLocaleFor(lang, FORMAT_REGION);
+// "2026-11-19" → "19-11-2026", VS "11/19/2026".
+const fmtNumDate = (d, withYear = true) => numDateLabel(d, FORMAT_REGION, withYear);
+
 const CURRENCIES = {
   EUR: { code: "EUR", symbol: "€",     locale: "nl-NL" },
   USD: { code: "USD", symbol: "$",     locale: "nl-NL" },
@@ -1205,7 +1228,10 @@ function salonLangOf(profile) {
 // unknown/missing, so existing behaviour is preserved).
 function currencyForCountry(countryCode) {
   const country = COUNTRIES.find((c) => c.code === countryCode);
-  return (country && CURRENCIES[country.currency]) || CURRENCIES.EUR;
+  const cur = (country && CURRENCIES[country.currency]) || CURRENCIES.EUR;
+  // VS fase 2: een Amerikaanse salon schrijft $1,234.50 (ook in de PDF- en
+  // Excel-rapporten, die moneyLocale hieruit halen). Bonaire blijft nl-NL.
+  return isUsCountry(countryCode) ? { ...cur, locale: moneyLocaleFor(countryCode) } : cur;
 }
 // Just the currency symbol — the minimal swap for display spots that keep their
 // own number formatting (e.g. `${curSym(cc)}${price}` replacing `€${price}`).
@@ -1227,11 +1253,9 @@ function fmtMoney(amount, countryCode, decimals = 2) {
 // oude `{cur}{x.toFixed(2)}`; invoervelden (type=number), betaallinks, de
 // SEPA-QR en CSV houden .toFixed(2) — daar hoort een punt.
 // Duizendtallen met een punt: "$80.458,53" i.p.v. "$80458,53" (Faisal 28-09).
+// VS fase 2: in een Amerikaanse salon (setFormatRegion) "$1,234.50" en "-$12.50".
 function fmtAmt(sym, n) {
-  const v = Number(n) || 0;
-  const [int, dec] = Math.abs(v).toFixed(2).split(".");
-  const neg = v < 0 && Number(Math.abs(v).toFixed(2)) !== 0;
-  return (sym || "") + (neg ? "-" : "") + int.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + dec;
+  return amountLabel(sym, n, FORMAT_REGION);
 }
 // Prijzen op de boekingspagina (boekingspagina-ronde 12-11-2026, punt 8): een
 // rond bedrag zonder ",00" ("€38", "$1.250"), met centen precies als fmtAmt
@@ -1239,7 +1263,7 @@ function fmtAmt(sym, n) {
 // van salon en team houden fmtAmt.
 function fmtPrice(sym, n) {
   const s = fmtAmt(sym, n);
-  return s.endsWith(",00") ? s.slice(0, -3) : s;
+  return s.endsWith(FORMAT_REGION === "US" ? ".00" : ",00") ? s.slice(0, -3) : s;
 }
 
 // "Vanaf"-prijs van een dienst met varianten: de laagste prijs, maar zonder
@@ -4109,7 +4133,9 @@ export {
   DEFAULT_HOURS,
   T,
   LANGUAGES, COUNTRIES,
-  CURRENCIES, currencyForCountry, curSym, fmtMoney, fmtAmt, fmtPrice, taxForCountry, ownerLangFor, salonLangOf, SALON_LANGS,
+  CURRENCIES, currencyForCountry, curSym, fmtMoney, fmtAmt, fmtPrice, taxForCountry,
+  // Regio-opmaak (VS fase 2)
+  setFormatRegion, formatRegion, fmtTime, fmtTimesIn, dateLocale, fmtNumDate, isUsCountry, ownerLangFor, salonLangOf, SALON_LANGS,
   TAX_RULES, TAX_REGIONS_BY_COUNTRY, taxRuleFor, resolveTax,
   PAGE_FONTS, getPageFont, ensurePageFontLoaded,
   makeCSS,

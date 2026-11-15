@@ -26,7 +26,7 @@ async function rest(path){const r=await fetch(`${SU}/rest/v1/${path}`,{headers:{
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Valutasymbool per land, gelijk aan CURRENCIES/COUNTRIES in src/shared.jsx
 // (CW/SX "XCG ", AW "Afl. ", BQ "$"). Onbekend land = €.
-const CUR_BY_COUNTRY={BQ:"$",AW:"Afl. ",CW:"XCG ",SX:"XCG ",GB:"£"};
+const CUR_BY_COUNTRY={BQ:"$",AW:"Afl. ",CW:"XCG ",SX:"XCG ",GB:"£",US:"$"};
 // Tijdzone per land, zelfde tabel als TZ_BY_COUNTRY in shared.jsx en de andere
 // edge-functies. Onbekend land = Amsterdam.
 const TZ_BY_COUNTRY={NL:"Europe/Amsterdam",BE:"Europe/Brussels",GB:"Europe/London",AW:"America/Curacao",CW:"America/Curacao",BQ:"America/Curacao",SX:"America/Curacao",US:"America/New_York"};
@@ -49,7 +49,16 @@ const tok=a.startsWith("Bearer ")?a.slice(7):null;
 if(tok){callerId=await verifyUserToken(tok);authed=!!callerId;}
 }
 if(!authed)return new Response(JSON.stringify({error:"unauthorized"}),{status:401,headers:{...headers,"Content-Type":"application/json"}});
-const fmtD=(ds,l="nl")=>{try{const d=new Date(ds+"T12:00:00");if(l==="es"){const dy=["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];const mo=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}if(l==="en"){const dy=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];const mo=["January","February","March","April","May","June","July","August","September","October","November","December"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}const dy=["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];const mo=["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}catch{return esc(ds);}};
+// VS-opmaak (fase 2, 15-11-2026), gelijk aan src/regionFormat.js: alleen een
+// salon (of, bij de Vellu-mails, een eigenaar) in de VS schrijft $1,234.50,
+// 2:30 PM en "Thursday, November 19, 2026"; elk ander land blijft precies zoals
+// het was, ook Bonaire met de dollar. US wordt per aanvraag gezet zodra het land
+// bekend is (na het inlezen en na het ophalen van het salonprofiel).
+let US=false;
+const isUsCc=(cc)=>String(cc||"").toUpperCase()==="US";
+// "14:30" -> "2:30 PM"; alles wat geen kale kloktijd is gaat ongewijzigd door.
+const usTime=(hm)=>{const s=hm==null?"":String(hm);if(!US)return s;const m=/^\s*(\d{1,2})[:.](\d{2})(?::\d{2})?\s*$/.exec(s);if(!m)return s;const h=Number(m[1]);if(h>24||Number(m[2])>59)return s;return `${h%12||12}:${m[2]} ${h>=12&&h<24?"PM":"AM"}`;};
+const fmtD=(ds,l="nl")=>{try{const d=new Date(ds+"T12:00:00");if(l==="es"){const dy=["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];const mo=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}if(l==="en"){const dy=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];const mo=["January","February","March","April","May","June","July","August","September","October","November","December"];if(US)return`${dy[d.getDay()]}, ${mo[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}const dy=["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];const mo=["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];return`${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]} ${d.getFullYear()}`;}catch{return esc(ds);}};
 // Mails renderen op witte/creme kaarten. Een (bijna) wit salon-accent
 // (Honeysets koos #ffffff, 27-08-2026) maakt koppen en knoppen onzichtbaar —
 // zak zulke accenten naar neutrale donkere inkt, net als readableAccent in
@@ -88,8 +97,9 @@ let CURSYM="€";
 // de voorkant getrimd (tot 24-09-2026 stond er "XCG45.00" en "Afl.45.00").
 // Betaallink en SEPA-QR (verderop) houden de punt — dat is een machineformaat.
 // Duizendtallen met een punt ("$1.500,00"), gelijk aan fmtAmt in de app (28-09).
-const fN=(p)=>{const v=parseFloat(p)||0;const [i,d]=Math.abs(v).toFixed(2).split(".");return (v<0&&+Math.abs(v).toFixed(2)!==0?"-":"")+i.replace(/\B(?=(\d{3})+(?!\d))/g,".")+","+d;};
-const fP=(p)=>`${CURSYM}${fN(p)}`;
+const fN=(p)=>{const v=parseFloat(p)||0;const [i,d]=Math.abs(v).toFixed(2).split(".");const neg=v<0&&+Math.abs(v).toFixed(2)!==0?"-":"";if(US)return neg+i.replace(/\B(?=(\d{3})+(?!\d))/g,",")+"."+d;return neg+i.replace(/\B(?=(\d{3})+(?!\d))/g,".")+","+d;};
+// VS: "-$12.50" (min vóór het symbool); elders ongewijzigd "€-12,50".
+const fP=(p)=>{const n=fN(p);return US&&n.startsWith("-")?`-${CURSYM}${n.slice(1)}`:`${CURSYM}${n}`;};
 const W=`<div style="font-family:Georgia,serif;max-width:500px;margin:0 auto;padding:40px 20px;color:#1a1a1a;">`;
 const bS=`style="background:#f9f7f4;border-radius:12px;padding:24px;margin-bottom:28px;"`;
 const tS=`style="width:100%;border-collapse:collapse;"`;
@@ -99,7 +109,7 @@ const gL=`style="border-top:1px solid #e8e0d5;"`;
 const gA=`style="padding:12px 0 4px;font-weight:600;color:#c9a96e;"`;
 const gR=`style="padding:12px 0 4px;font-weight:600;color:#c9a96e;text-align:right;"`;
 try{
-const{type,booking:b}=await req.json();
+const{type,booking:b}=await req.json();US=isUsCc(b?.country_code);
 // Een ingelogde gebruiker (eigenaar of medewerker in de app) mag alleen de mails
 // versturen die de app zelf verstuurt (src/shared.jsx sendEmails). Alleen van de
 // server, met x-internal-secret: de platformmails die als "Vellu" uitgaan
@@ -162,7 +172,7 @@ b.salon_accent=pr.accent_color||"";
 b.salon_slug=pr.slug||"";
 b.salon_email=pr.salon_email||"";
 b.owner_email=pr.salon_email||pr.email||null;
-b.country_code=pr.country_code||"NL";
+b.country_code=pr.country_code||"NL";US=isUsCc(b.country_code);
 b.timezone=pr.timezone||null;
 b.currency=CUR_BY_COUNTRY[String(pr.country_code||"").toUpperCase()]||"€";
 b.staff_view_client_contact=pr.staff_view_client_contact;
@@ -318,7 +328,7 @@ const send=(to,subject,html,rt)=>sendEmail(to,subject,html,fromLine,rt===undefin
 // (staff_view_client_contact) — het Reply-To zou haar het adres alsnog geven.
 const clientReply=/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(String(b.client_email||"").trim())?String(b.client_email).trim():null;
 const ownerReplyFor=(em)=>(clientReply&&!(em!==b.owner_email&&b.staff_view_client_contact===false))?clientReply:replyTo;
-const eC=esc(b.client_name),eS=esc(b.salon_name),eSv=esc(b.service_name),eT=esc(b.time),eD=esc(nD),ePh=esc(b.client_phone),eIN=esc(b.invoice_number),eAd=esc(b.salon_address),eKv=esc(b.salon_kvk),eBt=esc(b.salon_btw),eIb=esc(b.salon_iban),eSl=esc(b.salon_slug);
+const eC=esc(b.client_name),eS=esc(b.salon_name),eSv=esc(b.service_name),eT=esc(usTime(b.time)),eD=esc(nD),ePh=esc(b.client_phone),eIN=esc(b.invoice_number),eAd=esc(b.salon_address),eKv=esc(b.salon_kvk),eBt=esc(b.salon_btw),eIb=esc(b.salon_iban),eSl=esc(b.salon_slug);
 // Salon accent colour — every salon email is branded with it (falls back to
 // Vellu gold when not provided, e.g. Vellu's own subscription invoice).
 const AC=acOf(b);
@@ -461,7 +471,7 @@ const foot=bySalon?`<p style="color:#666;font-size:13px;text-align:center;margin
 await send(plainText(b.client_email),plainText(subj),`${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(lang,"Afspraak geannuleerd","Appointment cancelled","Cita cancelada")}</h2><p style="color:#666;margin-bottom:28px;">${intro}</p><div ${bS}><table ${tS}>${row(txt(lang,"Behandeling","Treatment","Servicio"),eSv)}${row(txt(lang,"Was gepland op","Was scheduled for","Estaba programada para"),`${eD} ${txt(lang,"om","at","a las")} ${eT}`)}</table></div>${foot}</div>`);}
 if(type==="appointment_updated"){
 const oldDate=b.old_date?esc(fmtD(b.old_date,lang)):"";
-const oldTime=esc(b.old_time||"");
+const oldTime=esc(usTime(b.old_time||""));
 const oldPrice=b.old_price!=null?fP(b.old_price):"";
 const newPrice=fP(b.price);
 const changedRow=(label,oldVal,newVal)=>{
@@ -505,7 +515,7 @@ const TAXL=b.tax_label?esc(String(b.tax_label)):txt(lang,"Btw","VAT","IVA");
 // een niet-bijgewerkte client geen kale factuur produceert.
 const taxLines=Array.isArray(b.tax_lines)?b.tax_lines.filter((l:any)=>l&&(parseFloat(l.tax)||0)!==0):null;
 const showTaxLine=b.show_tax_line!==undefined?!!b.show_tax_line:!!b.salon_btw;
-const pctStr=(v:any)=>parseFloat((parseFloat(v)||0).toFixed(2)).toString().replace(".",lang==="nl"?",":".");
+const pctStr=(v:any)=>parseFloat((parseFloat(v)||0).toFixed(2)).toString().replace(".",lang==="nl"&&!US?",":".");
 if(showTaxLine&&taxLines&&taxLines.length){
   const taxTotal=taxLines.reduce((n:number,l:any)=>n+(parseFloat(l.tax)||0),0);
   const netTotal=gross-taxTotal;
@@ -669,7 +679,7 @@ if(type==="trial_autopay_on"||type==="trial_autopay_ending"||type==="trial_autop
 // is het 18:00 of 19:00 de avond ervoor, in Engeland 23:00. Alleen "vóór
 // <afschrijvingsdatum>" schrijven liet een Caribische salon na 18:00 nog op de
 // knop drukken en dan toch betalen.
-const offByTxt=(iso,cc,l,tz)=>{const d=new Date(String(iso||""));if(isNaN(d.getTime()))return "";let hm="";try{hm=new Intl.DateTimeFormat("en-GB",{timeZone:tzFor(cc,tz),hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(d);}catch{hm="";}const dt=fmtD(localYmd(d.toISOString(),cc,tz),l);if(!hm||hm==="00:00")return txt(l,`vóór ${dt}`,`before ${dt}`,`antes del ${dt}`);return txt(l,`vóór ${dt} om ${hm}`,`before ${hm} on ${dt}`,`antes de las ${hm} del ${dt}`);};
+const offByTxt=(iso,cc,l,tz)=>{const d=new Date(String(iso||""));if(isNaN(d.getTime()))return "";let hm="";try{hm=new Intl.DateTimeFormat("en-GB",{timeZone:tzFor(cc,tz),hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(d);}catch{hm="";}const dt=fmtD(localYmd(d.toISOString(),cc,tz),l);if(!hm||hm==="00:00")return txt(l,`vóór ${dt}`,`before ${dt}`,`antes del ${dt}`);if(isUsCc(cc))hm=usTime(hm);return txt(l,`vóór ${dt} om ${hm}`,`before ${hm} on ${dt}`,`antes de las ${hm} del ${dt}`);};
 const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
 const eindigtOp=esc(b.trial_ends_at?fmtD(localYmd(b.trial_ends_at,b.country_code,b.timezone),oLang):"");
 // Kale datum: localYmd laat hem zoals hij is (Amsterdamse dag = Mollies dag).

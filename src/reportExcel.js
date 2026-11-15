@@ -27,6 +27,7 @@
 import { buildXlsx, saveXlsx } from "./xlsx.js";
 import { revenueReportData, productReportData, cashbookData, cashFlowOf, payLabel, revenueReportFilename, productReportFilename, cashbookFilename, companyNumberLabel, untaxedNote } from "./reportData.js";
 import { resolveTax } from "./shared.jsx";
+import { isUsCountry, timeLabel, dateLocaleFor } from "./regionFormat.js";
 
 const s = (v) => (v === null || v === undefined ? "" : String(v));
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -36,7 +37,7 @@ const date = (iso) => ({ d: s(iso).slice(0, 10) });
 const H = (...labels) => labels.map((l) => ({ v: l, s: "header" }));
 const sum = (col, from, to, total = true, style = "moneyTotal") => (v) => ({ f: `SUM(${col}${from}:${col}${to})`, v: round2(v), s: total ? style : "money" });
 const pctLabel = (rate, locale) => `${(Math.round((Number(rate) || 0) * 100) / 100).toLocaleString(locale)}%`;
-const genLocale = (lang) => (lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB");
+const genLocale = (lang, cc = null) => dateLocaleFor(lang, cc);
 
 // Bedrijfsblok + noten die onder elke samenvatting horen.
 function companyRows(salon, idLabel, T, lang = "nl") {
@@ -183,7 +184,7 @@ export function buildRevenueReportXlsx({
     const taxCell = plain ? { f: `I${rowNum}-I${rowNum}/(1+${mainRate / 100})`, v: r.tax, s: "money" } : { v: r.tax, s: "money" };
     const netCell = plain ? { f: `I${rowNum}-K${rowNum}`, v: r.net, s: "money" } : { v: r.net, s: "money" };
     // Geen betaalwijze = "Later / factuur" (payLabel), niet leeg en niet "in de salon".
-    return [date(a.date), s(a.time), s(a.client_name), { v: s(a.service_name), s: "wrap" }, s(a.staff_name), payLabel(a.payment_method, lang), s(a.invoice_number), discountCell(r.discount), money(r.gross),
+    return [date(a.date), s(timeLabel(a.time, salon.country_code)), s(a.client_name), { v: s(a.service_name), s: "wrap" }, s(a.staff_name), payLabel(a.payment_method, lang), s(a.invoice_number), discountCell(r.discount), money(r.gross),
       ...(showTaxRows ? [netCell, taxCell] : [])];
   };
   // Zonder regels geen SOM-formule (SUM(I3:I2) zou de totaalregel zelf raken).
@@ -237,7 +238,7 @@ export function buildRevenueReportXlsx({
       : T(`Netto en ${label} per afspraak zijn niet afgerond; opgeteld komen ze daardoor precies uit op de kerncijfers.`,
         `Net and ${label} per appointment are not rounded, so their sums match the key figures exactly.`,
         `El neto y el ${label} por cita no están redondeados; sumados coinciden exactamente con las cifras clave.`)) : null,
-    `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang))} · vellu.cc`,
+    `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang, salon.country_code))} · vellu.cc`,
   ]));
 
   // ── blad 2: afspraken (zelfde regels, bevroren kop + filter) ──
@@ -292,11 +293,11 @@ export function buildProductReportXlsx({
   const dayTotal = (first, last) => [{ v: T("Totaal", "Total", "Total"), s: "textTotal" }, sumOr("B", first, last, P.totalQty, "int"), sumOr("C", first, last, P.totalRevenue)];
 
   const trHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Verkocht", "Sold", "Vendido"), T("Medewerker", "Staff", "Personal"), T("Betaald", "Paid", "Pagado"), T("Soort", "Type", "Tipo"), T("Bedrag", "Amount", "Importe"));
-  const trBody = P.lines.map((l) => [date(l.date), l.time, l.what, l.staff, l.pay, l.isSale ? T("Kassa", "Till", "Caja") : T("Bij afspraak", "With appointment", "Con cita"), money(l.amount)]);
+  const trBody = P.lines.map((l) => [date(l.date), timeLabel(l.time, salon.country_code), l.what, l.staff, l.pay, l.isSale ? T("Kassa", "Till", "Caja") : T("Bij afspraak", "With appointment", "Con cita"), money(l.amount)]);
   const trTotal = (first, last) => [null, null, null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, sumOr("G", first, last, P.totalRevenue)];
 
   const itHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Product", "Product", "Producto"), T("Aantal", "Qty", "Cantidad"), T("Stukprijs", "Unit price", "Precio unitario"), T("Bedrag", "Amount", "Importe"), T("Medewerker", "Staff", "Personal"), T("Betaald", "Paid", "Pagado"));
-  const itBody = P.items.map((i) => [date(i.date), i.time, i.kind === "voucher" ? `${i.name} (${T("kadobon ingewisseld", "gift card redeemed", "tarjeta regalo canjeada")})` : i.kind === "voucher_issue" ? `${i.name} (${T("kadobon verkocht", "gift card sold", "tarjeta regalo vendida")})` : i.name, int(i.qty), money(i.price), money(i.amount), i.staff, i.pay]);
+  const itBody = P.items.map((i) => [date(i.date), timeLabel(i.time, salon.country_code), i.kind === "voucher" ? `${i.name} (${T("kadobon ingewisseld", "gift card redeemed", "tarjeta regalo canjeada")})` : i.kind === "voucher_issue" ? `${i.name} (${T("kadobon verkocht", "gift card sold", "tarjeta regalo vendida")})` : i.name, int(i.qty), money(i.price), money(i.amount), i.staff, i.pay]);
   const itTotal = (first, last) => [null, null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, sumOr("F", first, last, P.totalRevenue), null, null];
 
   // ── blad 1: samenvatting, net zo volledig als de PDF ──
@@ -341,7 +342,7 @@ export function buildProductReportXlsx({
     T(`Bedragen in ${curText}, inclusief belasting. Alleen productverkoop — behandelingen staan in het omzetrapport. Belastingbedragen volgen uit de instellingen van deze salon; Vellu geeft geen fiscaal advies.`,
       `Amounts in ${curText}, tax included. Product sales only — treatments are in the revenue report. Tax amounts follow this salon's settings; Vellu does not provide tax advice.`,
       `Importes en ${curText}, impuestos incluidos. Solo venta de productos. Los importes de impuestos siguen la configuración de este salón; Vellu no ofrece asesoramiento fiscal.`),
-    `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang))} · vellu.cc`,
+    `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang, salon.country_code))} · vellu.cc`,
   ]));
 
   // ── eigen bladen: dezelfde tabellen, met bevroren kopregel en filter ──
@@ -374,7 +375,7 @@ export function buildCashbookXlsx({ salon, movements, cashRows, range, lang = "n
   const idLabel = taxIdLabel || salon.tax_id_label || resolveTax(salon).idLabel || "BTW-id";
   const D = cashbookData({ movements, cashRows, from: range.from, to: range.to });
   const KIND = { open: T("Beginsaldo", "Opening float", "Saldo inicial"), in: T("Kas in", "Cash in", "Entrada"), out: T("Kas uit", "Cash out", "Salida"), count: T("Telling", "Count", "Recuento") };
-  const tijd = (iso) => { try { return new Date(iso).toLocaleTimeString(genLocale(lang), { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
+  const tijd = (iso) => { try { return isUsCountry(salon.country_code) ? new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : new Date(iso).toLocaleTimeString(genLocale(lang), { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 
   // ── tabellen: op blad 1 zoals in de PDF (per dag, mutaties, contante
   //    betalingen) én als eigen bladen om te sorteren en filteren (Faisal
@@ -391,7 +392,7 @@ export function buildCashbookXlsx({ salon, movements, cashRows, range, lang = "n
   });
 
   const csHead = H(T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Klant", "Client", "Cliente"), T("Omschrijving", "Description", "Descripción"), T("Medewerker", "Staff", "Personal"), T("Ontvangen", "Received", "Recibido"), T("Wisselgeld", "Change", "Cambio"), T("Bedrag", "Amount", "Importe"));
-  const csBody = D.cashRows.map((a) => { const f = cashFlowOf(a); return [date(a.date), s(a.time), s(a.client_name), s(a.service_name), s(a.staff_name).split(",")[0].trim(), money(f.received), money(f.change), money(f.net)]; });
+  const csBody = D.cashRows.map((a) => { const f = cashFlowOf(a); return [date(a.date), s(timeLabel(a.time, salon.country_code)), s(a.client_name), s(a.service_name), s(a.staff_name).split(",")[0].trim(), money(f.received), money(f.change), money(f.net)]; });
   const csTotal = (first, last) => [null, null, null, null, { v: T("Totaal", "Total", "Total"), s: "textTotal" }, sumOr("F", first, last, D.totals.received), sumOr("G", first, last, D.totals.change), sumOr("H", first, last, D.totals.sales)];
 
   // ── blad 1: samenvatting, net zo volledig als de PDF ──
@@ -424,7 +425,7 @@ export function buildCashbookXlsx({ salon, movements, cashRows, range, lang = "n
       "Expected in drawer = opening float + cash received − change + deposits − withdrawals. Difference = counted − expected at the time of counting.",
       "Esperado en caja = saldo inicial + efectivo recibido − cambio + depósitos − retiradas. Diferencia = contado − esperado en el momento del recuento."),
     T(`Bedragen in ${curText}. Contant ontvangen = wat de klant gaf (kassaverkopen én contant afgerekende behandelingen); wisselgeld = wat er terugging; contant verkocht (netto) = het verschil.`, `Amounts in ${curText}. Cash received = what the client handed over (till sales and treatments paid in cash); change = what went back; cash sales (net) = the difference.`, `Importes en ${curText}. Efectivo recibido = lo que entregó el cliente (ventas de caja y tratamientos en efectivo); cambio = lo devuelto; ventas en efectivo (neto) = la diferencia.`),
-    `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang))} · vellu.cc`,
+    `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(genLocale(lang, salon.country_code))} · vellu.cc`,
   ]));
 
   // ── eigen bladen: dezelfde tabellen, met bevroren kopregel en filter ──

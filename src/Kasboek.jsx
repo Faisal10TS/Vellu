@@ -20,7 +20,9 @@
 // als de verkooplijst, ook voor dagen buiten het 90-dagen-venster.
 
 import { useState, useEffect } from "react";
-import { NavIcon, onAccentInk, fmtAmt } from "./shared.jsx";
+import { NavIcon, onAccentInk, fmtAmt,
+  dateLocale, formatRegion,
+} from "./shared.jsx";
 import { cashFlowOf, hasCashFlow } from "./reportData.js";
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -126,7 +128,7 @@ export default function Kasboek({ supabase, ownerId, day, isToday, dayLabel, cas
     </div>
   );
   const btnStyle = (active) => ({ flex: "1 0 auto", padding: "7px 8px", fontSize: 9.5, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", borderRadius: 8, cursor: "pointer", fontFamily: "'Jost',sans-serif", border: `1px solid ${active ? accent : c.inputBorder}`, background: active ? `${accent}14` : "transparent", color: active ? accent : c.textSub, whiteSpace: "nowrap" });
-  const fmtTime = (iso) => { try { return new Date(iso).toLocaleTimeString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
+  const fmtTime = (iso) => { try { return formatRegion() === "US" ? new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : new Date(iso).toLocaleTimeString(dateLocale(lang), { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 
   return (
     <div data-kasboek style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>

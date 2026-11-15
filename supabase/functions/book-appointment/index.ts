@@ -104,6 +104,54 @@ const tzFor = (code?: string | null, tz?: string | null) => {
   return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
 };
 
+// VS-opmaak (fase 2, 15-11-2026), gelijk aan src/regionFormat.js: alleen een
+// salon in de VS (country_code "US") schrijft $1,234.50, 2:30 PM, 11/19/2026
+// en de maand eerst. Elk ander land krijgt precies wat hier al stond, ook
+// Bonaire met de dollar. Zelfde helpers (isUsCc, usAmt, usTime, usTimesIn,
+// usDateLoc, usNumDate) in elke edge-functie; samen wijzigen.
+const isUsCc = (cc?: unknown) => String(cc || "").toUpperCase() === "US";
+// Bedrag met symbool: VS "$1,234.50" en "-$12.50"; anders "€1.234,50" en "€-12,50".
+const usAmt = (sym: string, n: unknown, cc?: unknown) => {
+  const v = Number(n) || 0;
+  const [i, d] = Math.abs(v).toFixed(2).split(".");
+  const neg = v < 0 && Number(Math.abs(v).toFixed(2)) !== 0;
+  if (isUsCc(cc)) return (neg ? "-" : "") + (sym || "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + d;
+  return (sym || "") + (neg ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + d;
+};
+// Kloktijd "14:30" (of "9:00", "14:30:00") -> VS "2:30 PM"; 12:00 = "12:00 PM",
+// 00:00 en 24:00 = "12:00 AM". Buiten de VS, of als het geen kale kloktijd is,
+// ongewijzigd terug, zodat dubbel opmaken niets kapotmaakt.
+const usTime = (hm: unknown, cc?: unknown) => {
+  const s = hm == null ? "" : String(hm);
+  if (!isUsCc(cc)) return s;
+  const m = /^\s*(\d{1,2})[:.](\d{2})(?::\d{2})?\s*$/.exec(s);
+  if (!m) return s;
+  const h = Number(m[1]);
+  if (h > 24 || Number(m[2]) > 59) return s;
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 && h < 24 ? "PM" : "AM"}`;
+};
+// Kloktijden IN een tekst ("10:00 - 17:30", "om 9:00") -> VS 12-uurs; alleen
+// losse HH:MM die nog niet door AM/PM gevolgd worden. Anders ongewijzigd.
+const usTimesIn = (text: unknown, cc?: unknown) => {
+  const s = text == null ? "" : String(text);
+  if (!isUsCc(cc)) return s;
+  return s.replace(/(^|[^\d:.,/])([01]?\d|2[0-4]):([0-5]\d)(?![\d:]|\s?[AaPp]\.?\s?[Mm]\b)/g,
+    (_all: string, pre: string, h: string, mm: string) => pre + usTime(`${h}:${mm}`, cc));
+};
+// Locale voor toLocale*String en Intl.DateTimeFormat: VS nl-NL / es-US / en-US,
+// anders nl-NL / es-ES / en-GB.
+const usDateLoc = (lang: string, cc?: unknown) => isUsCc(cc)
+  ? (lang === "nl" ? "nl-NL" : lang === "es" ? "es-US" : "en-US")
+  : (lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB");
+// Kale datum "2026-11-19" -> VS "11/19/2026". Buiten de VS ongewijzigd terug:
+// daar tonen de pushmeldingen al de ISO-datum, en dat blijft zo.
+const usNumDate = (ymd: unknown, cc?: unknown) => {
+  const s = ymd == null ? "" : String(ymd);
+  if (!isUsCc(cc)) return s;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : s;
+};
+
 function tzOffsetMs(at: Date, tz: string) {
   try {
     const p: Record<string, string> = {};
@@ -1368,7 +1416,11 @@ serve(async (req) => {
     // terugzetten naar "NAf." — dat geld bestaat niet meer. Vellu toont de
     // ISO-code "XCG", niet het CBCS-symbool "Cg" (Faisal, 24-09-2026) —
     // gelijk houden met shared.jsx, send-reminders en prepay-watch.
-    currency: ({ BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£" } as Record<string, string>)[salon.country_code] || "€",
+    currency: ({ BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£", US: "$" } as Record<string, string>)[salon.country_code] || "€",
+    // Land en zone van de salon: send-emails schrijft daarmee de VS-opmaak
+    // ($1,234.50, 2:30 PM, maand eerst); elk ander land blijft zoals het was.
+    country_code: salon.country_code || null,
+    timezone: salon.timezone || null,
     lang: emailLang,
   };
   // ownerLang (salontaal voor de eigenaarsmail) staat al bij stap 6.
@@ -1378,6 +1430,11 @@ serve(async (req) => {
   // termijn wordt in SALONTIJD geschreven, in de taal van de lezer.
   const fmtDue = (d: Date, l: string) => {
     try {
+      // VS: maand eerst en 12-uursklok ("Thursday, November 19 at 2:30 PM").
+      if (isUsCc(salon.country_code)) {
+        return d.toLocaleString(usDateLoc(l, salon.country_code),
+          { timeZone: salonTz, weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true }).replace(/\u202f/g, " ");
+      }
       return d.toLocaleString(l === "es" ? "es-ES" : l === "en" ? "en-GB" : "nl-NL",
         { timeZone: salonTz, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
     } catch { return d.toISOString(); }
@@ -1506,7 +1563,10 @@ serve(async (req) => {
       // ("€45,00", "XCG 45,00" — Faisal 24-09-2026), duizendtallen met een
       // punt ("$1.500,00" — 28-09-2026). Totaal is hier nooit negatief.
       const [pInt, pDec] = Math.abs(Number(totalPrice) || 0).toFixed(2).split(".");
-      const priceStr = `${emailBase.currency}${pInt.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${pDec}`;
+      // VS: "$1,234.50" (usAmt); elk ander land precies zoals hier stond.
+      const priceStr = isUsCc(salon.country_code)
+        ? usAmt(emailBase.currency, Math.abs(Number(totalPrice) || 0), salon.country_code)
+        : `${emailBase.currency}${pInt.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${pDec}`;
       jobs.push(fetch(`${SUPABASE_URL}/functions/v1/send-push-notification`, {
         method: "POST",
         headers: internalHeaders,
@@ -1515,7 +1575,7 @@ serve(async (req) => {
           title: prepayInfo
             ? (ownerNl ? "Nieuwe reservering, wacht op betaling" : "New reservation, awaiting payment")
             : (ownerNl ? "Nieuwe boeking" : "New booking"),
-          body: `${firstName} ${lastName} · ${date} ${time} · ${combinedNameOwner} · ${priceStr}`,
+          body: `${firstName} ${lastName} · ${usNumDate(date, salon.country_code)} ${usTime(time, salon.country_code)} · ${combinedNameOwner} · ${priceStr}`,
           url: "/owner",
           tag: `booking-${appt.id}`,
         }),

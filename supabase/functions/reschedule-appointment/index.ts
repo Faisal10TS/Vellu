@@ -166,7 +166,7 @@ function localToUtc(dateStr: string, timeStr: string, tz: string) {
 // cancel-appointment); de klant zelf krijgt de taal waarin ze boekte.
 const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 // Spiegelt shared.jsx CURRENCIES (zelfde tabel als book-appointment).
-const CUR: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£" };
+const CUR: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£", US: "$" };
 
 async function verifyUser(tok: string): Promise<string | null> {
   if (!tok) return null;
@@ -606,6 +606,9 @@ serve(async (req) => {
       salon_slug: salon.slug || "",
       owner_id: callerId,
       currency: CUR[cc] || "€",
+      // Land en zone: send-emails schrijft daarmee de VS-opmaak.
+      country_code: cc,
+      timezone: salon.timezone || null,
       // De taal waarin de klant boekte; oude rijen zonder taal: de taal die de
       // salon koos (salon_lang, sinds 12-11-2026), anders de markttaal.
       lang: ["nl", "en", "es"].includes(updated.lang) ? updated.lang

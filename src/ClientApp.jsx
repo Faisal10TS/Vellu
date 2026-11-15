@@ -12,7 +12,8 @@ import {
   getToday as deviceNow, fmt, parseDate, getDays, salonNow, tzFor, localToUtc, fetchAllRows,
   genTimes, DAY_NL, DAY_EN, DAY_ES, DAY_FULL_NL, DAY_FULL_EN, DAY_FULL_ES, MON_NL, MON_EN, MON_ES,
   DEFAULT_HOURS, T, Layout, NavIcon, PTitle, SL, ThemeToggle, LangToggle, Header,
-  getPageFont, ensurePageFontLoaded, curSym, fmtPrice, variantFromPrice, Linkify, readableAccent, onAccentInk, accentTextOn, blockAppliesOn, EmailTypoHint
+  getPageFont, ensurePageFontLoaded, curSym, fmtPrice, variantFromPrice, Linkify, readableAccent, onAccentInk, accentTextOn, blockAppliesOn, EmailTypoHint,
+  setFormatRegion, fmtTime, fmtTimesIn, dateLocale, fmtNumDate,
 } from "./shared.jsx";
 
 // Zoekterm voor de kaart, "Open in Maps" en de route na het boeken
@@ -738,6 +739,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     const services = all.filter(s => staff.some(m => !m.service_ids || m.service_ids.length === 0 || m.service_ids.includes(s.id)));
     return services.length === all.length ? salonProp : { ...salonProp, services };
   }, [salonProp]);
+  // VS fase 2: de boekingspagina schrijft zoals het land van de SALON, niet van
+  // de bezoeker ($1,234.50 en 2:30 PM bij een Amerikaanse salon).
+  setFormatRegion(initialSalon.country_code);
   const { colors: themeC, theme, set: setThemeMode } = useTheme();
   // Thema bij het openen = keuze van de salon (Instellingen → Salon → Stijl):
   // "light"/"dark" vast, "auto" volgt het apparaat. Een Bonaire-salon vroeg
@@ -2082,7 +2086,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   // meetelt. null = niets te melden (gewone code op de hele boeking).
   const fmtDay = (d) => {
     try {
-      return new Date(d + "T12:00:00Z").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+      return new Date(d + "T12:00:00Z").toLocaleDateString(dateLocale(lang), { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
     } catch { return d; }
   };
   const discountNote = () => {
@@ -3273,17 +3277,17 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     }
     const nu = openFrom(mins);
     if (nu !== mins) {
-      return { salonIsOpen: false, salonStatusLabel: nu === null ? t.closedNow : `${t.closedNow} · ${t.opensAt} ${hhmm(nu)}` };
+      return { salonIsOpen: false, salonStatusLabel: nu === null ? t.closedNow : `${t.closedNow} · ${t.opensAt} ${fmtTime(hhmm(nu))}` };
     }
     const nextShut = merged.find(iv => iv.start > mins);
-    return { salonIsOpen: true, salonStatusLabel: `${t.openNow} · ${t.closesAt} ${nextShut ? hhmm(nextShut.start) : todayHoursObj.close}` };
+    return { salonIsOpen: true, salonStatusLabel: `${t.openNow} · ${t.closesAt} ${fmtTime(nextShut ? hhmm(nextShut.start) : todayHoursObj.close)}` };
   })();
 
   // "09:00 – 12:00 & 13:00 – 17:00" wanneer een dag een middagpauze heeft;
   // zonder pauze het vertrouwde "09:00 – 17:00".
   const fmtDayHours = (h) => h.break_start && h.break_end
-    ? `${h.open} – ${h.break_start} & ${h.break_end} – ${h.close}`
-    : `${h.open} – ${h.close}`;
+    ? `${fmtTime(h.open)} – ${fmtTime(h.break_start)} & ${fmtTime(h.break_end)} – ${fmtTime(h.close)}`
+    : `${fmtTime(h.open)} – ${fmtTime(h.close)}`;
 
   const avgRating = initialSalon.reviews?.length > 0
     ? (initialSalon.reviews.reduce((s, r) => s + r.rating, 0) / initialSalon.reviews.length).toFixed(1)
@@ -3455,7 +3459,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
         <div className="flow-next-slot-icon"><NavIcon name="calendar" size={18} color={accentText} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="flow-next-slot-label">{nextAvailableLabel}</div>
-          <div className="flow-next-slot-when"><b>{label}</b> {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {firstOpenSlot.time}</div>
+          <div className="flow-next-slot-when"><b>{label}</b> {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {fmtTime(firstOpenSlot.time)}</div>
         </div>
         {chosen ? (
           <span className="flow-next-slot-chosen"><NavIcon name="check" size={12} color={accentText} /> {lang === "nl" ? "Gekozen" : lang === "es" ? "Elegido" : "Chosen"}</span>
@@ -3610,7 +3614,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               const next = nextOpen ? (
                 <span key="next" className="profile-hero-meta-item" data-hero-next>
                   <NavIcon name="calendar" size={13} color="rgba(255,255,255,0.92)" />
-                  <span>{nextAvailableLabel} <b style={{ color: "#fff", fontWeight: 600 }}>{nextOpen.dayLabel} {nextOpen.hrs.open}</b></span>
+                  <span>{nextAvailableLabel} <b style={{ color: "#fff", fontWeight: 600 }}>{nextOpen.dayLabel} {fmtTime(nextOpen.hrs.open)}</b></span>
                 </span>
               ) : null;
               const row = isMobile || !next ? items : [...items, next];
@@ -4379,7 +4383,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           <div style={{ fontSize: 12, color: c.textSub }}>
             {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "long", day: "numeric", month: "long" })}
           </div>
-          <div style={{ fontSize: 18, fontWeight: 600, color: accentText, marginTop: 4 }}>{time}</div>
+          <div style={{ fontSize: 18, fontWeight: 600, color: accentText, marginTop: 4 }}>{fmtTime(time)}</div>
           {selectedServices.length > 0 && <div style={{ fontSize: 11, color: c.textLabel, marginTop: 4 }}>{t.totalDuration}: {getDuration()} {t.min}</div>}
         </div>
       )}
@@ -4519,7 +4523,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="flow-done-row-label">{lang === "nl" ? "Wanneer" : lang === "es" ? "Cuándo" : "When"}</div>
               <div className="flow-done-row-value">{capFirst(dateLabel)}</div>
-              <div className="flow-done-row-sub">{time} · {getDuration()} {t.min}</div>
+              <div className="flow-done-row-sub">{fmtTime(time)} · {getDuration()} {t.min}</div>
             </div>
           </div>
           <div className="flow-done-row">
@@ -5210,7 +5214,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                     fontSize: 13, fontWeight: 500, fontVariantNumeric: "tabular-nums",
                                     transition: "all 0.15s",
                                   }}
-                                >{tt}</div>
+                                >{fmtTime(tt)}</div>
                               );
                             })}
                           </div>
@@ -5410,7 +5414,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
               {step === 2 && (
                 <button className="btn-primary" disabled={!chosenTimeOk} onClick={() => goToStep(3)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                   {chosenTimeOk ? (
-                    <>{t.next} · {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {time}</>
+                    <>{t.next} · {parseDate(date).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-US", { weekday: "short", day: "numeric", month: "short" })} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {fmtTime(time)}</>
                   ) : (
                     <>{lang === "nl" ? "Kies een tijdstip" : lang === "es" ? "Elige una hora" : "Pick a time"}</>
                   )}
@@ -5827,7 +5831,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                                 onClick={() => { if (!booked) setTime(tt); }}
                                 onKeyDown={chipKeys(() => { if (!booked) setTime(tt); })}
                                 style={{ minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", ...(booked ? { opacity: 0.25, cursor: "not-allowed", textDecoration: "line-through" } : {}) }}
-                              >{tt}</div>
+                              >{fmtTime(tt)}</div>
                             );
                           })}
                         </div>
@@ -6030,7 +6034,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
                   <div style={{ fontSize: 11, color: c.textSub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {selectedServices.length === 1 ? svcName(selectedServices[0].service) : `${selectedServices.length} ${t.servicesSelected}`}
                     {/* Geen verouderde tijd tonen die stap 2 niet meer aanbiedt. */}
-                    {chosenTimeOk && ` · ${time}`}
+                    {chosenTimeOk && ` · ${fmtTime(time)}`}
                   </div>
                   <div style={{ fontFamily: displayFont, fontSize: 20, color: accentText }}>{fromPrefix}{fmtPrice(cur, getPrice())}</div>
                 </div>

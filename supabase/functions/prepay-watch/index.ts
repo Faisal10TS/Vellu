@@ -70,6 +70,54 @@ const tzFor = (code?: string | null, tz?: string | null) => {
   if (tz && (SALON_TZS[cc] || []).includes(tz)) return tz;
   return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
 };
+
+// VS-opmaak (fase 2, 15-11-2026), gelijk aan src/regionFormat.js: alleen een
+// salon in de VS (country_code "US") schrijft $1,234.50, 2:30 PM, 11/19/2026
+// en de maand eerst. Elk ander land krijgt precies wat hier al stond, ook
+// Bonaire met de dollar. Zelfde helpers (isUsCc, usAmt, usTime, usTimesIn,
+// usDateLoc, usNumDate) in elke edge-functie; samen wijzigen.
+const isUsCc = (cc?: unknown) => String(cc || "").toUpperCase() === "US";
+// Bedrag met symbool: VS "$1,234.50" en "-$12.50"; anders "€1.234,50" en "€-12,50".
+const usAmt = (sym: string, n: unknown, cc?: unknown) => {
+  const v = Number(n) || 0;
+  const [i, d] = Math.abs(v).toFixed(2).split(".");
+  const neg = v < 0 && Number(Math.abs(v).toFixed(2)) !== 0;
+  if (isUsCc(cc)) return (neg ? "-" : "") + (sym || "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + d;
+  return (sym || "") + (neg ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + d;
+};
+// Kloktijd "14:30" (of "9:00", "14:30:00") -> VS "2:30 PM"; 12:00 = "12:00 PM",
+// 00:00 en 24:00 = "12:00 AM". Buiten de VS, of als het geen kale kloktijd is,
+// ongewijzigd terug, zodat dubbel opmaken niets kapotmaakt.
+const usTime = (hm: unknown, cc?: unknown) => {
+  const s = hm == null ? "" : String(hm);
+  if (!isUsCc(cc)) return s;
+  const m = /^\s*(\d{1,2})[:.](\d{2})(?::\d{2})?\s*$/.exec(s);
+  if (!m) return s;
+  const h = Number(m[1]);
+  if (h > 24 || Number(m[2]) > 59) return s;
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 && h < 24 ? "PM" : "AM"}`;
+};
+// Kloktijden IN een tekst ("10:00 - 17:30", "om 9:00") -> VS 12-uurs; alleen
+// losse HH:MM die nog niet door AM/PM gevolgd worden. Anders ongewijzigd.
+const usTimesIn = (text: unknown, cc?: unknown) => {
+  const s = text == null ? "" : String(text);
+  if (!isUsCc(cc)) return s;
+  return s.replace(/(^|[^\d:.,/])([01]?\d|2[0-4]):([0-5]\d)(?![\d:]|\s?[AaPp]\.?\s?[Mm]\b)/g,
+    (_all: string, pre: string, h: string, mm: string) => pre + usTime(`${h}:${mm}`, cc));
+};
+// Locale voor toLocale*String en Intl.DateTimeFormat: VS nl-NL / es-US / en-US,
+// anders nl-NL / es-ES / en-GB.
+const usDateLoc = (lang: string, cc?: unknown) => isUsCc(cc)
+  ? (lang === "nl" ? "nl-NL" : lang === "es" ? "es-US" : "en-US")
+  : (lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB");
+// Kale datum "2026-11-19" -> VS "11/19/2026". Buiten de VS ongewijzigd terug:
+// daar tonen de pushmeldingen al de ISO-datum, en dat blijft zo.
+const usNumDate = (ymd: unknown, cc?: unknown) => {
+  const s = ymd == null ? "" : String(ymd);
+  if (!isUsCc(cc)) return s;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : s;
+};
 // Salontijd → UTC, letterlijk dezelfde helpers als book-/cancel-appointment.
 function tzOffsetMs(at: Date, tz: string) {
   try {
@@ -93,7 +141,7 @@ function localToUtc(dateStr: string, timeStr: string, tz: string) {
 }
 // Spiegelt shared.jsx CURRENCIES. CW/SX = Caribische gulden; Vellu toont de
 // ISO-code "XCG", niet het CBCS-symbool "Cg" (Faisal, 24-09-2026).
-const CUR: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£" };
+const CUR: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£", US: "$" };
 // Taal van de salon: zelf gekozen (profiles.salon_lang, sinds 12-11-2026),
 // anders de landregel.
 const ownerLang = (p: any) => {
@@ -106,8 +154,13 @@ const clientLang = (apptLang: unknown, p: any) => {
   if (l === "nl" || l === "en" || l === "es") return l;
   return ownerLang(p);
 };
-const fmtDue = (iso: string, l: string, tz: string) => {
+const fmtDue = (iso: string, l: string, tz: string, cc?: unknown) => {
   try {
+    // VS: maand eerst en 12-uursklok ("Thursday, November 19 at 2:30 PM").
+    if (isUsCc(cc)) {
+      return new Date(iso).toLocaleString(usDateLoc(l, cc),
+        { timeZone: tz, weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true }).replace(/\u202f/g, " ");
+    }
     return new Date(iso).toLocaleString(l === "es" ? "es-ES" : l === "en" ? "en-GB" : "nl-NL",
       { timeZone: tz, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
   } catch { return iso; }
@@ -155,6 +208,7 @@ function baseOf(a: any) {
     lang,
     oLang: ownerLang(p),
     tz: tzFor(cc, p.timezone),
+    cc,
     booking: {
       client_name: a.client_name,
       client_email: a.client_email,
@@ -169,6 +223,9 @@ function baseOf(a: any) {
       salon_email: p.salon_email || p.email || "",
       salon_slug: p.slug || "",
       currency: CUR[cc] || "€",
+      // Land en zone: send-emails schrijft daarmee de VS-opmaak.
+      country_code: cc,
+      timezone: p.timezone || null,
       lang,
       owner_lang: ownerLang(p),
       staff_view_client_contact: p.staff_view_client_contact,
@@ -287,8 +344,8 @@ serve(async (req) => {
       if (a.client_email) {
         await sendMail("prepay_expired", {
           ...b.booking,
-          due_text: fmtDue(a.payment_due_at, b.lang, b.tz),
-          due_text_owner: fmtDue(a.payment_due_at, b.oLang, b.tz),
+          due_text: fmtDue(a.payment_due_at, b.lang, b.tz, b.cc),
+          due_text_owner: fmtDue(a.payment_due_at, b.oLang, b.tz, b.cc),
           owner_email: b.ownerEmail, staff_emails: staffEmails,
         });
       }
@@ -297,7 +354,7 @@ serve(async (req) => {
         body: JSON.stringify({
           user_id: a.owner_id,
           title: b.oLang === "nl" ? "Reservering vervallen" : "Reservation expired",
-          body: `${a.client_name} · ${a.date} ${String(a.time || "").slice(0, 5)} · ${a.service_name}`,
+          body: `${a.client_name} · ${usNumDate(a.date, b.cc)} ${usTime(String(a.time || "").slice(0, 5), b.cc)} · ${a.service_name}`,
           url: "/owner", tag: `prepay-expired-${a.id}`,
         }),
       }).catch((e) => console.error("push failed:", e));
@@ -330,7 +387,7 @@ serve(async (req) => {
         ...b.booking,
         payment_link: pay.payment_link, salon_iban: pay.iban, iban_holder: pay.iban_holder,
         payment_ref: `${p.business_name} ${a.date} ${String(a.time || "").slice(0, 5)}`.slice(0, 100),
-        due_text: fmtDue(a.payment_due_at, b.lang, b.tz),
+        due_text: fmtDue(a.payment_due_at, b.lang, b.tz, b.cc),
       });
     }
 

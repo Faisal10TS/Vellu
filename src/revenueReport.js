@@ -21,6 +21,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { revenueReportData, revenueReportFilename, pdfSafe, pdfSafeCells, companyNumberLabel, payLabel } from "./reportData.js";
+import { isUsCountry, timeLabel, dateLocaleFor, numDateLabel } from "./regionFormat.js";
 
 const ACCENT = [201, 169, 110]; // #c9a96e as RGB
 
@@ -36,10 +37,12 @@ const REPORT_MONTHS = {
   en: ["January","February","March","April","May","June","July","August","September","October","November","December"],
   es: ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"],
 };
-const fmtDateNL = (isoDate, lang = "nl") => {
+const fmtDateNL = (isoDate, lang = "nl", cc = null) => {
   try {
     const [y, m, d] = isoDate.split("-").map(Number);
     const months = REPORT_MONTHS[lang] || REPORT_MONTHS.nl;
+    // VS-salon in het Engels: maand eerst ("November 15, 2026").
+    if (lang === "en" && isUsCountry(cc)) return `${months[m - 1]} ${d}, ${y}`;
     return `${d} ${months[m - 1]} ${y}`;
   } catch {
     return isoDate;
@@ -107,7 +110,7 @@ export function generateRevenueReportPDF({
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   doc.setTextColor(120, 120, 120);
-  doc.text(s(range.label || `${fmtDateNL(range.from, lang)} — ${fmtDateNL(range.to, lang)}`), margin, 78);
+  doc.text(s(range.label || `${fmtDateNL(range.from, lang, salon.country_code)} — ${fmtDateNL(range.to, lang, salon.country_code)}`), margin, 78);
   if (staffName) {
     doc.setFontSize(10);
     doc.setTextColor(...ACCENT);
@@ -374,8 +377,8 @@ export function generateRevenueReportPDF({
       T("Bedrag", "Amount", "Importe"),
     ]],
     body: R.rows.map(({ appt: a, discount }) => [
-      a.date,
-      s(a.time),
+      isUsCountry(salon.country_code) ? numDateLabel(a.date, salon.country_code) : a.date,
+      s(timeLabel(a.time, salon.country_code)),
       s(a.client_name),
       svcLabel(a),
       s(a.staff_name),
@@ -414,7 +417,7 @@ export function generateRevenueReportPDF({
     styles: { cellPadding: { top: 5, right: 4, bottom: 5, left: 4 } },
     columnStyles: {
       0: { cellWidth: 56 },
-      1: { cellWidth: 32 },
+      1: { cellWidth: isUsCountry(salon.country_code) ? 46 : 32 }, // VS: "12:30 PM" op één regel
       2: { cellWidth: 66 },
       4: { cellWidth: 58 },
       5: { cellWidth: 62 },
@@ -457,7 +460,7 @@ export function generateRevenueReportPDF({
       pageH - 32
     );
     doc.text(
-      `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")} · vellu.cc`,
+      `${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(dateLocaleFor(lang, salon.country_code))} · vellu.cc`,
       margin,
       pageH - 20
     );

@@ -386,6 +386,8 @@ serve(async (req) => {
     salon_logo: salon.logo_url || "",
     salon_slug: salon.slug || "",
     salon_email: salonEmail, // Reply-To for the client's confirmation
+    // Land van de salon: send-emails schrijft de datums dan in VS-opmaak.
+    country_code: salon.country_code || null,
   };
 
   // De rijen staan er; een mailhapering mag de aanmelding niet als mislukt

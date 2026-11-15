@@ -5,10 +5,12 @@ import SupportChat from "./SupportChat.jsx";
 import {
   useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable,
   AT, AT_COLORS, AT_RADIUS, AtelierSkin, readableAccent, accentEdge, storedRef, useReferralPromo, rewardLabel, promoEndLabel,
-  fetchAllRows, fmtAmt, RESERVED_SLUGS, US_TIMEZONES, guessUsTimezone
+  fetchAllRows, fmtAmt, RESERVED_SLUGS, US_TIMEZONES, guessUsTimezone,
+  setFormatRegion,
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
+  setFormatRegion(null); // VS fase 2: geen salon, dus de gewone Vellu-schrijfwijze
   const { colors: c, theme } = useTheme();
   const navigate = useNavigate();
   const t = T[lang];

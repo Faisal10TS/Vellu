@@ -9,6 +9,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { cashbookData, cashbookFilename, cashFlowOf, pdfSafe, pdfSafeCells, companyNumberLabel } from "./reportData.js";
+import { isUsCountry, timeLabel, dateLocaleFor } from "./regionFormat.js";
 
 const ACCENT = [201, 169, 110];
 // Door pdfSafe: een minteken (U+2212) in een kassaomschrijving of een naam met
@@ -26,8 +27,8 @@ const fmtDate = (iso, lang = "nl") => {
     return lang === "en" ? `${mo} ${d}, ${y}` : `${d} ${mo} ${y}`;
   } catch { return s(iso); }
 };
-const fmtTime = (iso, lang = "nl") => {
-  try { return new Date(iso).toLocaleTimeString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
+const fmtTime = (iso, lang = "nl", cc = null) => {
+  try { return isUsCountry(cc) ? new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : new Date(iso).toLocaleTimeString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
 };
 
 export function generateCashbookPDF({
@@ -129,7 +130,7 @@ export function generateCashbookPDF({
       body: D.movements.map((m) => {
         const amt = parseFloat(m.amount) || 0;
         const diff = m.kind === "count" ? Math.round((amt - (parseFloat(m.expected) || 0)) * 100) / 100 : null;
-        return [fmtDate(m.date, lang), fmtTime(m.created_at, lang), KIND[m.kind] || m.kind, s(m.reason), m.kind === "out" ? `-${money(amt)}` : m.kind === "in" ? `+${money(amt)}` : money(amt), diff === null ? "" : signed(diff)];
+        return [fmtDate(m.date, lang), fmtTime(m.created_at, lang, salon.country_code), KIND[m.kind] || m.kind, s(m.reason), m.kind === "out" ? `-${money(amt)}` : m.kind === "in" ? `+${money(amt)}` : money(amt), diff === null ? "" : signed(diff)];
       }),
       columnStyles: { 4: right(), 5: right(), 3: { cellWidth: 170 } },
     });
@@ -141,7 +142,7 @@ export function generateCashbookPDF({
       ...tableTheme,
       startY: doc.lastAutoTable.finalY + 20,
       head: [[T("Datum", "Date", "Fecha"), T("Tijd", "Time", "Hora"), T("Klant", "Client", "Cliente"), T("Omschrijving", "Description", "Descripción"), T("Medewerker", "Staff", "Personal"), T("Ontvangen", "Received", "Recibido"), T("Wisselgeld", "Change", "Cambio"), T("Bedrag", "Amount", "Importe")]],
-      body: D.cashRows.map((a) => { const f = cashFlowOf(a); return [fmtDate(a.date, lang), s(a.time), s(a.client_name), s(a.service_name).slice(0, 60), s(a.staff_name).split(",")[0].trim(), money(f.received), f.change ? money(f.change) : "", money(f.net)]; }),
+      body: D.cashRows.map((a) => { const f = cashFlowOf(a); return [fmtDate(a.date, lang), s(timeLabel(a.time, salon.country_code)), s(a.client_name), s(a.service_name).slice(0, 60), s(a.staff_name).split(",")[0].trim(), money(f.received), f.change ? money(f.change) : "", money(f.net)]; }),
       foot: [["", "", "", "", T("Totaal", "Total", "Total"), money(D.totals.received), money(D.totals.change), money(D.totals.sales)]],
       columnStyles: { 5: right(), 6: right(), 7: right(), 3: { cellWidth: 130 } },
     });
@@ -161,7 +162,7 @@ export function generateCashbookPDF({
     doc.text(T(`Bedragen in ${currencySymbolText}. Verwacht in kas = beginsaldo + contant ontvangen - wisselgeld + stortingen - opnames; kasverschil = geteld - verwacht op het moment van tellen.`,
       `Amounts in ${currencySymbolText}. Expected = opening float + cash received - change + deposits - withdrawals; difference = counted - expected at the time of counting.`,
       `Importes en ${currencySymbolText}. Esperado = saldo inicial + efectivo recibido - cambio + depósitos - retiradas; diferencia = contado - esperado en el momento del recuento.`), margin, pageH - 44, { maxWidth: pageW - margin * 2 });
-    doc.text(`${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB")} · vellu.cc`, margin, pageH - 20);
+    doc.text(`${T("Gegenereerd op", "Generated on", "Generado el")} ${new Date().toLocaleDateString(dateLocaleFor(lang, salon.country_code))} · vellu.cc`, margin, pageH - 20);
     doc.text(`${p} / ${pages}`, pageW - margin, pageH - 20, { align: "right" });
   }
 

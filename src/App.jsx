@@ -3,7 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate, useLoca
 import { supabase, rememberStaffInviteFromUrl, readStaffInvite, claimStaffInvite } from "./supabase.js";
 import {
   ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, parseDate, Layout, curSym, fmtAmt,
-  AT, AT_COLORS, AT_RADIUS, AtelierSkin, salonNow, ToastContainer
+  AT, AT_COLORS, AT_RADIUS, AtelierSkin, salonNow, ToastContainer,
+  dateLocale, setFormatRegion, fmtTime,
 } from "./shared.jsx";
 import { planIsActive } from "./autopay.js";
 import { splitPlace } from "./salonSchema.js";
@@ -1085,6 +1086,8 @@ function CancelRoute({ lang }) {
   const t = T[lang];
   const [status, setStatus] = useState("loading");
   const [appointment, setAppointment] = useState(null);
+  // VS fase 2: 12-uursklok, maand-eerst en "$1,234.50" voor een VS-salon.
+  setFormatRegion(appointment?.country_code);
   const [reason, setReason] = useState("");
   // Binnen de annuleringstermijn van de salon: uren + telefoonnummer voor de
   // "bel de salon"-uitleg, gevuld door het check-antwoord of door een 403 op
@@ -1109,7 +1112,7 @@ function CancelRoute({ lang }) {
     try {
       const d = parseDate(ds);
       if (isNaN(d.getTime())) return ds || "";
-      return d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long" });
+      return d.toLocaleDateString(dateLocale(lang), { weekday: "long", day: "numeric", month: "long" });
     } catch { return ds || ""; }
   };
 
@@ -1235,7 +1238,7 @@ function CancelRoute({ lang }) {
               </div>
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.date}</div>
-                <div style={{ fontWeight: 500 }}>{dateLabel(appointment.date)} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {appointment.time}</div>
+                <div style={{ fontWeight: 500 }}>{dateLabel(appointment.date)} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {fmtTime(appointment.time)}</div>
               </div>
               <div>
                 <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.total}</div>
@@ -1292,7 +1295,7 @@ function CancelRoute({ lang }) {
             </p>
             {appointment && (
               <p style={{ color: c.textLabel, fontSize: 12, marginBottom: 24 }}>
-                {[salonInfo.name, appointment.service_name].filter(Boolean).join(" · ")} · {dateLabel(appointment.date)} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {appointment.time}
+                {[salonInfo.name, appointment.service_name].filter(Boolean).join(" · ")} · {dateLabel(appointment.date)} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {fmtTime(appointment.time)}
               </p>
             )}
             <button className="btn-ghost" onClick={() => navigate(backTo)}>
@@ -1329,7 +1332,7 @@ function CancelRoute({ lang }) {
             </p>
             {appointment && (
               <p style={{ color: c.textLabel, fontSize: 12, marginBottom: 24 }}>
-                {appointment.service_name} · {dateLabel(appointment.date)} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {appointment.time}
+                {appointment.service_name} · {dateLabel(appointment.date)} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {fmtTime(appointment.time)}
               </p>
             )}
             {lateInfo?.phone && (

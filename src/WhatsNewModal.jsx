@@ -4,7 +4,9 @@
 // wanneer het venster wél/niet verschijnt.
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { NavIcon, LangToggle } from "./shared.jsx";
+import { NavIcon, LangToggle,
+  dateLocale,
+} from "./shared.jsx";
 
 const KIND = {
   new: { nl: "Nieuw", en: "New", es: "Nuevo" },
@@ -20,7 +22,7 @@ export default function WhatsNewModal({ releases, lang: appLang, c, accent, onCl
   if (!releases || releases.length === 0) return null;
   const L = (o) => (o && (o[lang] || o.nl || o.en)) || "";
   const fmtDate = (iso) => {
-    try { return new Date(`${iso}T12:00:00`).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long", year: "numeric" }); }
+    try { return new Date(`${iso}T12:00:00`).toLocaleDateString(dateLocale(lang), { day: "numeric", month: "long", year: "numeric" }); }
     catch { return iso; }
   };
   const kindColor = (k) => k === "fix" ? c.success : k === "improved" ? c.textSub : accent;

@@ -9,7 +9,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase.js";
-import { useTheme, ACCENT, Layout, NavIcon, ThemeToggle, LangToggle, useDashboardScrollbars, currencyForCountry } from "./shared.jsx";
+import { useTheme, ACCENT, Layout, NavIcon, ThemeToggle, LangToggle, useDashboardScrollbars, currencyForCountry,
+  setFormatRegion,
+} from "./shared.jsx";
 import { Star } from "./RateVellu.jsx";
 
 const fmtEur = (n) => `€${Math.round(Number(n) || 0).toLocaleString("nl-NL")}`;
@@ -228,6 +230,7 @@ function StatCard({ label, value, sub, accent, c }) {
 }
 
 export default function AdminDashboard({ onLogout }) {
+  setFormatRegion(null); // VS fase 2: admin schrijft altijd zoals Vellu, ook na een Amerikaanse salonpagina
   const { colors: c } = useTheme();
   useDashboardScrollbars();
   const accent = ACCENT;

@@ -88,6 +88,54 @@ const tzFor = (code?: string | null, tz?: string | null) => {
   return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
 };
 
+// VS-opmaak (fase 2, 15-11-2026), gelijk aan src/regionFormat.js: alleen een
+// salon in de VS (country_code "US") schrijft $1,234.50, 2:30 PM, 11/19/2026
+// en de maand eerst. Elk ander land krijgt precies wat hier al stond, ook
+// Bonaire met de dollar. Zelfde helpers (isUsCc, usAmt, usTime, usTimesIn,
+// usDateLoc, usNumDate) in elke edge-functie; samen wijzigen.
+const isUsCc = (cc?: unknown) => String(cc || "").toUpperCase() === "US";
+// Bedrag met symbool: VS "$1,234.50" en "-$12.50"; anders "€1.234,50" en "€-12,50".
+const usAmt = (sym: string, n: unknown, cc?: unknown) => {
+  const v = Number(n) || 0;
+  const [i, d] = Math.abs(v).toFixed(2).split(".");
+  const neg = v < 0 && Number(Math.abs(v).toFixed(2)) !== 0;
+  if (isUsCc(cc)) return (neg ? "-" : "") + (sym || "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + d;
+  return (sym || "") + (neg ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + d;
+};
+// Kloktijd "14:30" (of "9:00", "14:30:00") -> VS "2:30 PM"; 12:00 = "12:00 PM",
+// 00:00 en 24:00 = "12:00 AM". Buiten de VS, of als het geen kale kloktijd is,
+// ongewijzigd terug, zodat dubbel opmaken niets kapotmaakt.
+const usTime = (hm: unknown, cc?: unknown) => {
+  const s = hm == null ? "" : String(hm);
+  if (!isUsCc(cc)) return s;
+  const m = /^\s*(\d{1,2})[:.](\d{2})(?::\d{2})?\s*$/.exec(s);
+  if (!m) return s;
+  const h = Number(m[1]);
+  if (h > 24 || Number(m[2]) > 59) return s;
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 && h < 24 ? "PM" : "AM"}`;
+};
+// Kloktijden IN een tekst ("10:00 - 17:30", "om 9:00") -> VS 12-uurs; alleen
+// losse HH:MM die nog niet door AM/PM gevolgd worden. Anders ongewijzigd.
+const usTimesIn = (text: unknown, cc?: unknown) => {
+  const s = text == null ? "" : String(text);
+  if (!isUsCc(cc)) return s;
+  return s.replace(/(^|[^\d:.,/])([01]?\d|2[0-4]):([0-5]\d)(?![\d:]|\s?[AaPp]\.?\s?[Mm]\b)/g,
+    (_all: string, pre: string, h: string, mm: string) => pre + usTime(`${h}:${mm}`, cc));
+};
+// Locale voor toLocale*String en Intl.DateTimeFormat: VS nl-NL / es-US / en-US,
+// anders nl-NL / es-ES / en-GB.
+const usDateLoc = (lang: string, cc?: unknown) => isUsCc(cc)
+  ? (lang === "nl" ? "nl-NL" : lang === "es" ? "es-US" : "en-US")
+  : (lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB");
+// Kale datum "2026-11-19" -> VS "11/19/2026". Buiten de VS ongewijzigd terug:
+// daar tonen de pushmeldingen al de ISO-datum, en dat blijft zo.
+const usNumDate = (ymd: unknown, cc?: unknown) => {
+  const s = ymd == null ? "" : String(ymd);
+  if (!isUsCc(cc)) return s;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : s;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return fail("method_not_allowed", null, 405);
@@ -202,7 +250,8 @@ serve(async (req) => {
       booking.client_email ? `Email: ${booking.client_email}` : "",
       booking.client_phone ? `Tel: ${booking.client_phone}` : "",
       `Behandeling: ${booking.service_name || ""}`,
-      booking.price !== undefined ? `Prijs: €${booking.price}` : "",
+      // VS (fase 2): "Prijs: $1,234.50"; elk ander land precies zoals het was.
+      booking.price !== undefined ? (isUsCc(profile?.country_code) ? `Prijs: ${usAmt("$", booking.price, "US")}` : `Prijs: €${booking.price}`) : "",
       booking.staff_name ? `Medewerker: ${booking.staff_name}` : "",
     ].filter(Boolean);
 

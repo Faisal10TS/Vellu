@@ -26,7 +26,9 @@ import { useNavigate } from "react-router-dom";
 import SupportChat from "./SupportChat.jsx";
 import { supabase } from "./supabase.js";
 import { splitPlace } from "./salonSchema.js";
-import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS, rememberRef, useReferralPromo, rewardLabel, promoEndLabel, planMatrix } from "./shared.jsx";
+import { useSEO, T, Layout, NavIcon, AT, AT_COLORS, AT_RADIUS, rememberRef, useReferralPromo, rewardLabel, promoEndLabel, planMatrix,
+  setFormatRegion,
+} from "./shared.jsx";
 import {
   SalonFinder, StickyStartPill, ArrowIcon,
   Reveal, KineticLine, HeroEnter, Marquee, TweenedNumber,
@@ -902,6 +904,7 @@ function SalonRatingQuotes({ lang, quotes }) {
 }
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
+  setFormatRegion(null); // VS fase 2: geen salon, dus de gewone Vellu-schrijfwijze
   const navigate = useNavigate();
   const t = T[lang];
   // Beoordelingen voor de regel in de hero en de citaten onder de stappen.

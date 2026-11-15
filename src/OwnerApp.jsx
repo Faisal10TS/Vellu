@@ -24,6 +24,8 @@ import {
   useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars, fetchAllRows,
   RESERVED_SLUGS, salonNow, tzFor, localToUtc, US_TIMEZONES, guessUsTimezone,
   EmailTypoHint,
+  setFormatRegion, fmtTime, fmtTimesIn, dateLocale, fmtNumDate,
+  formatRegion,
 } from "./shared.jsx";
 import Kasboek from "./Kasboek.jsx";
 import AfsprakenImport from "./AfsprakenImport.jsx";
@@ -385,7 +387,7 @@ function RescheduleModal({ appt, onClose, onSuccess, lang, c, accent, toast, sta
           {appt.client_name} · {appt.service_name}
         </div>
         <div style={{ fontSize: 10, color: c.textMuted, background: c.bgCard, padding: "8px 12px", borderRadius: 10, marginBottom: 16 }}>
-          {lang === "nl" ? "Nu: " : lang === "es" ? "Actualmente: " : "Currently: "}{appt.date} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {appt.time}
+          {lang === "nl" ? "Nu: " : lang === "es" ? "Actualmente: " : "Currently: "}{appt.date} {lang === "nl" ? "om" : lang === "es" ? "a las" : "at"} {fmtTime(appt.time)}
         </div>
 
         <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
@@ -779,7 +781,7 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, days = null, prefix, 
         const ds = String(r.expires_on);
         const opts = { day: "numeric", month: "long" };
         if (ds.slice(0, 4) !== String(new Date().getFullYear())) opts.year = "numeric";
-        return new Date(ds + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", opts);
+        return new Date(ds + "T12:00:00").toLocaleDateString(dateLocale(lang), opts);
       } catch { return r.expires_on; }
     })();
     const link = slug ? `https://vellu.cc/${slug}` : "https://vellu.cc";
@@ -851,7 +853,7 @@ function BirthdayCodesBlock({ lang, c, accent, toast, pct, days = null, prefix, 
   // query bij het openen van deze instellingen-tab.
   useEffect(() => { load(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, []);
 
-  const fmtD = (ds) => { try { return new Date(String(ds).length === 10 ? ds + "T12:00:00" : ds).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch { return ds; } };
+  const fmtD = (ds) => { try { return new Date(String(ds).length === 10 ? ds + "T12:00:00" : ds).toLocaleDateString(dateLocale(lang), { day: "numeric", month: "short", year: "numeric" }); } catch { return ds; } };
   // Verlopen bepalen we op lokale datum; de server hanteert een dag speling,
   // maar voor een leesoverzicht is dat verschil niet belangrijk.
   const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
@@ -1345,10 +1347,10 @@ function ClientImportBlock({ ownerId, lang, c, accent, toast }) {
       </div>
       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.55, marginBottom: 14 }}>
         {lang === "nl"
-          ? "Overstappen vanuit een andere app? Exporteer daar je klantenlijst als Excel of CSV en upload hem hier. De kolommen Naam, E-mail, Telefoon, Verjaardag (dd-mm-jjjj) en Notitie worden herkend; klanten die je al hebt worden overgeslagen, maar hun verjaardag wordt wel aangevuld."
+          ? `Overstappen vanuit een andere app? Exporteer daar je klantenlijst als Excel of CSV en upload hem hier. De kolommen Naam, E-mail, Telefoon, Verjaardag (${formatRegion() === "US" ? "mm/dd/jjjj" : "dd-mm-jjjj"}) en Notitie worden herkend; klanten die je al hebt worden overgeslagen, maar hun verjaardag wordt wel aangevuld.`
           : lang === "es"
-          ? "\u00bfVienes de otra app? Exporta tus clientes como Excel o CSV y s\u00fabelo aqu\u00ed. Se reconocen Nombre, Correo, Tel\u00e9fono, Cumplea\u00f1os (dd-mm-aaaa) y Nota; los duplicados se omiten, pero su cumplea\u00f1os s\u00ed se completa."
-          : "Switching from another app? Export your client list there as Excel or CSV and upload it here. Name, Email, Phone, Birthday (dd-mm-yyyy) and Note columns are recognised; clients you already have are skipped, but their birthday is still filled in."}
+          ? `\u00bfVienes de otra app? Exporta tus clientes como Excel o CSV y s\u00fabelo aqu\u00ed. Se reconocen Nombre, Correo, Tel\u00e9fono, Cumplea\u00f1os (${formatRegion() === "US" ? "mm/dd/aaaa" : "dd-mm-aaaa"}) y Nota; los duplicados se omiten, pero su cumplea\u00f1os s\u00ed se completa.`
+          : `Switching from another app? Export your client list there as Excel or CSV and upload it here. Name, Email, Phone, Birthday (${formatRegion() === "US" ? "mm/dd/yyyy" : "dd-mm-yyyy"}) and Note columns are recognised; clients you already have are skipped, but their birthday is still filled in.`}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <label className="btn-ghost" style={{ padding: "11px 18px", fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7, color: accent, borderColor: accent + "55", opacity: busy ? 0.5 : 1 }}>
@@ -1528,7 +1530,7 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
       const fromDate = parseDate(customFrom);
       const toDate = parseDate(customTo);
       const label = lang === "nl"
-        ? `${fromDate.toLocaleDateString("nl-NL")} — ${toDate.toLocaleDateString("nl-NL")}`
+        ? `${fmtNumDate(fromDate)} — ${fmtNumDate(toDate)}`
         : lang === "es"
         ? `${fromDate.toLocaleDateString("es-ES")} — ${toDate.toLocaleDateString("es-ES")}`
         : `${fromDate.toLocaleDateString("en-US")} — ${toDate.toLocaleDateString("en-US")}`;
@@ -3846,11 +3848,11 @@ function OnboardingWizard({ salonData, update, lang, setLang, onFinish }) {
                       // springen ze samen naar een eigen regel i.p.v. uit de kaart.
                       <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 190px", minWidth: 0 }}>
                         <select value={hours.open} onChange={e => update(d => { if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS}; d.business_hours[day] = { ...d.business_hours[day], open: e.target.value }; return d; })} style={{ ...selStyle, flex: 1, minWidth: 0 }}>
-                          {TIMES.map(tm => <option key={tm} value={tm} style={optStyle}>{tm}</option>)}
+                          {TIMES.map(tm => <option key={tm} value={tm} style={optStyle}>{fmtTime(tm)}</option>)}
                         </select>
                         <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
                         <select value={hours.close} onChange={e => update(d => { if (!d.business_hours) d.business_hours = {...DEFAULT_HOURS}; d.business_hours[day] = { ...d.business_hours[day], close: e.target.value }; return d; })} style={{ ...selStyle, flex: 1, minWidth: 0 }}>
-                          {TIMES.map(tm => <option key={tm} value={tm} style={optStyle}>{tm}</option>)}
+                          {TIMES.map(tm => <option key={tm} value={tm} style={optStyle}>{fmtTime(tm)}</option>)}
                         </select>
                       </div>
                     ) : (
@@ -3960,6 +3962,9 @@ const parseBirthday = (raw) => {
   // de salons zitten in NL/BE en de Cariben. Nederlandse Excel schrijft korte
   // datums zonder voorloopnul ('5-3-1990'), ook na opnieuw opslaan.
   const eu = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(t);
+  // VS-salon: Amerikaanse export = maand eerst ('05/14/1990'); kan dat niet
+  // (maand > 12), dan toch dag eerst.
+  if (eu && formatRegion() === "US") return valid(eu[3], eu[1], eu[2]) || valid(eu[3], eu[2], eu[1]);
   if (eu) return valid(eu[3], eu[2], eu[1]);
   return null;
 };
@@ -5049,10 +5054,10 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
   const filtered = q ? baseList.filter((cl) => matchesSearch(cl, q)) : baseList;
 
   const initials = (name) => (name || "?").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
-  const fmtDate = (ds) => { try { return new Date(ds + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch { return ds; } };
-  const fmtNext = (a) => { try { const d = new Date(a.date + "T12:00:00"); const wd = d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long" }); const ds = d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short" }); return `${wd} ${ds}${a.time ? ` · ${a.time}` : ""}`; } catch { return a.date; } };
+  const fmtDate = (ds) => { try { return new Date(ds + "T12:00:00").toLocaleDateString(dateLocale(lang), { day: "numeric", month: "short", year: "numeric" }); } catch { return ds; } };
+  const fmtNext = (a) => { try { const d = new Date(a.date + "T12:00:00"); const wd = d.toLocaleDateString(dateLocale(lang), { weekday: "long" }); const ds = d.toLocaleDateString(dateLocale(lang), { day: "numeric", month: "short" }); return `${wd} ${ds}${a.time ? ` · ${fmtTime(a.time)}` : ""}`; } catch { return a.date; } };
   // Voluit ("31 december 2026") — voor de WhatsApp-tekst aan de klant.
-  const fmtLong = (ds) => { try { const d = new Date(ds + "T12:00:00"); return isNaN(d) ? ds : d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long", year: "numeric" }); } catch { return ds; } };
+  const fmtLong = (ds) => { try { const d = new Date(ds + "T12:00:00"); return isNaN(d) ? ds : d.toLocaleDateString(dateLocale(lang), { day: "numeric", month: "long", year: "numeric" }); } catch { return ds; } };
   // WhatsApp-aanhef: de voornaam van de klant; bij een zakelijke klant die van
   // de contactpersoon (de naam is daar de bedrijfsnaam), en anders geen naam.
   const greetFirst = (cl) => { const f = String((cl?.isBusiness ? cl.contactName : cl?.name) || "").trim().split(/\s+/)[0] || ""; return f === "—" ? "" : f; };
@@ -5352,7 +5357,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                   <NavIcon name="gift" size={15} color={accent} />
                   {(() => {
                     const d = new Date(`${selected.birthday}T00:00:00`);
-                    return isNaN(d) ? selected.birthday : d.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+                    return isNaN(d) ? selected.birthday : d.toLocaleDateString(dateLocale(lang), { day: "numeric", month: "long", year: "numeric" });
                   })()}
                   {selected.birthdayOff && (
                     <span data-client-birthday-off-note style={{ fontSize: 11, color: c.textMuted }}>
@@ -5630,7 +5635,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                   klanten komen wel binnen, maar zonder verjaardag. */}
               {importPreview.badBirthdays > 0 && (
                 <span data-import-bad-birthdays style={{ color: c.warning }}>
-                  {(() => { const n = importPreview.badBirthdays; return lang === "nl" ? ` · ${n} ${n === 1 ? "verjaardag" : "verjaardagen"} niet herkend (gebruik dd-mm-jjjj); die klanten komen erin zonder verjaardag` : lang === "es" ? ` · ${n} ${n === 1 ? "cumpleaños no reconocido" : "cumpleaños no reconocidos"} (usa dd-mm-aaaa); esos clientes se importan sin cumpleaños` : ` · ${n} ${n === 1 ? "birthday" : "birthdays"} not recognised (use dd-mm-yyyy); those clients are imported without a birthday`; })()}
+                  {(() => { const n = importPreview.badBirthdays; return lang === "nl" ? ` · ${n} ${n === 1 ? "verjaardag" : "verjaardagen"} niet herkend (gebruik ${formatRegion() === "US" ? "mm/dd/jjjj" : "dd-mm-jjjj"}); die klanten komen erin zonder verjaardag` : lang === "es" ? ` · ${n} ${n === 1 ? "cumpleaños no reconocido" : "cumpleaños no reconocidos"} (usa ${formatRegion() === "US" ? "mm/dd/aaaa" : "dd-mm-aaaa"}); esos clientes se importan sin cumpleaños` : ` · ${n} ${n === 1 ? "birthday" : "birthdays"} not recognised (use ${formatRegion() === "US" ? "mm/dd/yyyy" : "dd-mm-yyyy"}); those clients are imported without a birthday`; })()}
                 </span>
               )}
             </div>
@@ -5868,9 +5873,9 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 {waitlistGroups.map(g => {
                   const multi = g.entries.length > 1;
                   const open = !!waitlistOpen[g.key];
-                  const fmtD = (d) => { try { return new Date(d + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short" }); } catch { return d; } };
+                  const fmtD = (d) => { try { return new Date(d + "T12:00:00").toLocaleDateString(dateLocale(lang), { day: "numeric", month: "short" }); } catch { return d; } };
                   // Met weekdag, voor de losse voorkeursdata (stond er als 2026-10-12).
-                  const fmtDW = (d) => { try { const x = new Date(d + "T12:00:00"); return isNaN(x) ? d : x.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short" }); } catch { return d; } };
+                  const fmtDW = (d) => { try { const x = new Date(d + "T12:00:00"); return isNaN(x) ? d : x.toLocaleDateString(dateLocale(lang), { weekday: "short", day: "numeric", month: "short" }); } catch { return d; } };
                   // Klikbare tekst ook met het toetsenbord (Enter of spatie).
                   const keyAct = (fn) => (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } };
                   return (
@@ -6200,6 +6205,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       products: []
     };
   });
+  // VS fase 2: bedragen, tijden en datums in de schrijfwijze van het land van
+  // deze salon (fmtAmt, fmtTime, dateLocale lezen deze schakelaar). Bij elke
+  // render, zodat een regiowissel in Instellingen meteen doorwerkt.
+  setFormatRegion(salonData.country_code);
   const [saved, setSaved] = useState(false);
 
   // iOS Safari: URL bar overlaps content on initial load but collapses once user interacts.
@@ -6313,7 +6322,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   const discountSvcName = (s) => lang === "nl" ? (s.name_nl || s.name_en) : lang === "es" ? (s.name_es || s.name_en || s.name_nl) : (s.name_en || s.name_nl);
   const discountDay = (d) => {
     try {
-      return new Date(d + "T12:00:00Z").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+      return new Date(d + "T12:00:00Z").toLocaleDateString(dateLocale(lang), { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
     } catch { return d; }
   };
   // Eén regel onder de code in de lijst: periode en/of behandelingen.
@@ -8445,7 +8454,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   };
   // Korte termijnweergave op de kaart: "ma 8 sep, 14:00".
   const fmtDueShort = (iso) => {
-    try { return new Date(iso).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
+    try { return new Date(iso).toLocaleString(dateLocale(lang), { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
     catch { return String(iso || ""); }
   };
   // Notitie voor de volgende keer (appointments.visit_advice) en, bij het
@@ -8966,14 +8975,14 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       const open = toMinutes(h.open || "00:00");
       const close = toMinutes(h.close || "23:59");
       if (start < open || end > close) {
-        w.push(lang === "nl" ? `dit valt buiten de openingstijden (${h.open}–${h.close})`
-          : lang === "es" ? `queda fuera del horario de apertura (${h.open}–${h.close})`
-          : `this falls outside opening hours (${h.open}–${h.close})`);
+        w.push(lang === "nl" ? `dit valt buiten de openingstijden (${fmtTime(h.open)}–${fmtTime(h.close)})`
+          : lang === "es" ? `queda fuera del horario de apertura (${fmtTime(h.open)}–${fmtTime(h.close)})`
+          : `this falls outside opening hours (${fmtTime(h.open)}–${fmtTime(h.close)})`);
       }
       if (h.break_start && h.break_end && start < toMinutes(h.break_end) && end > toMinutes(h.break_start)) {
-        w.push(lang === "nl" ? `dit overlapt met de middagpauze (${h.break_start}–${h.break_end})`
-          : lang === "es" ? `se solapa con la pausa del mediodía (${h.break_start}–${h.break_end})`
-          : `this overlaps the midday break (${h.break_start}–${h.break_end})`);
+        w.push(lang === "nl" ? `dit overlapt met de middagpauze (${fmtTime(h.break_start)}–${fmtTime(h.break_end)})`
+          : lang === "es" ? `se solapa con la pausa del mediodía (${fmtTime(h.break_start)}–${fmtTime(h.break_end)})`
+          : `this overlaps the midday break (${fmtTime(h.break_start)}–${fmtTime(h.break_end)})`);
       }
     }
     // Dagblokkade van de eigenaar (profiles.day_overrides, één per datum).
@@ -10133,7 +10142,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const today = fmt(salonNow(salonData));
     const base = baseDay && baseDay <= today ? baseDay : today;
     const d = parseDate(base);
-    const locale = lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB";
+    const locale = dateLocale(lang);
     let from, to, label;
     if (scope === "day") { from = base; to = base; label = d.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" }); }
     else if (scope === "month") { from = base.slice(0, 7) + "-01"; to = fmt(new Date(d.getFullYear(), d.getMonth() + 1, 0)); label = d.toLocaleDateString(locale, { month: "long", year: "numeric" }); }
@@ -10224,8 +10233,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         : scope === "quarter"
         ? `Q${kwartaal + 1} ${base.slice(0, 4)}`
         : scope === "month"
-        ? new Date(base + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { month: "long", year: "numeric" })
-        : new Date(base + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+        ? new Date(base + "T12:00:00").toLocaleDateString(dateLocale(lang), { month: "long", year: "numeric" })
+        : new Date(base + "T12:00:00").toLocaleDateString(dateLocale(lang), { weekday: "long", day: "numeric", month: "long", year: "numeric" });
       const params = {
         salon: salonData,
         appointments: rows,
@@ -11345,7 +11354,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             const window = (time, dur) => {
               const [h, m] = (time || "0:0").split(":").map(Number);
               const endMin = h * 60 + (m || 0) + parseInt(dur || 60);
-              return `${time} – ${pad(Math.floor(endMin / 60) % 24)}:${pad(endMin % 60)}`;
+              return `${fmtTime(time)} – ${fmtTime(`${pad(Math.floor(endMin / 60) % 24)}:${pad(endMin % 60)}`)}`;
             };
             // Gecombineerde boeking (meerdere behandelingen, evt. bij
             // verschillende stylistes): elk deel op een eigen regel met zijn
@@ -11581,7 +11590,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             {/* Termijn op de klok van de SALON (timeZone), niet die van het
                 apparaat — een Bonaire-salon die vanuit NL kijkt zag 5 à 6 uur verschil. */}
             {a.payment_due_at ? ` · ${lang === "nl" ? "vervalt" : lang === "es" ? "caduca" : "expires"} ${(() => {
-              try { return new Date(a.payment_due_at).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { timeZone: tzFor(salonData), weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
+              try { return new Date(a.payment_due_at).toLocaleString(dateLocale(lang), { timeZone: tzFor(salonData), weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
               catch { return fmtDueShort(a.payment_due_at); }
             })()}` : ""}
           </div>
@@ -12132,12 +12141,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <div><label style={lbl}>{lang === "nl" ? "Van" : lang === "es" ? "Desde" : "From"}</label>
                       <select className="input-field" value={blockForm.time_start} onChange={e => setBlockForm(f => ({ ...f, time_start: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
-                        {genTimes(salonData.slot_interval_minutes || 30).map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                        {genTimes(salonData.slot_interval_minutes || 30).map(tt => <option key={tt} value={tt}>{fmtTime(tt)}</option>)}
                       </select>
                     </div>
                     <div><label style={lbl}>{lang === "nl" ? "Tot" : lang === "es" ? "Hasta" : "To"}</label>
                       <select className="input-field" value={blockForm.time_end} onChange={e => setBlockForm(f => ({ ...f, time_end: e.target.value }))} style={{ width: "100%", fontFamily: "'Jost',sans-serif" }}>
-                        {genTimes(salonData.slot_interval_minutes || 30).map(tt => <option key={tt} value={tt}>{tt}</option>)}
+                        {genTimes(salonData.slot_interval_minutes || 30).map(tt => <option key={tt} value={tt}>{fmtTime(tt)}</option>)}
                       </select>
                     </div>
                   </div>
@@ -12470,7 +12479,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <NavIcon name="kassa" size={15} color="currentColor" /> {lang === "nl" ? "Verkoop" : lang === "es" ? "Venta" : "Sale"}
                   </div>
                   <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
-                    {new Date(sale.date + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short" })} {"·"} {sale.time}
+                    {new Date(sale.date + "T12:00:00").toLocaleDateString(dateLocale(lang), { weekday: "short", day: "numeric", month: "short" })} {"·"} {fmtTime(sale.time)}
                   </div>
                 </div>
                 <button type="button" onClick={close} aria-label={t.close || "Sluiten"} style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", padding: 2 }}>
@@ -12576,7 +12585,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   <span style={{ fontSize: 12, color: accent, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, parseFloat(v.remaining))} <span style={{ color: c.textMuted, fontSize: 10 }}>/ {fmtAmt(cur, parseFloat(v.amount))}</span></span>
                 </div>
                 <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
-                  {[v.buyer_name, v.buyer_email, new Date(v.created_at).toLocaleDateString("nl-NL")].filter(Boolean).join(" · ")}
+                  {[v.buyer_name, v.buyer_email, fmtNumDate(new Date(v.created_at))].filter(Boolean).join(" · ")}
                   {!v.active && ` · ${lang === "nl" ? "gedeactiveerd" : lang === "es" ? "desactivado" : "deactivated"}`}
                   {v.active && v.remaining <= 0 && ` · ${lang === "nl" ? "volledig gebruikt" : lang === "es" ? "usado por completo" : "fully used"}`}
                 </div>
@@ -12715,7 +12724,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           ? { ...live, time: apptDetail.time, _baseTime: apptDetail._baseTime, service_duration: apptDetail.service_duration, service_name: apptDetail.service_name, _slotKey: apptDetail._slotKey, _isSubSlot: true }
           : { ...apptDetail, ...live };
         const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
-        const dateLabel = new Date(a.date + "T12:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+        const dateLabel = new Date(a.date + "T12:00:00").toLocaleDateString(dateLocale(lang), { weekday: "long", day: "numeric", month: "long", year: "numeric" });
         return (
         <div data-appt-sheet onClick={() => setApptDetail(null)}
              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.42)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", padding: isMobile ? 0 : 24, zIndex: 320, fontFamily: "'Jost', sans-serif", color: c.text }}>
@@ -13630,7 +13639,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 // eerste afschrijving (zelfde regel als Mollie, src/autopay.js).
                 if (salonData.mollie_subscription_id) {
                   const chargeYmd = autopayChargeYmd(salonData.trial_ends_at);
-                  const chargeTxt = parseDate(chargeYmd).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" });
+                  const chargeTxt = parseDate(chargeYmd).toLocaleDateString(dateLocale(lang), { day: "numeric", month: "short", year: "numeric" });
                   const price = fmtAmt("€", AUTOPAY_MONTHLY[salonData.plan] || AUTOPAY_MONTHLY.starter);
                   // Is de afschrijvingsdag al begonnen, dan kan uitzetten niet
                   // meer (cancel-subscription weigert, de kaart toont "charging"
@@ -14020,7 +14029,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSaleDeleteArm(false); setSaleDetail(a); } }}
                               title={lang === "nl" ? "Openen: bon, factuur of verwijderen" : lang === "es" ? "Abrir: recibo, factura o eliminar" : "Open: receipt, invoice or delete"}
                               style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "6px 0", borderBottom: `1px solid ${c.border}`, fontSize: 11, cursor: "pointer" }}>
-                              <span style={{ color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{a.time}</span>
+                              <span style={{ color: c.textMuted, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmtTime(a.time)}</span>
                               <span style={{ flex: 1, minWidth: 0, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{what}</span>
                               <span style={{ color: c.textMuted, flexShrink: 0, fontSize: 10 }}>{[a.staff_name ? String(a.staff_name).split(",")[0].trim() : "", payLabel(a.payment_method)].filter(Boolean).join(" · ")}</span>
                               <span style={{ color: accent, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{fmtAmt(cur, amt)}</span>
@@ -14088,7 +14097,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, color: accent, lineHeight: 1.1 }}>{fmtAmt(cur, (parseFloat(sale.service_price) || 0))}</div>
                             <div style={{ fontSize: 11, color: sale.paid_at ? c.success : c.warning, marginTop: 3 }}>
                               {sale.paid_at
-                                ? `${lang === "nl" ? "Betaald" : lang === "es" ? "Pagado" : "Paid"} · ${payTxt} · ${sale.time}`
+                                ? `${lang === "nl" ? "Betaald" : lang === "es" ? "Pagado" : "Paid"} · ${payTxt} · ${fmtTime(sale.time)}`
                                 : `${lang === "nl" ? "Nog niet betaald" : lang === "es" ? "Pendiente de pago" : "Not paid yet"} · ${payTxt}`}
                             </div>
                             {sale.invoice_sent && sale.client_email && (
@@ -14482,7 +14491,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               // shift calDate by ±1 day so this label follows suit.
               periodAppts = agendaApptsUnique.filter(a => a.date === calDate);
               const d = new Date(calDate + "T12:00:00");
-              periodLabel = `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+              periodLabel = formatRegion() === "US" ? `${MON_SHORT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : `${d.getDate()} ${MON_SHORT[d.getMonth()]} ${d.getFullYear()}`;
             } else if (calViewMode === "week") {
               const base = new Date(todayDate);
               base.setDate(base.getDate() + calWeekOffset * 7);
@@ -14494,7 +14503,12 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
               const we = fmt(weekEnd);
               periodAppts = agendaApptsUnique.filter(a => a.date >= ws && a.date <= we);
               const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
-              periodLabel = sameMonth
+              // VS fase 2: maand eerst ("Nov 9 – 15, 2026").
+              periodLabel = formatRegion() === "US"
+                ? (sameMonth
+                  ? `${MON_SHORT[weekStart.getMonth()]} ${weekStart.getDate()} – ${weekEnd.getDate()}, ${weekEnd.getFullYear()}`
+                  : `${MON_SHORT[weekStart.getMonth()]} ${weekStart.getDate()} – ${MON_SHORT[weekEnd.getMonth()]} ${weekEnd.getDate()}, ${weekEnd.getFullYear()}`)
+                : sameMonth
                 ? `${weekStart.getDate()} – ${weekEnd.getDate()} ${MON_SHORT[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`
                 : `${weekStart.getDate()} ${MON_SHORT[weekStart.getMonth()]} – ${weekEnd.getDate()} ${MON_SHORT[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`;
             } else if (calViewMode === "month") {
@@ -14632,7 +14646,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const countOn = (ds) => new Set(agendaApptsUnique.filter(a => a.date === ds && actief(a)).map(a => a.id)).size;
                 const dayCount = periodAppts.filter(actief).length;
                 const expected = periodAppts.filter(actief).reduce((s, a) => s + (agendaStaff ? staffShareOf(a, agendaStaff, salonData.services || [], salonData.staff || []) : parseFloat(a.service_price || 0)), 0);
-                const titel = d0.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long" });
+                const titel = d0.toLocaleDateString(dateLocale(lang), { weekday: "long", day: "numeric", month: "long" });
                 // Gesloten = salon dicht volgens de openingstijden én geen
                 // uitzonderingsdag (JSON of rij; met filter alleen die van haar
                 // of de hele salon).
@@ -15174,7 +15188,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                           // Smalle kolom mét pil in de kop: alleen de begintijd, anders past
                           // de pil er niet naast. De eindtijd zie je aan de kaarthoogte en in
                           // de tooltip.
-                          const timeLabel = (compact && chipInHeader) ? a.time : `${a.time}–${endTime}`;
+                          const timeLabel = (compact && chipInHeader) ? fmtTime(a.time) : `${fmtTime(a.time)}–${fmtTime(endTime)}`;
                           const staffChip = hasChip ? (
                             <div style={{ fontSize: 9, height: 17, display: "inline-flex", alignItems: "center", gap: 4, padding: "0 7px", borderRadius: 6, background: `${accent}20`, color: accent, border: `1px solid ${accent}44`, fontWeight: 700, letterSpacing: "0.04em", maxWidth: "100%", minWidth: 0, lineHeight: "11px" }}>
                               <NavIcon name="user" size={8} color={accent} />
@@ -15189,7 +15203,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             <span data-appt-price style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 13, color, lineHeight: "14px", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{Math.abs(prijs % 1) > 0.004 ? fmtAmt(cur, prijs) : fmtWhole(prijs)}</span>
                           );
                           return (
-                            <div key={a._slotKey || a.id} onClick={() => setApptDetail(a)} title={`${a.time}–${endTime} · ${a.client_name} · ${a.service_name}${a.staff_name ? ` · ${a.staff_name}` : ""}`}
+                            <div key={a._slotKey || a.id} onClick={() => setApptDetail(a)} title={`${fmtTime(a.time)}–${fmtTime(endTime)} · ${a.client_name} · ${a.service_name}${a.staff_name ? ` · ${a.staff_name}` : ""}`}
                               style={{
                                 position: "absolute", top, height, ...lane, zIndex: 2,
                                 // Dekkende ondergrond (paginakleur) onder de kleurtint: sinds
@@ -15201,7 +15215,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                               }}>
                               {layout === "tight" ? (
                                 <div style={{ display: "flex", alignItems: "center", gap: 6, height: "100%", whiteSpace: "nowrap", overflow: "hidden" }}>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums", flexShrink: 0, lineHeight: "14px" }}>{a.time}</span>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: "tabular-nums", flexShrink: 0, lineHeight: "14px" }}>{fmtTime(a.time)}</span>
                                   {/* De naam krimpt pas als laatste (basis = eigen breedte); de
                                       dienst (basis 0) krijgt alleen wat er overblijft. Eerst
                                       was het andersom en werd de naam "J…" naast een volle
@@ -15356,7 +15370,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {isTimeBlocked && (
                               <div style={{ display: "flex", alignItems: "center", gap: 3, padding: isMobile ? "3px 4px" : "4px 6px", background: `${c.danger}14`, border: `1px solid ${c.danger}33`, borderRadius: 4 }}>
                                 <svg width={isMobile ? 8 : 10} height={isMobile ? 8 : 10} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
-                                <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: c.danger, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ov.block_time_start}–{ov.block_time_end}</div>
+                                <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: c.danger, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmtTime(ov.block_time_start)}–{fmtTime(ov.block_time_end)}</div>
                               </div>
                             )}
                             {offNames.length > 0 && !isFullDayBlocked && (
@@ -15368,7 +15382,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                             {staffTimeBlocks.map(b => (
                               <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 3, padding: isMobile ? "3px 4px" : "4px 6px", background: `${c.danger}14`, border: `1px solid ${c.danger}33`, borderRadius: 4 }} title={staffNameById(b.staff_id)}>
                                 <svg width={isMobile ? 8 : 10} height={isMobile ? 8 : 10} viewBox="0 0 24 24" fill="none" stroke={c.danger} strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
-                                <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: c.danger, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.block_time_start}–{b.block_time_end}</div>
+                                <div style={{ fontSize: isMobile ? 8 : 9, fontWeight: 600, color: c.danger, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmtTime(b.block_time_start)}–{fmtTime(b.block_time_end)}</div>
                               </div>
                             ))}
                             {dayAppts.length === 0 && !isFullDayBlocked && !isTimeBlocked && staffBlocksHere.length === 0 && offNames.length === 0 ? (
@@ -15388,7 +15402,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                         const endTime = `${pad2(Math.floor(endMin / 60) % 24)}:${pad2(endMin % 60)}`;
                                         return (
                                           <div style={{ fontSize: isMobile ? 8 : 10, fontWeight: 600, color: statusColor, fontVariantNumeric: "tabular-nums", textDecoration: isCancelled ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                            {a.time}–{endTime}
+                                            {fmtTime(a.time)}–{fmtTime(endTime)}
                                           </div>
                                         );
                                       })()}
@@ -15559,7 +15573,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
                                   {dayAppts.map((a, ai) => (
                                     <div key={ai} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: `${accent}1a`, color: c.textSub, borderLeft: `2px solid ${accent}`, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                      {a.time}{a.service_duration ? ` (${a.service_duration}m)` : ""} {a.client_name?.split(" ")[0] || ""}
+                                      {fmtTime(a.time)}{a.service_duration ? ` (${a.service_duration}m)` : ""} {a.client_name?.split(" ")[0] || ""}
                                     </div>
                                   ))}
                                   {count > 3 && <div style={{ fontSize: 9, color: c.textMuted, paddingLeft: 2 }}>+{count - 3}</div>}
@@ -15635,7 +15649,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const isTimeBlock = !!ov.block_time_start;
                 const unblock = async () => {
                   const label = isTimeBlock
-                    ? (lang === "nl" ? `tijdvak ${ov.block_time_start}–${ov.block_time_end}` : lang === "es" ? `Bloqueo ${ov.block_time_start}–${ov.block_time_end}` : `${ov.block_time_start}–${ov.block_time_end} time block`)
+                    ? (lang === "nl" ? `tijdvak ${fmtTime(ov.block_time_start)}–${fmtTime(ov.block_time_end)}` : lang === "es" ? `Bloqueo ${fmtTime(ov.block_time_start)}–${fmtTime(ov.block_time_end)}` : `${fmtTime(ov.block_time_start)}–${fmtTime(ov.block_time_end)} time block`)
                     : (lang === "nl" ? "geblokkeerde dag" : lang === "es" ? "día bloqueado" : "blocked day");
                   if (!window.confirm(lang === "nl" ? `Deblokkeer deze ${label}?` : lang === "es" ? `¿Desbloquear este ${label}?` : `Unblock this ${label}?`)) return;
                   const next = { ...(salonData.day_overrides || {}) };
@@ -15671,7 +15685,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     <div style={{ flex: 1, minWidth: 180 }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
                         {isTimeBlock
-                          ? (lang === "nl" ? `Geblokkeerd ${ov.block_time_start}–${ov.block_time_end}` : lang === "es" ? `Bloqueado ${ov.block_time_start}–${ov.block_time_end}` : `Blocked ${ov.block_time_start}–${ov.block_time_end}`)
+                          ? (lang === "nl" ? `Geblokkeerd ${fmtTime(ov.block_time_start)}–${fmtTime(ov.block_time_end)}` : lang === "es" ? `Bloqueado ${fmtTime(ov.block_time_start)}–${fmtTime(ov.block_time_end)}` : `Blocked ${fmtTime(ov.block_time_start)}–${fmtTime(ov.block_time_end)}`)
                           : (lang === "nl" ? "Dag geblokkeerd" : lang === "es" ? "Día bloqueado" : "Day blocked")}
                       </div>
                       <div style={{ fontSize: 11, color: c.textSub, lineHeight: 1.4 }}>
@@ -15722,15 +15736,15 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         <div style={{ fontSize: 11, fontWeight: 700, color: c.danger, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 3 }}>
                           {svcLabel
                             ? (isTimeBlock
-                                ? (lang === "nl" ? `Geen ${svcLabel} ${b.block_time_start}–${b.block_time_end}${staffName ? ` bij ${staffName}` : ""}` : lang === "es" ? `Sin ${svcLabel} ${b.block_time_start}–${b.block_time_end}${staffName ? ` con ${staffName}` : ""}` : `No ${svcLabel} ${b.block_time_start}–${b.block_time_end}${staffName ? ` with ${staffName}` : ""}`)
+                                ? (lang === "nl" ? `Geen ${svcLabel} ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}${staffName ? ` bij ${staffName}` : ""}` : lang === "es" ? `Sin ${svcLabel} ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}${staffName ? ` con ${staffName}` : ""}` : `No ${svcLabel} ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}${staffName ? ` with ${staffName}` : ""}`)
                                 : (lang === "nl" ? `Geen ${svcLabel} vandaag${staffName ? ` bij ${staffName}` : ""}` : lang === "es" ? `Sin ${svcLabel} hoy${staffName ? ` con ${staffName}` : ""}` : `No ${svcLabel} today${staffName ? ` with ${staffName}` : ""}`))
                             : !staffName
                             // Salonbrede rij: zelfde koppen als de JSON-blokkade hierboven.
                             ? (isTimeBlock
-                                ? (lang === "nl" ? `Geblokkeerd ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `Bloqueado ${b.block_time_start}–${b.block_time_end}` : `Blocked ${b.block_time_start}–${b.block_time_end}`)
+                                ? (lang === "nl" ? `Geblokkeerd ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}` : lang === "es" ? `Bloqueado ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}` : `Blocked ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}`)
                                 : (lang === "nl" ? "Dag geblokkeerd" : lang === "es" ? "Día bloqueado" : "Day blocked"))
                             : isTimeBlock
-                            ? (lang === "nl" ? `${staffName} geblokkeerd ${b.block_time_start}–${b.block_time_end}` : lang === "es" ? `${staffName} bloqueó ${b.block_time_start}–${b.block_time_end}` : `${staffName} blocked ${b.block_time_start}–${b.block_time_end}`)
+                            ? (lang === "nl" ? `${staffName} geblokkeerd ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}` : lang === "es" ? `${staffName} bloqueó ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}` : `${staffName} blocked ${fmtTime(b.block_time_start)}–${fmtTime(b.block_time_end)}`)
                             : (lang === "nl" ? `${staffName} is vrij` : lang === "es" ? `${staffName} está libre` : `${staffName} is off`)}
                         </div>
                         {b.weekday != null && (
@@ -15781,7 +15795,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {calViewMode !== "day" && (
                   <div data-list-day style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>
                     {lang === "nl" ? "Afspraken op " : lang === "es" ? "Citas del " : "Appointments on "}
-                    {parseDate(calDate).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "long", day: "numeric", month: "long", ...(calDate.slice(0, 4) !== todayStr.slice(0, 4) ? { year: "numeric" } : {}) })}
+                    {parseDate(calDate).toLocaleDateString(dateLocale(lang), { weekday: "long", day: "numeric", month: "long", ...(calDate.slice(0, 4) !== todayStr.slice(0, 4) ? { year: "numeric" } : {}) })}
                   </div>
                 )}
                 {calViewMode !== "day" && (
@@ -17071,7 +17085,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         return (
                           <div key={h} style={{ flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                             <div style={{ width: "100%", borderRadius: 4, background: count > 0 ? `${accent}${Math.max(Math.round(pct * 0.8 + 20), 20).toString(16).padStart(2,"0")}` : c.bgCardHover, height: Math.max(pct * 0.7, 2), transition: "height 0.3s" }} />
-                            <span style={{ fontSize: 10, color: c.textMuted }}>{isMobile ? h : `${h}:00`}</span>
+                            <span style={{ fontSize: 10, color: c.textMuted }}>{formatRegion() === "US" ? (isMobile ? `${h % 12 || 12}${h < 12 ? "a" : "p"}` : `${h % 12 || 12} ${h < 12 ? "AM" : "PM"}`) : (isMobile ? h : `${h}:00`)}</span>
                           </div>
                         );
                       })}
@@ -20866,11 +20880,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                               {isOn ? (
                                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                                   <select value={openTime} onChange={e => { setEditStaffForm(f => { const wh = {...(f.working_hours || {})}; wh[day] = { closed: false, open: e.target.value, close: wh[day]?.close || closeTime }; return {...f, working_hours: wh}; }); }} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
-                                    {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                                    {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{fmtTime(tt)}</option>)}
                                   </select>
                                   <span style={{ fontSize: 10, color: c.textMuted }}>–</span>
                                   <select value={closeTime} onChange={e => { setEditStaffForm(f => { const wh = {...(f.working_hours || {})}; wh[day] = { closed: false, open: wh[day]?.open || openTime, close: e.target.value }; return {...f, working_hours: wh}; }); }} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 6, padding: "3px 4px", color: c.text, fontSize: 10, fontFamily: "'Jost',sans-serif" }}>
-                                    {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                                    {TIMES.map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{fmtTime(tt)}</option>)}
                                   </select>
                                 </div>
                               ) : (<span style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic" }}>{t.closed}</span>)}
@@ -21129,11 +21143,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         <div style={{ flex: 1, minWidth: 0, ...(isMobile ? { flexBasis: "100%" } : {}) }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                             <select value={hours.open} onChange={e => setDay({ open: e.target.value })} style={selStyle}>
-                              {timeOptionsWith(hourOpts, hours.open).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                              {timeOptionsWith(hourOpts, hours.open).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{fmtTime(t)}</option>)}
                             </select>
                             <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
                             <select value={hours.close} onChange={e => setDay({ close: e.target.value })} style={selStyle}>
-                              {timeOptionsWith(hourOpts, hours.close).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                              {timeOptionsWith(hourOpts, hours.close).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{fmtTime(t)}</option>)}
                             </select>
                             <button type="button" onClick={toggleBreak}
                               style={{ marginLeft: "auto", padding: "5px 10px", borderRadius: 6, fontSize: 9.5, fontWeight: 600, letterSpacing: "0.05em", cursor: "pointer", border: `1px solid ${hasBreak ? accent : c.inputBorder}`, background: hasBreak ? `${accent}14` : "transparent", color: hasBreak ? accent : c.textMuted, whiteSpace: "nowrap" }}>
@@ -21151,11 +21165,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                                 const later = hourOpts.filter(x => x > e.target.value && x < hours.close);
                                 setDay({ break_start: e.target.value, break_end: hours.break_end <= e.target.value ? (later[1] || later[0] || hours.break_end) : hours.break_end });
                               }} style={selStyle}>
-                                {timeOptionsWith(hourOpts.filter(x => x > hours.open && x < hours.close), hours.break_start).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                                {timeOptionsWith(hourOpts.filter(x => x > hours.open && x < hours.close), hours.break_start).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{fmtTime(t)}</option>)}
                               </select>
                               <span style={{ fontSize: 11, color: c.textLabel }}>—</span>
                               <select value={hours.break_end} onChange={e => setDay({ break_end: e.target.value })} style={selStyle}>
-                                {timeOptionsWith(hourOpts.filter(x => x > (hours.break_start || hours.open) && x < hours.close), hours.break_end).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{t}</option>)}
+                                {timeOptionsWith(hourOpts.filter(x => x > (hours.break_start || hours.open) && x < hours.close), hours.break_end).map(t => <option key={t} value={t} style={{ background: c.selectBg }}>{fmtTime(t)}</option>)}
                               </select>
                               {!isMobile && <span style={{ fontSize: 10, color: c.textMuted }}>
                                 {lang === "nl" ? "dicht tussen deze tijden" : lang === "es" ? "cerrado entre estas horas" : "closed between these times"}
@@ -21452,7 +21466,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                             </span>
                           )}
                         </div>
-                        <div style={{ fontSize: 10, color: c.textLabel }}>{x.open} — {x.close}</div>
+                        <div style={{ fontSize: 10, color: c.textLabel }}>{fmtTime(x.open)} — {fmtTime(x.close)}</div>
                       </div>
                       <div style={{ display: "flex", gap: 4 }}>
                         <button className="btn-ghost" style={{ fontSize: 10, padding: "3px 8px", color: accent, borderColor: `${accent}33` }}
@@ -21492,11 +21506,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     <input type="date" className="input-field" value={newException.date} onChange={e => setNewException(f => ({...f, date: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", flex: 1, minWidth: 120 }} />
                     {/* Zelfde kwartierraster (05:00–23:30) als de openingstijden. */}
                     <select value={newException.open} onChange={e => setNewException(f => ({...f, open: e.target.value}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif" }}>
-                      {timeOptionsWith(genTimes(15, 5, 23.5), newException.open).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                      {timeOptionsWith(genTimes(15, 5, 23.5), newException.open).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{fmtTime(tt)}</option>)}
                     </select>
                     <span style={{ color: c.textMuted, fontSize: 11, alignSelf: "center" }}>—</span>
                     <select value={newException.close} onChange={e => setNewException(f => ({...f, close: e.target.value}))} style={{ background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, padding: "6px 8px", color: c.text, fontSize: 11, fontFamily: "'Jost',sans-serif" }}>
-                      {timeOptionsWith(genTimes(15, 5, 23.5), newException.close).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                      {timeOptionsWith(genTimes(15, 5, 23.5), newException.close).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{fmtTime(tt)}</option>)}
                     </select>
                   </div>
                   {(salonData.staff || []).length > 0 && (
@@ -21581,7 +21595,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
               {/* Blocked Days */}
               <div style={{ background: c.bgCard, border: "1px solid " + c.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <SL>{t.blockedDays}</SL>
-                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{t.blockedDesc}</div>
+                <div style={{ fontSize: 11, color: c.textLabel, marginBottom: 14 }}>{fmtTimesIn(t.blockedDesc)}</div>
                 {/* Twee bronnen, samen in één lijst:
                     - profiles.day_overrides (oud model, één entry per datum):
                       salonbrede hele dagen, plus oude medewerker- en
@@ -21658,7 +21672,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         </span>
                       </div>
                       {v.block_time_start && v.block_time_end && (
-                        <div style={{ fontSize: 10, color: accent, fontWeight: 500 }}>{v.block_time_start} — {v.block_time_end}</div>
+                        <div style={{ fontSize: 10, color: accent, fontWeight: 500 }}>{fmtTime(v.block_time_start)} — {fmtTime(v.block_time_end)}</div>
                       )}
                       {v.reason && <div style={{ fontSize: 10, color: c.textLabel }}>{v.reason}</div>}
                     </div>
@@ -21740,11 +21754,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       const grid = genTimes(salonData.slot_interval_minutes || 30, 5, 23.5, hoursForDate(newBlocked.from)?.open || null);
                       return (<>
                       <select className="input-field" value={newBlocked.time_start || "09:00"} onChange={e => setNewBlocked(f => ({...f, time_start: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", minWidth: 75, background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, color: c.text, fontFamily: "'Jost',sans-serif" }}>
-                        {timeOptionsWith(grid, newBlocked.time_start || "09:00").map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                        {timeOptionsWith(grid, newBlocked.time_start || "09:00").map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{fmtTime(tt)}</option>)}
                       </select>
                       <span style={{ color: c.textMuted, fontSize: 11, alignSelf: "center" }}>—</span>
                       <select className="input-field" value={newBlocked.time_end || "17:30"} onChange={e => setNewBlocked(f => ({...f, time_end: e.target.value}))} style={{ fontSize: 11, padding: "8px 10px", minWidth: 75, background: c.bgCardHover, border: "1px solid " + c.inputBorder, borderRadius: 8, color: c.text, fontFamily: "'Jost',sans-serif" }}>
-                        {timeOptionsWith(grid, newBlocked.time_end || "17:30").map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                        {timeOptionsWith(grid, newBlocked.time_end || "17:30").map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{fmtTime(tt)}</option>)}
                       </select>
                       </>);
                     })()}
@@ -22257,11 +22271,11 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 const trialEnds = bp.trial_ends_at ? new Date(bp.trial_ends_at) : null;
                 const trialDaysLeft = trialEnds ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86400000)) : null;
                 const fmtEUR = (n) => fmtAmt("€", n);
-                const fmtDate = (d) => d ? new Date(d).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
+                const fmtDate = (d) => d ? new Date(d).toLocaleDateString(dateLocale(lang), { day: "numeric", month: "short", year: "numeric" }) : "";
                 // Kale datums (period_start/period_end zijn DATE-kolommen):
                 // new Date("2026-09-28") is UTC-middernacht en toonde in een
                 // Caribische browser (UTC-4) de dag ervóór. parseDate = lokaal.
-                const fmtDay = (ds) => ds ? parseDate(String(ds).slice(0, 10)).toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
+                const fmtDay = (ds) => ds ? parseDate(String(ds).slice(0, 10)).toLocaleDateString(dateLocale(lang), { day: "numeric", month: "short", year: "numeric" }) : "";
                 // Jaarbetaling zonder Mollie-abonnement (eenmalig vooruit
                 // betaald, nu alleen My Whims): er wordt niets automatisch
                 // afgeschreven, dus geen "Volgende afschrijving" maar "Toegang
@@ -22287,7 +22301,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     const dl = autopayOffDeadline(bp.trial_ends_at);
                     const tz = tzFor(salonData);
                     const hm = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(dl);
-                    const day = dl.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { timeZone: tz, day: "numeric", month: "short", year: "numeric" });
+                    const day = dl.toLocaleDateString(dateLocale(lang), { timeZone: tz, day: "numeric", month: "short", year: "numeric" });
                     return hm === "00:00"
                       ? L(`vóór ${day}`, `before ${day}`, `antes del ${day}`)
                       : L(`vóór ${day} ${hm}`, `before ${hm} on ${day}`, `antes de las ${hm} del ${day}`);
@@ -24282,7 +24296,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           nodigde uit tot boeken op een moment dat dicht is. */}
                       <select className="input-field" value={addApptForm.time} onChange={e => setAddApptForm(f => ({...f, time: e.target.value}))} style={{ fontSize: 12, flex: 1 }}>
                         <option value="" style={{ background: c.selectBg }}>—</option>
-                        {timesForDate(addApptForm.date, addApptForm.time).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{tt}</option>)}
+                        {timesForDate(addApptForm.date, addApptForm.time).map(tt => <option key={tt} value={tt} style={{ background: c.selectBg }}>{fmtTime(tt)}</option>)}
                       </select>
                     </div>
                   </div>

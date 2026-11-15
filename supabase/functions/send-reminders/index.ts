@@ -91,7 +91,7 @@ const salonLangOf = (p: any): string => (["nl", "en", "es"].includes(p?.salon_la
 // Antilliaanse gulden (NAf./ANG) op Curaçao en Sint Maarten. Niet terugzetten
 // naar "NAf." — dat geld bestaat niet meer. Vellu toont de ISO-code "XCG", niet
 // het CBCS-symbool "Cg" (Faisal, 24-09-2026) — gelijk houden met shared.jsx.
-const CUR_SYM: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£" };
+const CUR_SYM: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£", US: "$" };
 const curFor = (code?: string | null) => CUR_SYM[code || ""] || "€";
 
 // Tijdzone per land, zelfde soort tabel als DUTCH_COUNTRIES en CUR_SYM hierboven.
@@ -121,6 +121,54 @@ const tzFor = (code?: string | null, tz?: string | null) => {
   const cc = String(code || "").toUpperCase();
   if (tz && (SALON_TZS[cc] || []).includes(tz)) return tz;
   return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
+};
+
+// VS-opmaak (fase 2, 15-11-2026), gelijk aan src/regionFormat.js: alleen een
+// salon in de VS (country_code "US") schrijft $1,234.50, 2:30 PM, 11/19/2026
+// en de maand eerst. Elk ander land krijgt precies wat hier al stond, ook
+// Bonaire met de dollar. Zelfde helpers (isUsCc, usAmt, usTime, usTimesIn,
+// usDateLoc, usNumDate) in elke edge-functie; samen wijzigen.
+const isUsCc = (cc?: unknown) => String(cc || "").toUpperCase() === "US";
+// Bedrag met symbool: VS "$1,234.50" en "-$12.50"; anders "€1.234,50" en "€-12,50".
+const usAmt = (sym: string, n: unknown, cc?: unknown) => {
+  const v = Number(n) || 0;
+  const [i, d] = Math.abs(v).toFixed(2).split(".");
+  const neg = v < 0 && Number(Math.abs(v).toFixed(2)) !== 0;
+  if (isUsCc(cc)) return (neg ? "-" : "") + (sym || "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + d;
+  return (sym || "") + (neg ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + d;
+};
+// Kloktijd "14:30" (of "9:00", "14:30:00") -> VS "2:30 PM"; 12:00 = "12:00 PM",
+// 00:00 en 24:00 = "12:00 AM". Buiten de VS, of als het geen kale kloktijd is,
+// ongewijzigd terug, zodat dubbel opmaken niets kapotmaakt.
+const usTime = (hm: unknown, cc?: unknown) => {
+  const s = hm == null ? "" : String(hm);
+  if (!isUsCc(cc)) return s;
+  const m = /^\s*(\d{1,2})[:.](\d{2})(?::\d{2})?\s*$/.exec(s);
+  if (!m) return s;
+  const h = Number(m[1]);
+  if (h > 24 || Number(m[2]) > 59) return s;
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 && h < 24 ? "PM" : "AM"}`;
+};
+// Kloktijden IN een tekst ("10:00 - 17:30", "om 9:00") -> VS 12-uurs; alleen
+// losse HH:MM die nog niet door AM/PM gevolgd worden. Anders ongewijzigd.
+const usTimesIn = (text: unknown, cc?: unknown) => {
+  const s = text == null ? "" : String(text);
+  if (!isUsCc(cc)) return s;
+  return s.replace(/(^|[^\d:.,/])([01]?\d|2[0-4]):([0-5]\d)(?![\d:]|\s?[AaPp]\.?\s?[Mm]\b)/g,
+    (_all: string, pre: string, h: string, mm: string) => pre + usTime(`${h}:${mm}`, cc));
+};
+// Locale voor toLocale*String en Intl.DateTimeFormat: VS nl-NL / es-US / en-US,
+// anders nl-NL / es-ES / en-GB.
+const usDateLoc = (lang: string, cc?: unknown) => isUsCc(cc)
+  ? (lang === "nl" ? "nl-NL" : lang === "es" ? "es-US" : "en-US")
+  : (lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB");
+// Kale datum "2026-11-19" -> VS "11/19/2026". Buiten de VS ongewijzigd terug:
+// daar tonen de pushmeldingen al de ISO-datum, en dat blijft zo.
+const usNumDate = (ymd: unknown, cc?: unknown) => {
+  const s = ymd == null ? "" : String(ymd);
+  if (!isUsCc(cc)) return s;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : s;
 };
 
 // Offset van een tijdzone op een concreet moment, in ms. Bewust via Intl en niet
@@ -290,12 +338,14 @@ function esc(s: unknown) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function fmtDate(dateStr: string, lang: string) {
+function fmtDate(dateStr: string, lang: string, cc?: unknown) {
   try {
     const d = new Date(dateStr + "T12:00:00");
     if (lang === "en") {
       const dy = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
       const mo = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      // VS: maand eerst ("Thursday, November 19").
+      if (isUsCc(cc)) return `${dy[d.getDay()]}, ${mo[d.getMonth()]} ${d.getDate()}`;
       return `${dy[d.getDay()]} ${d.getDate()} ${mo[d.getMonth()]}`;
     }
     const dy = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
@@ -358,16 +408,17 @@ type DigestRow = {
 // gebeurt: "{n} uur van tevoren". Bij 0 (geen herinneringen) geen zin.
 async function sendOwnerDigest(owner: {
   email: string; salon_name: string; lang: string; date: string; reminderHours: number;
+  country_code?: string | null;
   appts: { time: string; client_name: string; service_name: string; staff_name?: string | null }[];
 }) {
   if (!RESEND_API_KEY || !owner.email || owner.appts.length === 0) return false;
   const nl = owner.lang !== "en";
-  const dateLabel = fmtDate(owner.date, owner.lang);
+  const dateLabel = fmtDate(owner.date, owner.lang, owner.country_code);
   const rows = owner.appts
     .slice()
     .sort((a, b) => (a.time || "").localeCompare(b.time || ""))
     .map((a) => `<tr>
-      <td style="padding:8px 12px 8px 0;font-weight:600;white-space:nowrap;vertical-align:top;">${esc((a.time || "").slice(0, 5))}</td>
+      <td style="padding:8px 12px 8px 0;font-weight:600;white-space:nowrap;vertical-align:top;">${esc(usTime((a.time || "").slice(0, 5), owner.country_code))}</td>
       <td style="padding:8px 0;vertical-align:top;">
         <div style="font-weight:500;">${esc(a.client_name)}</div>
         <div style="color:#888;font-size:12px;">${esc(a.service_name)}${a.staff_name ? " · " + esc(a.staff_name) : ""}</div>
@@ -386,7 +437,7 @@ async function sendOwnerDigest(owner: {
       ? `Je klanten krijgen automatisch een herinnering ${owner.reminderHours} uur van tevoren.`
       : `Your clients automatically get a reminder ${owner.reminderHours} ${owner.reminderHours === 1 ? "hour" : "hours"} in advance.`}</p>` : ""}
   </div>`;
-  const text = owner.appts.map((a) => `${(a.time || "").slice(0, 5)} — ${a.client_name} — ${a.service_name}${a.staff_name ? " (" + a.staff_name + ")" : ""}`).join("\n");
+  const text = owner.appts.map((a) => `${usTime((a.time || "").slice(0, 5), owner.country_code)} — ${a.client_name} — ${a.service_name}${a.staff_name ? " (" + a.staff_name + ")" : ""}`).join("\n");
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -525,6 +576,9 @@ serve(async (req) => {
         salon_email: p.salon_email || p.email || "",
         // Currency symbol so a Bonaire client's reminder shows $ not € (send-emails defaults to €).
         currency: curFor(p.country_code),
+        // Land en zone: send-emails en send-sms schrijven daarmee de VS-opmaak.
+        country_code: p.country_code || null,
+        timezone: p.timezone || null,
         // Vandaag volgens de klok van de salon. send-emails vergelijkt dit met
         // date en schrijft "vandaag", "morgen" of de datum zelf — die mail zei
         // altijd "morgen", terwijl reminder_hours 1 t/m 12 over vandaag gaat en
@@ -665,6 +719,7 @@ serve(async (req) => {
           lang: salonLangOf(p) === "nl" ? "nl" : "en",
           date: tomorrowStr,
           reminderHours: Number(p.reminder_hours) || 0,
+          country_code: p.country_code || null,
           appts,
         });
         if (ok) digests++;

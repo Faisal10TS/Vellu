@@ -94,6 +94,54 @@ const tzFor = (code?: string | null, tz?: string | null) => {
   return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
 };
 
+// VS-opmaak (fase 2, 15-11-2026), gelijk aan src/regionFormat.js: alleen een
+// salon in de VS (country_code "US") schrijft $1,234.50, 2:30 PM, 11/19/2026
+// en de maand eerst. Elk ander land krijgt precies wat hier al stond, ook
+// Bonaire met de dollar. Zelfde helpers (isUsCc, usAmt, usTime, usTimesIn,
+// usDateLoc, usNumDate) in elke edge-functie; samen wijzigen.
+const isUsCc = (cc?: unknown) => String(cc || "").toUpperCase() === "US";
+// Bedrag met symbool: VS "$1,234.50" en "-$12.50"; anders "€1.234,50" en "€-12,50".
+const usAmt = (sym: string, n: unknown, cc?: unknown) => {
+  const v = Number(n) || 0;
+  const [i, d] = Math.abs(v).toFixed(2).split(".");
+  const neg = v < 0 && Number(Math.abs(v).toFixed(2)) !== 0;
+  if (isUsCc(cc)) return (neg ? "-" : "") + (sym || "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + d;
+  return (sym || "") + (neg ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + d;
+};
+// Kloktijd "14:30" (of "9:00", "14:30:00") -> VS "2:30 PM"; 12:00 = "12:00 PM",
+// 00:00 en 24:00 = "12:00 AM". Buiten de VS, of als het geen kale kloktijd is,
+// ongewijzigd terug, zodat dubbel opmaken niets kapotmaakt.
+const usTime = (hm: unknown, cc?: unknown) => {
+  const s = hm == null ? "" : String(hm);
+  if (!isUsCc(cc)) return s;
+  const m = /^\s*(\d{1,2})[:.](\d{2})(?::\d{2})?\s*$/.exec(s);
+  if (!m) return s;
+  const h = Number(m[1]);
+  if (h > 24 || Number(m[2]) > 59) return s;
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 && h < 24 ? "PM" : "AM"}`;
+};
+// Kloktijden IN een tekst ("10:00 - 17:30", "om 9:00") -> VS 12-uurs; alleen
+// losse HH:MM die nog niet door AM/PM gevolgd worden. Anders ongewijzigd.
+const usTimesIn = (text: unknown, cc?: unknown) => {
+  const s = text == null ? "" : String(text);
+  if (!isUsCc(cc)) return s;
+  return s.replace(/(^|[^\d:.,/])([01]?\d|2[0-4]):([0-5]\d)(?![\d:]|\s?[AaPp]\.?\s?[Mm]\b)/g,
+    (_all: string, pre: string, h: string, mm: string) => pre + usTime(`${h}:${mm}`, cc));
+};
+// Locale voor toLocale*String en Intl.DateTimeFormat: VS nl-NL / es-US / en-US,
+// anders nl-NL / es-ES / en-GB.
+const usDateLoc = (lang: string, cc?: unknown) => isUsCc(cc)
+  ? (lang === "nl" ? "nl-NL" : lang === "es" ? "es-US" : "en-US")
+  : (lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB");
+// Kale datum "2026-11-19" -> VS "11/19/2026". Buiten de VS ongewijzigd terug:
+// daar tonen de pushmeldingen al de ISO-datum, en dat blijft zo.
+const usNumDate = (ymd: unknown, cc?: unknown) => {
+  const s = ymd == null ? "" : String(ymd);
+  if (!isUsCc(cc)) return s;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : s;
+};
+
 function tzOffsetMs(at: Date, tz: string) {
   try {
     const p: Record<string, string> = {};
@@ -136,7 +184,7 @@ function stylistenVan(a: any): string[] {
 // niemand een mail — "er is een plek vrij" voor iets wat er niet in past, of
 // bij een andere stylist, stuurt de klant voor niets naar de boekingspagina.
 // Zelfde regel als OwnerApp.notifyWaitlistSpot en prepay-watch.
-async function notifyWaitlist(appt: any, salonMeta: { name?: string; accent?: string; logo?: string; slug?: string; lang?: string }) {
+async function notifyWaitlist(appt: any, salonMeta: { name?: string; accent?: string; logo?: string; slug?: string; lang?: string; cc?: string | null }) {
   try {
     const ownerId = appt.owner_id;
     const date = appt.date;
@@ -190,6 +238,8 @@ async function notifyWaitlist(appt: any, salonMeta: { name?: string; accent?: st
           salon_accent: salonMeta.accent || "",
           salon_logo: salonMeta.logo || "",
           salon_slug: salonMeta.slug || "",
+          // Land van de salon: send-emails schrijft de datum dan in VS-opmaak.
+          country_code: salonMeta.cc || null,
           date,
           // De taal waarin de klant zich aanmeldde (waitlist.lang, sinds
           // 05-10-2026); oude rijen zonder taal: de markttaal van de salon.
@@ -213,7 +263,7 @@ async function notifyOwnerCancellation(b: {
   client_email?: string | null;
   date?: string; time?: string; reason?: string | null;
   staff_view_revenue?: boolean; staff_view_client_contact?: boolean;
-  owner_id?: string;
+  owner_id?: string; country_code?: string | null;
 }) {
   // Push-melding naar de eigenaar (sinds 2026-08-22, zie send-push-notification).
   // Los van de mail: geen abonnement = niets; een mislukte push raakt de
@@ -227,7 +277,7 @@ async function notifyOwnerCancellation(b: {
       body: JSON.stringify({
         user_id: b.owner_id,
         title: nl ? "Afspraak geannuleerd" : "Appointment cancelled",
-        body: `${b.client_name || ""} · ${b.date || ""} ${b.time || ""} · ${b.service_name || ""}`.trim(),
+        body: `${b.client_name || ""} · ${usNumDate(b.date || "", b.country_code)} ${usTime(b.time || "", b.country_code)} · ${b.service_name || ""}`.trim(),
         url: "/owner",
         tag: `cancel-${b.owner_id}-${b.date}-${b.time}`,
       }),
@@ -257,6 +307,7 @@ async function notifyOwnerCancellation(b: {
           date: b.date,
           time: b.time,
           reason: b.reason || "",
+          country_code: b.country_code || null,
           salon_name: b.salon_name || "",
           salon_accent: b.salon_accent || "",
           salon_logo: b.salon_logo || "",
@@ -280,6 +331,7 @@ async function notifyClientCancellation(b: {
   client_email?: string; client_phone?: string | null; owner_id?: string;
   salon_name?: string; salon_accent?: string; salon_logo?: string; lang?: string;
   salon_email?: string; service_name?: string; date?: string; time?: string;
+  country_code?: string | null;
 }) {
   const internalHeaders = { "Content-Type": "application/json", "x-internal-secret": SUPABASE_SERVICE_KEY };
   const base = {
@@ -296,6 +348,7 @@ async function notifyClientCancellation(b: {
     // (OwnerApp.cancelAppt), dan stuurt die "salon" en krijgt de klant een
     // andere tekst.
     cancelled_by: "client",
+    country_code: b.country_code || null,
     lang: b.lang || "nl",
   };
   try {
@@ -534,6 +587,7 @@ serve(async (req) => {
       date: appt.date,
       time: appt.time,
       reason: cleanReason,
+      country_code: cc,
     }),
     // Client-facing cancellation confirmation (email + SMS) — in the language
     // the CLIENT booked in (stored on the appointment row), falling back to
@@ -548,6 +602,7 @@ serve(async (req) => {
       salon_logo: notify.salon_logo,
       salon_email: notify.owner_email,
       lang: ["nl", "en", "es"].includes(appt.lang) ? appt.lang : notify.lang,
+      country_code: cc,
       service_name: appt.service_name,
       date: appt.date,
       time: appt.time,
@@ -560,6 +615,7 @@ serve(async (req) => {
           accent: notify.salon_accent,
           logo: notify.salon_logo,
           slug: salonSlug,
+          cc,
           lang: notify.lang,
         })
       : Promise.resolve(),
