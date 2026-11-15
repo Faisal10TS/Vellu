@@ -29,6 +29,11 @@ const NL_MARKETS = new Set(['NL', 'BE', 'AW', 'CW', 'SX', 'BQ']);
 // uitbreiden als er Spaanstalige landen bijkomen. De rest krijgt Engels.
 const ES_MARKETS = new Set(['ES']);
 const OG_LOCALES = { nl: 'nl_NL', en: 'en_US', es: 'es_ES' };
+// Vellu-plaatje voor een salon zonder eigen foto. index.html heeft sinds
+// 15-11-2026 het Engelse (v3); een salon uit een NL-markt houdt het
+// Nederlandse (v2), zodat haar voorbeeld helemaal Nederlands blijft.
+const OG_DEFAULT = { nl: 'https://www.vellu.cc/og-image-v2.png', other: 'https://www.vellu.cc/og-image-v3.png' };
+const defaultImage = (lang) => (lang === 'nl' ? OG_DEFAULT.nl : OG_DEFAULT.other);
 
 const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -115,6 +120,12 @@ function inject(html, m) {
     out = setTag(out, /<meta\s+name="twitter:image"[^>]*>/i, `<meta name="twitter:image" content="${esc(m.image)}" />`);
     // De vaste afmetingen horen bij og-image.png, niet bij de salonfoto.
     out = out.replace(/\s*<meta\s+property="og:image:(?:width|height)"[^>]*>/gi, '');
+  } else {
+    // Geen eigen foto: het Vellu-plaatje in de taal van de pagina (zelfde
+    // afmetingen, 1200x630, dus width/height blijven staan).
+    const img = defaultImage(m.lang);
+    out = setTag(out, /<meta\s+property="og:image"\s[^>]*>/i, `<meta property="og:image" content="${esc(img)}" />`);
+    out = setTag(out, /<meta\s+name="twitter:image"[^>]*>/i, `<meta name="twitter:image" content="${esc(img)}" />`);
   }
   return out;
 }
@@ -139,7 +150,7 @@ ${localeTags(lang).join('\n')}
 <meta property="og:url" content="${esc(u)}">
 <meta property="og:title" content="${esc(t)}">
 <meta property="og:description" content="${esc(d)}">
-<meta property="og:image" content="${esc((m && m.image) || 'https://www.vellu.cc/og-image-v2.png')}">
+<meta property="og:image" content="${esc((m && m.image) || (m ? defaultImage(lang) : OG_DEFAULT.other))}">
 </head>
 <body><a href="${esc(u)}">${esc(t)}</a></body>
 </html>`;
