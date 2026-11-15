@@ -80,8 +80,19 @@ const TZ_BY_COUNTRY: Record<string, string> = {
   CW: "America/Curacao",
   BQ: "America/Curacao",
   SX: "America/Curacao",
+  US: "America/New_York",
 };
-const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+// VS (15-11-2026): meerdere tijdzones, de salon kiest er een
+// (profiles.timezone). Telt alleen bij het eigen land; zelfde lijst als
+// US_TIMEZONES in shared.jsx en profiles_timezone_check (samen wijzigen).
+const SALON_TZS: Record<string, string[]> = {
+  US: ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"],
+};
+const tzFor = (code?: string | null, tz?: string | null) => {
+  const cc = String(code || "").toUpperCase();
+  if (tz && (SALON_TZS[cc] || []).includes(tz)) return tz;
+  return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
+};
 
 function tzOffsetMs(at: Date, tz: string) {
   try {
@@ -352,15 +363,17 @@ serve(async (req) => {
   // De annuleringstermijn moet op BEIDE paden gelden: wie de pagina al open had
   // staan vóór de grens, mag hem niet alsnog passeren met de knop.
   let cc = "NL";
+  let salonTz: string | null = null; // eigen tijdzone (VS), zie tzFor
   let deadlineHours = 0;
   let salonPhone: string | null = null;
   let salonNaam = "";
   let salonSlugPub = "";
   if (appt.owner_id) {
     const { data: o } = await supabase.from("profiles")
-      .select("country_code, cancel_deadline_hours, salon_phone, business_name, slug")
+      .select("country_code, timezone, cancel_deadline_hours, salon_phone, business_name, slug")
       .eq("id", appt.owner_id).maybeSingle();
     cc = o?.country_code || "NL";
+    salonTz = o?.timezone || null;
     deadlineHours = parseInt(String(o?.cancel_deadline_hours ?? 0)) || 0;
     salonPhone = o?.salon_phone || null;
     salonNaam = o?.business_name || "";
@@ -401,7 +414,7 @@ serve(async (req) => {
   // afspraak, dan blokkeren we bewust NIET: liever een annulering te veel dan
   // een klant die een geldige annulering nergens kwijt kan.
   if (deadlineHours > 0 && appt.date && appt.time) {
-    const startUtc = localToUtc(String(appt.date), String(appt.time), tzFor(cc));
+    const startUtc = localToUtc(String(appt.date), String(appt.time), tzFor(cc, salonTz));
     if (startUtc && Date.now() > startUtc.getTime() - deadlineHours * 3_600_000) {
       if (action === "check") {
         return json(200, {

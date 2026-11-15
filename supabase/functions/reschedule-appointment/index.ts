@@ -126,8 +126,19 @@ const TZ_BY_COUNTRY: Record<string, string> = {
   CW: "America/Curacao",
   BQ: "America/Curacao",
   SX: "America/Curacao",
+  US: "America/New_York",
 };
-const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+// VS (15-11-2026): meerdere tijdzones, de salon kiest er een
+// (profiles.timezone). Telt alleen bij het eigen land; zelfde lijst als
+// US_TIMEZONES in shared.jsx en profiles_timezone_check (samen wijzigen).
+const SALON_TZS: Record<string, string[]> = {
+  US: ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"],
+};
+const tzFor = (code?: string | null, tz?: string | null) => {
+  const cc = String(code || "").toUpperCase();
+  if (tz && (SALON_TZS[cc] || []).includes(tz)) return tz;
+  return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
+};
 
 function tzOffsetMs(at: Date, tz: string) {
   try {
@@ -244,7 +255,7 @@ serve(async (req) => {
 
   const { data: salon } = await supabase
     .from("profiles")
-    .select("business_hours, day_overrides, break_minutes, business_name, account_type, country_code, salon_lang, logo_url, accent_color, salon_email, email, slug, prepay_term_hours")
+    .select("business_hours, day_overrides, break_minutes, business_name, account_type, country_code, timezone, salon_lang, logo_url, accent_color, salon_email, email, slug, prepay_term_hours")
     .eq("id", callerId).maybeSingle();
   if (!salon) return err(404, "salon_not_found", origin);
 
@@ -468,7 +479,7 @@ serve(async (req) => {
   const oldDate = appt.date;
   const oldTime = String(appt.time || "").slice(0, 5);
   const datumOfTijdAnders = new_date !== oldDate || new_time !== oldTime;
-  const nieuweStart = localToUtc(new_date, new_time, tzFor(salon.country_code));
+  const nieuweStart = localToUtc(new_date, new_time, tzFor(salon.country_code, salon.timezone));
 
   const updatePayload: any = { date: new_date, time: new_time, rescheduled_at: new Date().toISOString() };
   if (new_staff_id !== undefined) updatePayload.staff_id = nieuweStylist;

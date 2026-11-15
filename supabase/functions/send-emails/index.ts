@@ -29,12 +29,15 @@ const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CUR_BY_COUNTRY={BQ:"$",AW:"Afl. ",CW:"XCG ",SX:"XCG ",GB:"£"};
 // Tijdzone per land, zelfde tabel als TZ_BY_COUNTRY in shared.jsx en de andere
 // edge-functies. Onbekend land = Amsterdam.
-const TZ_BY_COUNTRY={NL:"Europe/Amsterdam",BE:"Europe/Brussels",GB:"Europe/London",AW:"America/Curacao",CW:"America/Curacao",BQ:"America/Curacao",SX:"America/Curacao"};
-const tzFor=(cc)=>TZ_BY_COUNTRY[String(cc||"").toUpperCase()]||"Europe/Amsterdam";
+const TZ_BY_COUNTRY={NL:"Europe/Amsterdam",BE:"Europe/Brussels",GB:"Europe/London",AW:"America/Curacao",CW:"America/Curacao",BQ:"America/Curacao",SX:"America/Curacao",US:"America/New_York"};
+// VS (15-11-2026): de salon kiest een eigen zone (profiles.timezone, b.timezone);
+// telt alleen bij het eigen land. Zelfde lijst als US_TIMEZONES in shared.jsx.
+const SALON_TZS={US:["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"]};
+const tzFor=(cc,tz)=>{const c=String(cc||"").toUpperCase();if(tz&&(SALON_TZS[c]||[]).includes(tz))return tz;return TZ_BY_COUNTRY[c]||"Europe/Amsterdam";};
 // Kalenderdatum (YYYY-MM-DD) van een tijdstempel op de klok van de salon. Een
 // kale datum blijft zoals hij is. String(ts).slice(0,10) gaf de UTC-datum: een
 // proef die op Curaçao om 21:30 begon, "eindigde" in de mail een dag later.
-function localYmd(ts,cc){const s=String(ts||"");if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;const d=new Date(s);if(isNaN(d.getTime()))return s.slice(0,10);try{return new Intl.DateTimeFormat("en-CA",{timeZone:tzFor(cc),year:"numeric",month:"2-digit",day:"2-digit"}).format(d);}catch{return d.toISOString().slice(0,10);}}
+function localYmd(ts,cc,tz){const s=String(ts||"");if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;const d=new Date(s);if(isNaN(d.getTime()))return s.slice(0,10);try{return new Intl.DateTimeFormat("en-CA",{timeZone:tzFor(cc,tz),year:"numeric",month:"2-digit",day:"2-digit"}).format(d);}catch{return d.toISOString().slice(0,10);}}
 serve(async(req)=>{
 const origin=req.headers.get("origin");const headers=cors(origin);
 if(req.method==="OPTIONS")return new Response("ok",{headers});
@@ -144,7 +147,7 @@ const deny=(code,status=403)=>new Response(JSON.stringify({error:code}),{status,
 const enc=encodeURIComponent;
 const me=(await rest(`staff_members?user_id=eq.${enc(callerId)}&owner_id=neq.${enc(callerId)}&active=eq.true&select=id,owner_id,name,email,address,kvk_number,btw_id,iban,iban_holder,payment_link&limit=1`))?.[0]||null;
 const salonId=me?me.owner_id:callerId;
-const pr=(await rest(`profiles?id=eq.${enc(salonId)}&select=business_name,salon_email,email,logo_url,accent_color,slug,country_code,iban,iban_holder,payment_link,address,kvk_number,btw_id,invoice_profiles,show_logo_on_invoice,staff_view_client_contact,staff_view_revenue,staff_see_all,deactivated_at`))?.[0];
+const pr=(await rest(`profiles?id=eq.${enc(salonId)}&select=business_name,salon_email,email,logo_url,accent_color,slug,country_code,timezone,iban,iban_holder,payment_link,address,kvk_number,btw_id,invoice_profiles,show_logo_on_invoice,staff_view_client_contact,staff_view_revenue,staff_see_all,deactivated_at`))?.[0];
 if(!pr)return deny("no_salon");
 // Gedeactiveerde salon (23-10-2026): ook met een nog geldige login geen mails
 // meer vanuit de app.
@@ -160,6 +163,7 @@ b.salon_slug=pr.slug||"";
 b.salon_email=pr.salon_email||"";
 b.owner_email=pr.salon_email||pr.email||null;
 b.country_code=pr.country_code||"NL";
+b.timezone=pr.timezone||null;
 b.currency=CUR_BY_COUNTRY[String(pr.country_code||"").toUpperCase()]||"€";
 b.staff_view_client_contact=pr.staff_view_client_contact;
 b.staff_view_revenue=pr.staff_view_revenue;
@@ -527,7 +531,7 @@ const noVatNote=taxCharged?"":`<p style="color:#aaa;font-size:11px;text-align:ce
 // Factuurdatum op de klok van de SALON. Hier stond vast Europe/Amsterdam: een
 // factuur die een salon op Bonaire om 18:30 verstuurde, droeg de datum van
 // morgen (Amsterdam loopt zes uur voor).
-const invDate=fmtD(localYmd(new Date().toISOString(),b.country_code),lang);
+const invDate=fmtD(localYmd(new Date().toISOString(),b.country_code,b.timezone),lang);
 // Al (vooruit)betaald bedrag: aftrekken en alleen het restant vragen. Eén
 // factuur voor de hele behandeling, met de vooruitbetaling erop verrekend.
 const paidAmt=Math.max(0,parseFloat(b.amount_paid||0)||0);const openAmt=Math.round((gross-paidAmt)*100)/100;
@@ -615,7 +619,7 @@ await send(plainText(b.client_email),plainText(b.salon_name?txt(lang,`${b.salon_
 if(type==="renewal_reminder"){
 const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
 // Datum op de klok van de salon (country_code), niet de UTC-datum.
-const verlooptOp=b.plan_expires_at?fmtD(localYmd(b.plan_expires_at,b.country_code),oLang):"";
+const verlooptOp=b.plan_expires_at?fmtD(localYmd(b.plan_expires_at,b.country_code,b.timezone),oLang):"";
 await send(plainText(b.owner_email),
 plainText(txt(oLang,`Je Vellu-abonnement loopt bijna af`,`Your Vellu subscription is about to expire`,`Tu suscripción de Vellu está por vencer`)),
 `${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${txt(oLang,"Je abonnement loopt bijna af","Your subscription is about to expire","Tu suscripción está por vencer")}</h2>
@@ -628,14 +632,16 @@ plainText(txt(oLang,`Je Vellu-abonnement loopt bijna af`,`Your Vellu subscriptio
 // hun proef. Verstuurd door send-renewal-reminder (dagelijks, met dedupe).
 if(type==="trial_ending"||type==="trial_expired"){
 const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
-const eindigtOp=b.trial_ends_at?fmtD(localYmd(b.trial_ends_at,b.country_code),oLang):"";
+const eindigtOp=b.trial_ends_at?fmtD(localYmd(b.trial_ends_at,b.country_code,b.timezone),oLang):"";
 const dagen=parseInt(String(b.days_left??""))||0;
 const knop=`<p style="text-align:center;margin-bottom:28px;"><a href="https://vellu.cc/owner?tab=settings" style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;">${txt(oLang,"Plan kiezen","Choose a plan","Elegir un plan")}</a></p>`;
-// "(incl. btw)" alleen waar Vellu ook echt btw rekent. Bonaire, Aruba, Curaçao
-// en Sint Maarten vallen buiten het EU-btw-gebied: hun abonnementsfactuur heeft
-// geen btw-regel (OUTSIDE_EU_VAT in mollie-webhook), dus de proefmail mag dat
-// daar ook niet beloven. Zelfde lijst, zelfde terugval (geen land = NL).
-const exVat=["BQ","AW","CW","SX"].includes(String(b.country_code||"NL").toUpperCase());
+// "(incl. btw)" alleen waar Vellu ook echt btw rekent. Elk land buiten de EU
+// (de Caribische delen, sinds 15-11-2026 ook de VS) valt buiten het EU-btw-
+// gebied: die abonnementsfactuur heeft geen btw-regel (vatForCustomer in
+// mollie-webhook), dus de proefmail mag dat daar ook niet beloven. Zelfde regel,
+// zelfde terugval (geen land = NL); EU buiten NL krijgt daar nog 21%.
+const EU_LANDEN=["AT","BE","BG","CY","CZ","DE","DK","EE","ES","FI","FR","GR","HR","HU","IE","IT","LT","LU","LV","MT","NL","PL","PT","RO","SE","SI","SK"];
+const exVat=!EU_LANDEN.includes(String(b.country_code||"NL").toUpperCase());
 const prijzen=exVat
 ?txt(oLang,"Starter €19 of Professional €35 per maand; jaarlijks betaal je 10 maanden en krijg je er 2 gratis.","Starter €19 or Professional €35 per month; pay yearly and you get 2 months free.","Starter €19 o Professional €35 al mes; pagando anual, 2 meses gratis.")
 :txt(oLang,"Starter €19 of Professional €35 per maand (incl. btw); jaarlijks betaal je 10 maanden en krijg je er 2 gratis.","Starter €19 or Professional €35 per month (incl. VAT); pay yearly and you get 2 months free.","Starter €19 o Professional €35 al mes (IVA incl.); pagando anual, 2 meses gratis.");
@@ -663,9 +669,9 @@ if(type==="trial_autopay_on"||type==="trial_autopay_ending"||type==="trial_autop
 // is het 18:00 of 19:00 de avond ervoor, in Engeland 23:00. Alleen "vóór
 // <afschrijvingsdatum>" schrijven liet een Caribische salon na 18:00 nog op de
 // knop drukken en dan toch betalen.
-const offByTxt=(iso,cc,l)=>{const d=new Date(String(iso||""));if(isNaN(d.getTime()))return "";let hm="";try{hm=new Intl.DateTimeFormat("en-GB",{timeZone:tzFor(cc),hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(d);}catch{hm="";}const dt=fmtD(localYmd(d.toISOString(),cc),l);if(!hm||hm==="00:00")return txt(l,`vóór ${dt}`,`before ${dt}`,`antes del ${dt}`);return txt(l,`vóór ${dt} om ${hm}`,`before ${hm} on ${dt}`,`antes de las ${hm} del ${dt}`);};
+const offByTxt=(iso,cc,l,tz)=>{const d=new Date(String(iso||""));if(isNaN(d.getTime()))return "";let hm="";try{hm=new Intl.DateTimeFormat("en-GB",{timeZone:tzFor(cc,tz),hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(d);}catch{hm="";}const dt=fmtD(localYmd(d.toISOString(),cc,tz),l);if(!hm||hm==="00:00")return txt(l,`vóór ${dt}`,`before ${dt}`,`antes del ${dt}`);return txt(l,`vóór ${dt} om ${hm}`,`before ${hm} on ${dt}`,`antes de las ${hm} del ${dt}`);};
 const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
-const eindigtOp=esc(b.trial_ends_at?fmtD(localYmd(b.trial_ends_at,b.country_code),oLang):"");
+const eindigtOp=esc(b.trial_ends_at?fmtD(localYmd(b.trial_ends_at,b.country_code,b.timezone),oLang):"");
 // Kale datum: localYmd laat hem zoals hij is (Amsterdamse dag = Mollies dag).
 const chargeOp=esc(b.first_charge_date?fmtD(String(b.first_charge_date).slice(0,10),oLang):"");
 const bedrag=esc(fP(b.first_charge_amount));
@@ -675,7 +681,7 @@ const dagen=parseInt(String(b.days_left??""))||0;
 // Uiterste uitzetmoment op de klok van de salon (offByTxt). Oude aanroepers
 // zonder autopay_off_deadline: terugval op "vóór <afschrijvingsdatum>".
 const offIso=b.autopay_off_deadline||"";
-const offBy=offIso?esc(offByTxt(offIso,b.country_code,oLang)):txt(oLang,`vóór ${chargeOp}`,`before ${chargeOp}`,`antes del ${chargeOp}`);
+const offBy=offIso?esc(offByTxt(offIso,b.country_code,oLang,b.timezone)):txt(oLang,`vóór ${chargeOp}`,`before ${chargeOp}`,`antes del ${chargeOp}`);
 const offVoorbij=offIso?new Date(String(offIso)).getTime()<=Date.now():false;
 const pS=`style="color:#666;margin-bottom:12px;"`;
 const pL=`style="color:#666;margin-bottom:28px;"`;
@@ -751,7 +757,7 @@ const eB=esc(b.business_name||"");
 // NaN", en de zin stond er ook bij proeven die al lang voorbij waren ("je kunt
 // Vellu gewoon blijven gebruiken" terwijl het dashboard al op slot zat).
 const tEnd=b.trial_ends_at?new Date(String(b.trial_ends_at)).getTime():NaN;
-const trialDate=Number.isFinite(tEnd)&&tEnd>Date.now()?esc(fmtD(localYmd(b.trial_ends_at,b.country_code),oLang)):"";
+const trialDate=Number.isFinite(tEnd)&&tEnd>Date.now()?esc(fmtD(localYmd(b.trial_ends_at,b.country_code,b.timezone),oLang)):"";
 await send(plainText(b.owner_email),
 plainText(txt(oLang,"Je betaling is niet gelukt — er is niets afgeschreven","Your payment did not go through — nothing was charged","Tu pago no se completó — no se cobró nada")),
 `${W}${lH(b)}<h2 style="font-weight:400;font-size:22px;margin-bottom:8px;">${naProef?txt(oLang,"De eerste afschrijving na je proef is niet gelukt","The first charge after your trial did not go through","El primer cobro después de tu prueba no se completó"):txt(oLang,"De betaling is niet gelukt","The payment did not go through","El pago no se completó")}</h2>
@@ -775,7 +781,7 @@ const planName=b.plan==="professional"?"Vellu Professional":"Vellu Starter";
 const intervalLabel=b.billing_interval==="yearly"?txt(lang,"jaarlijks","yearly","anual"):txt(lang,"maandelijks","monthly","mensual");
 const total=parseFloat(b.amount||0);
 // Vellu's EIGEN abonnementsfactuur. Een klant buiten het EU-BTW-gebied
-// (Bonaire, Saba, Sint Eustatius, Aruba, Curacao, Sint Maarten) krijgt GEEN
+// (de Caribische delen van het Koninkrijk, sinds 15-11-2026 ook de VS) krijgt GEEN
 // Nederlandse BTW: de plaats van dienst ligt bij de afnemer (art. 6 lid 1 Wet
 // OB voor een ondernemer, art. 6h voor een elektronische dienst aan een
 // particulier). De BES-eilanden zijn staatsrechtelijk Nederland maar
@@ -793,9 +799,9 @@ const btwBuitenBereik = b.vat_rate === null;
 const exclVat=btwBuitenBereik?total:(b.amount_excl_vat?parseFloat(b.amount_excl_vat):+(total/1.21).toFixed(2));
 const vatAmount=btwBuitenBereik?null:(b.vat_amount?parseFloat(b.vat_amount):+(total-exclVat).toFixed(2));
 const geenBtwRegel=btwBuitenBereik?`<p style="color:#888;font-size:11px;line-height:1.6;margin:16px 0 0;">${txt(lang,
-  "Niet belast met Nederlandse btw: de plaats van dienst ligt in het land van de afnemer. Bonaire, Saba, Sint Eustatius, Aruba, Cura\u00e7ao en Sint Maarten vallen buiten het btw-gebied van de Europese Unie. Eventuele lokale belasting komt voor rekening van de afnemer.",
-  "Not subject to Dutch VAT: the place of supply is the customer's country. Bonaire, Saba, Sint Eustatius, Aruba, Cura\u00e7ao and Sint Maarten fall outside the VAT territory of the European Union. Any local tax is payable by the customer.",
-  "No sujeto al IVA neerland\u00e9s: el lugar de prestaci\u00f3n es el pa\u00eds del cliente. Bonaire, Saba, San Eustaquio, Aruba, Curazao y San Mart\u00edn quedan fuera del territorio del IVA de la Uni\u00f3n Europea. Cualquier impuesto local corre por cuenta del cliente.")}</p>`:"";
+  "Niet belast met Nederlandse btw: de plaats van dienst ligt in het land van de afnemer, en dat valt buiten het btw-gebied van de Europese Unie. Eventuele lokale belasting komt voor rekening van de afnemer.",
+  "Not subject to Dutch VAT: the place of supply is the customer's country, which falls outside the VAT territory of the European Union. Any local tax is payable by the customer.",
+  "No sujeto al IVA neerland\u00e9s: el lugar de prestaci\u00f3n es el pa\u00eds del cliente, que queda fuera del territorio del IVA de la Uni\u00f3n Europea. Cualquier impuesto local corre por cuenta del cliente.")}</p>`:"";
 const invoiceNum=esc(b.invoice_number||"");const ownerEmail=plainText(b.owner_email);const businessName=esc(b.business_name||ownerEmail);
 const periodStart=b.period_start?fmtD(String(b.period_start).slice(0,10),lang):"";const credits=parseInt(b.credits_used||0,10);
 // period_end is het einde van de TOEGANG: betaalde periode + referral-dagen

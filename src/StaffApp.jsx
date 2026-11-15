@@ -90,7 +90,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
   // "Vandaag" en "nu" op de klok van de SALON, niet op die van het toestel:
   // een medewerker van een Bonaire-salon met de telefoon nog op NL-tijd zag na
   // 20:00 de afspraken van morgen onder "Vandaag" (audit S1-24).
-  const salonToday = () => salonNow(salonProfile.country_code);
+  const salonToday = () => salonNow(salonProfile);
   // Betaalstand zoals staff_list_appointments hem meestuurt (pay_state) als
   // omzet verborgen is; hier uit een volledige rij (realtime, eigen insert).
   const payStateOf = (r) => {
@@ -308,7 +308,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
           // destructuring hieronder gelijk blijft. Gepagineerd (fetchAllRows;
           // de RPC sorteert op datum, id): PostgREST geeft per keer hooguit
           // 1000 rijen en een drukke salon met teamzicht zit daar snel boven.
-          fetchAllRows(() => supabase.rpc("staff_list_appointments", { p_from: windowStartFor(salonProfile.country_code) }))
+          fetchAllRows(() => supabase.rpc("staff_list_appointments", { p_from: windowStartFor(salonProfile) }))
             .then(r => ({ data: (r.data || []).sort((a, b) => String(b.date).localeCompare(String(a.date))), error: r.error })),
           supabase.from("services").select("*, service_variants(*), service_extras(*, staff_extra_exclusions(staff_id)), service_photos(*)").eq("owner_id", salonProfile.id),
           fetchAllRows(() => supabase.from("manual_clients").select("email, notes").eq("owner_id", salonProfile.id).not("notes", "is", null).order("id")),
@@ -465,7 +465,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
       // Zelfde RPC en venster als de hoofdlading — die stript serverzijde de
       // velden die deze medewerker niet mag zien. Ook gepagineerd.
       const { data, error } = await fetchAllRows(() => supabase.rpc("staff_list_appointments", {
-        p_from: windowStartFor(salonProfile.country_code),
+        p_from: windowStartFor(salonProfile),
       }));
       busy = false;
       if (!alive || error || !data) return;
@@ -597,7 +597,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     : s === "pending_payment" ? (lang === "nl" ? "Wacht op betaling" : lang === "es" ? "Pendiente de pago" : "Awaiting payment")
     : s;
   const fmtDueShort = (iso) => {
-    try { return new Date(iso).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: tzFor(salonProfile.country_code) }); }
+    try { return new Date(iso).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: tzFor(salonProfile) }); }
     catch { return String(iso || ""); }
   };
   // Alle wijzigingen aan afspraken lopen via de server (staff_update_appointment
@@ -823,7 +823,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
     const esc = (s) => String(s ?? "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
     const enc = new TextEncoder();
     const fold = (line) => { let out = "", len = 0; for (const ch of line) { const b = enc.encode(ch).length; if (len + b > 75) { out += "\r\n "; len = 1; } out += ch; len += b; } return out; };
-    const tz = tzFor(salonProfile.country_code);
+    const tz = tzFor(salonProfile);
     const stamp = fmtUTC(new Date());
     const icsStatus = (s) => s === "completed" ? "CONFIRMED" : (s === "cancelled" || s === "no_show" ? "CANCELLED" : "CONFIRMED");
     const events = apptList.map(a => {
@@ -1527,11 +1527,11 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                   description: `${a.service_name}\n${a.client_name}${showMoney ? `\n${fmtAmt(cur, a.service_price)}` : ""}`,
                   location: salonProfile.business_name || "",
                   // Tijdzone van de salon (ctz), niet die van het toestel (S1-24).
-                  tz: tzFor(salonProfile.country_code),
+                  tz: tzFor(salonProfile),
                 }), "_blank");
               }}><NavIcon name="calendar" size={13} color="currentColor" /></button>
               {showContact && phoneDigits && (
-                <a href={getWhatsAppUrl(a.client_phone, getWhatsAppReminderMsg(lang, { salonName: salonProfile.business_name, clientName: a.client_name, serviceName: a.service_name, date: a.date, time: a.time, countryCode: salonProfile.country_code }), salonProfile.country_code)} target="_blank" rel="noopener noreferrer"
+                <a href={getWhatsAppUrl(a.client_phone, getWhatsAppReminderMsg(lang, { salonName: salonProfile.business_name, clientName: a.client_name, serviceName: a.service_name, date: a.date, time: a.time, countryCode: salonProfile.country_code, timezone: salonProfile.timezone }), salonProfile.country_code)} target="_blank" rel="noopener noreferrer"
                   aria-label="WhatsApp" title="WhatsApp" style={{ ...icoon, border: "1px solid #25D36655", color: "#25a55c" }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/></svg>
                 </a>
@@ -3728,7 +3728,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                       // Landcode mee, zodat de vervaldatum in de tijdzone van de
                       // SALON valt en niet in die van het apparaat van de
                       // medewerker (die kan op reis of in een ander land zitten).
-                      const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time, salonProfile.country_code);
+                      const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time, salonProfile);
                       await sendEmails("booking_confirmation", {
                         appointment_id: appt.id,
                         client_name: addApptForm.client_name, client_email: email,

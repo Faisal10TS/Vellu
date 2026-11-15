@@ -23,7 +23,7 @@ const toMin = (hm) => Number(String(hm).slice(0, 2)) * 60 + Number(String(hm).sl
 const MAX_FILE = 10 * 1024 * 1024;
 const CHUNK = 100;
 
-export default function AfsprakenImport({ supabase, ownerId, lang = "nl", c, accent, cur = "€", countryCode, services = [], staff = [], existing = [], apptLang = "nl", toast, onClose, onImported, onUndone }) {
+export default function AfsprakenImport({ supabase, ownerId, lang = "nl", c, accent, cur = "€", countryCode, timezone = null, services = [], staff = [], existing = [], apptLang = "nl", toast, onClose, onImported, onUndone }) {
   const L = (nl, en, es) => (lang === "es" ? (es || en) : lang === "en" ? en : nl);
   const [phase, setPhase] = useState("pick"); // pick | review | saving | done
   const [fileName, setFileName] = useState("");
@@ -43,7 +43,7 @@ export default function AfsprakenImport({ supabase, ownerId, lang = "nl", c, acc
   const [result, setResult] = useState(null);   // { rows, manualIds, failed }
   const [undone, setUndone] = useState(false);
 
-  const now = salonNow(countryCode);
+  const now = salonNow(countryCode, timezone);
   const todayYmd = fmt(now);
   const nowHm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   const activeStaff = useMemo(() => (staff || []).filter((s) => s && s.active !== false), [staff]);

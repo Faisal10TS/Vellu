@@ -29,6 +29,7 @@ const MAPS_COUNTRY = {
   CW: { name: "Curaçao", seen: ["curacao", "korsou"] },
   AW: { name: "Aruba", seen: ["aruba"] },
   SX: { name: "Sint Maarten", seen: ["sint maarten", "st. maarten", "st maarten"] },
+  US: { name: "United States", seen: ["united states", "usa", "united states of america"] },
 };
 const foldMapsText = (s) => String(s || "").normalize("NFKC").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const hasMapsWord = (text, word) => {
@@ -1208,7 +1209,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   // bij een Bonaire-salon de hele middag voor NL-avondkijkers. De lokale
   // naam schaduwt bewust de oude import (hernoemd naar deviceNow), zodat
   // álle bestaande aanroepen in dit component automatisch salon-tijd rekenen.
-  const getToday = () => salonNow(initialSalon.country_code);
+  const getToday = () => salonNow(initialSalon);
   void deviceNow; // bewust ongebruikt — zie shadow hierboven
 
   // Booking window helpers (min/max advance)
@@ -2688,7 +2689,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     const latestStartMs = Date.now() + maxAdvanceDays * 24 * 60 * 60 * 1000;
     const limitDay = new Date(getToday());
     limitDay.setDate(limitDay.getDate() + maxAdvanceDays - 1);
-    const noonUtc = forDate >= fmt(limitDay) ? localToUtc(forDate, "12:00", tzFor(initialSalon.country_code)) : null;
+    const noonUtc = forDate >= fmt(limitDay) ? localToUtc(forDate, "12:00", tzFor(initialSalon)) : null;
 
     // Candidate start times follow the salon's own slot grid (owner setting,
     // default 30 min) instead of a hardcoded half-hour raster. Het raster
@@ -4283,7 +4284,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     const ids = Array.from(new Set(selectedServices.map(i => i.staff?.id).filter(Boolean)));
     const onlyStaff = ids.length === 1 ? selectedServices.find(i => i.staff?.id === ids[0]).staff : null;
     if (!initialSalon.payment_configured && onlyStaff?.has_pay !== true) return false;
-    const start = localToUtc(date, time, tzFor(initialSalon.country_code));
+    const start = localToUtc(date, time, tzFor(initialSalon));
     return !!start && start.getTime() - Date.now() >= 4 * 3600000 + 120000;
   };
   const prepayOffered = prepayAllowedNow();
@@ -4425,7 +4426,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     // las de tijd in de zone van het toestel, dus een NL-telefoon die een
     // Bonaire-salon boekte kreeg de afspraak 6 uur verschoven. Nu het echte
     // UTC-moment via localToUtc + tzFor, zoals book-appointment rekent.
-    const calTz = tzFor(initialSalon.country_code);
+    const calTz = tzFor(initialSalon);
     const calStart = localToUtc(date, time, calTz);
     const calEnd = calStart ? new Date(calStart.getTime() + getDuration() * 60000) : null;
     const stamp = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");

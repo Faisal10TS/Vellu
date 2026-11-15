@@ -103,8 +103,19 @@ const TZ_BY_COUNTRY: Record<string, string> = {
   CW: "America/Curacao",
   BQ: "America/Curacao",
   SX: "America/Curacao",
+  US: "America/New_York",
 };
-const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+// VS (15-11-2026): meerdere tijdzones, de salon kiest er een
+// (profiles.timezone). Telt alleen bij het eigen land; zelfde lijst als
+// US_TIMEZONES in shared.jsx en profiles_timezone_check (samen wijzigen).
+const SALON_TZS: Record<string, string[]> = {
+  US: ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"],
+};
+const tzFor = (code?: string | null, tz?: string | null) => {
+  const cc = String(code || "").toUpperCase();
+  if (tz && (SALON_TZS[cc] || []).includes(tz)) return tz;
+  return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
+};
 function salonToday(tz: string): string {
   try {
     return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -183,7 +194,7 @@ serve(async (req) => {
   // Resolve the salon. If it doesn't exist, do nothing (can't leak anything).
   const { data: salon } = await supabase
     .from("profiles")
-    .select("business_name, accent_color, logo_url, slug, salon_email, email, country_code, salon_lang, staff_view_revenue, staff_view_client_contact, waitlist_enabled, phone_required, max_advance_days, min_advance_hours, business_hours, day_overrides, account_type, deactivated_at")
+    .select("business_name, accent_color, logo_url, slug, salon_email, email, country_code, timezone, salon_lang, staff_view_revenue, staff_view_client_contact, waitlist_enabled, phone_required, max_advance_days, min_advance_hours, business_hours, day_overrides, account_type, deactivated_at")
     .eq("id", ownerId)
     .maybeSingle();
   if (!salon) return json(404, { error: "salon_not_found" }, origin);
@@ -198,7 +209,7 @@ serve(async (req) => {
 
   // Alleen dagen die de boekingspagina zelf aanbiedt: vandaag (salontijd) t/m
   // vandaag + max_advance_days.
-  const salonTz = tzFor(salon.country_code);
+  const salonTz = tzFor(salon.country_code, salon.timezone);
   const today = salonToday(salonTz);
   const lastDay = addDays(today, parseInt(salon.max_advance_days) || 60);
   let dates = datesIn.filter((d) => d >= today && d <= lastDay).sort();

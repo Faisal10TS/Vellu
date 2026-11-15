@@ -102,10 +102,22 @@ const esc = (s: unknown) => String(s ?? "")
 const TZ_BY_COUNTRY: Record<string, string> = {
   NL: "Europe/Amsterdam", BE: "Europe/Brussels", GB: "Europe/London",
   AW: "America/Curacao", CW: "America/Curacao", BQ: "America/Curacao", SX: "America/Curacao",
+  US: "America/New_York",
 };
-const salonToday = (country: string | null) => {
+// VS (15-11-2026): meerdere tijdzones, de salon kiest er een
+// (profiles.timezone). Telt alleen bij het eigen land; zelfde lijst als
+// US_TIMEZONES in shared.jsx en profiles_timezone_check (samen wijzigen).
+const SALON_TZS: Record<string, string[]> = {
+  US: ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"],
+};
+const tzFor = (code?: string | null, tz?: string | null) => {
+  const cc = String(code || "").toUpperCase();
+  if (tz && (SALON_TZS[cc] || []).includes(tz)) return tz;
+  return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
+};
+const salonToday = (country: string | null, tz?: string | null) => {
   try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: TZ_BY_COUNTRY[country || ""] || "Europe/Amsterdam", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tzFor(country, tz), year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   } catch { return new Date().toISOString().slice(0, 10); }
 };
 
@@ -186,7 +198,7 @@ serve(async (req) => {
 async function verwerk(slug: string, email: string, reqLang: unknown) {
   const { data: salon } = await supabase
     .from("profiles")
-    .select("id, business_name, slug, accent_color, country_code, salon_lang, deactivated_at")
+    .select("id, business_name, slug, accent_color, country_code, timezone, salon_lang, deactivated_at")
     .eq("slug", slug)
     .maybeSingle();
   if (!salon) return;
@@ -211,7 +223,7 @@ async function verwerk(slug: string, email: string, reqLang: unknown) {
 
   // Geweest bezoeken: datum vóór vandaag in de tijdzone van de salon, status
   // completed of confirmed (zoals send-followups). Jongste eerst.
-  const todayStr = salonToday(salon.country_code);
+  const todayStr = salonToday(salon.country_code, salon.timezone);
   const { data: appts, error: apptErr } = await supabase
     .from("appointments")
     .select("id, date, time, service_name, client_name, client_email, lang, status, is_sale, service_id, service_duration, products")

@@ -5,7 +5,7 @@ import SupportChat from "./SupportChat.jsx";
 import {
   useTheme, useSEO, ACCENT, T, COUNTRIES, currencyForCountry, taxForCountry, Layout, NavIcon, LangToggle, ThemeToggle, Header, PlanCompareTable,
   AT, AT_COLORS, AT_RADIUS, AtelierSkin, readableAccent, accentEdge, storedRef, useReferralPromo, rewardLabel, promoEndLabel,
-  fetchAllRows, fmtAmt, RESERVED_SLUGS
+  fetchAllRows, fmtAmt, RESERVED_SLUGS, US_TIMEZONES, guessUsTimezone
 } from "./shared.jsx";
 
 function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {} }) {
@@ -1589,7 +1589,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   // persists the session (localStorage) — this flag only controls whether we
   // reuse the email locally on the next visit.
   const rememberedEmail = typeof window !== "undefined" ? (localStorage.getItem("vellu_remember_email") || "") : "";
-  const [form, setForm] = useState({ email: rememberedEmail, password: "", businessName: "", slug: "", city: "", countryCode: "NL", accountType: "joint", referralCode: effRef });
+  const [form, setForm] = useState({ email: rememberedEmail, password: "", businessName: "", slug: "", city: "", countryCode: "NL", timezone: "", accountType: "joint", referralCode: effRef });
   const [rememberMe, setRememberMe] = useState(!!rememberedEmail);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1624,6 +1624,11 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
   const handle = async () => {
     if (!form.email || !form.password) { setError(t.fillAllFields); return; }
     if (mode === "signup" && !inviteSignup && !form.businessName) { setError(t.fillBusinessName); return; }
+    // VS: meerdere tijdzones, dus de salon moet er een kiezen (15-11-2026).
+    if (mode === "signup" && !inviteSignup && form.countryCode === "US" && !form.timezone) {
+      setError(lang === "nl" ? "Kies de tijdzone van je salon." : lang === "es" ? "Elige la zona horaria de tu salón." : "Choose your salon's time zone.");
+      return;
+    }
     setLoading(true);
     setError("");
 
@@ -1696,6 +1701,9 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
         slug: slug,
         city: form.city || "Nederland",
         country_code: form.countryCode || "NL",
+        // Alleen voor de VS (profiles_timezone_check); andere landen sturen de
+        // kolom niet eens mee.
+        ...(form.countryCode === "US" && form.timezone ? { timezone: form.timezone } : {}),
         // De taal die de salon in het formulier koos (= de paginataal).
         salon_lang: ["nl", "en", "es"].includes(lang) ? lang : null,
         accent_color: "#c9a96e",
@@ -1883,7 +1891,7 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                     <select
                       className="input-field"
                       value={form.countryCode}
-                      onChange={e => setForm(f => ({...f, countryCode: e.target.value}))}
+                      onChange={e => { const v = e.target.value; setForm(f => ({ ...f, countryCode: v, timezone: v === "US" ? (f.timezone || guessUsTimezone()) : "" })); }}
                       aria-label={lang === "nl" ? "Land / regio" : lang === "es" ? "País / región" : "Country / region"}
                       style={{ appearance: "none", cursor: "pointer", paddingRight: 40, width: "100%" }}
                     >
@@ -1904,6 +1912,36 @@ function OwnerAuth({ onLogin, onBack, lang, setLang }) {
                       : <>Sets your <strong style={{ color: c.text }}>currency and tax</strong>: {currencyForCountry(form.countryCode).symbol.trim()} · {taxForCountry(form.countryCode).label}. Changeable later in Settings.</>}
                   </div>
                 </div>
+                {/* Tijdzone (VS, 15-11-2026): verplicht, want het land heeft er
+                    meerdere. Alvast ingevuld met de klok van dit apparaat als
+                    die Amerikaans is (guessUsTimezone). */}
+                {form.countryCode === "US" && (
+                  <div data-signup-tz>
+                    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel, marginBottom: 8 }}>{lang === "nl" ? "Tijdzone" : lang === "es" ? "Zona horaria" : "Time zone"}</div>
+                    <div style={{ position: "relative" }}>
+                      <select
+                        className="input-field"
+                        value={form.timezone}
+                        onChange={e => { const v = e.target.value; setForm(f => ({ ...f, timezone: v })); }}
+                        aria-label={lang === "nl" ? "Tijdzone" : lang === "es" ? "Zona horaria" : "Time zone"}
+                        style={{ appearance: "none", cursor: "pointer", paddingRight: 40, width: "100%" }}
+                      >
+                        <option value="" disabled style={{ background: c.selectBg, color: c.text }}>{lang === "nl" ? "Kies je tijdzone" : lang === "es" ? "Elige tu zona horaria" : "Choose your time zone"}</option>
+                        {US_TIMEZONES.map(z => (
+                          <option key={z.id} value={z.id} style={{ background: c.selectBg, color: c.text }}>{z[lang] || z.en}</option>
+                        ))}
+                      </select>
+                      <div style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: c.textLabel, fontSize: 12 }}>▾</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>
+                      {lang === "nl"
+                        ? "Je boekingspagina, agenda en herinneringen volgen deze klok."
+                        : lang === "es"
+                        ? "Tu página de reservas, agenda y recordatorios siguen este reloj."
+                        : "Your booking page, calendar and reminders follow this clock."}
+                    </div>
+                  </div>
+                )}
                 {/* Taal (12-11-2026): de salon kiest zelf. Dezelfde keuze als de
                     taalknop rechtsboven, dus de pagina schakelt mee; bij het
                     aanmelden gaat hij als profiles.salon_lang mee. Voorheen volgde

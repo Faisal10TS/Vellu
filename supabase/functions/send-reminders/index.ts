@@ -109,8 +109,19 @@ const TZ_BY_COUNTRY: Record<string, string> = {
   CW: "America/Curacao",
   BQ: "America/Curacao",
   SX: "America/Curacao",
+  US: "America/New_York",
 };
-const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+// VS (15-11-2026): meerdere tijdzones, de salon kiest er een
+// (profiles.timezone). Telt alleen bij het eigen land; zelfde lijst als
+// US_TIMEZONES in shared.jsx en profiles_timezone_check (samen wijzigen).
+const SALON_TZS: Record<string, string[]> = {
+  US: ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"],
+};
+const tzFor = (code?: string | null, tz?: string | null) => {
+  const cc = String(code || "").toUpperCase();
+  if (tz && (SALON_TZS[cc] || []).includes(tz)) return tz;
+  return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
+};
 
 // Offset van een tijdzone op een concreet moment, in ms. Bewust via Intl en niet
 // via een vaste tabel met uren: Amsterdam is +1 in de winter en +2 in de zomer,
@@ -423,7 +434,7 @@ serve(async (req) => {
 
     const { data: appointments, error } = await supabase
       .from("appointments")
-      .select("*, profiles!owner_id(business_name, slug, accent_color, logo_url, email, salon_email, country_code, salon_lang, reminder_hours, deactivated_at)")
+      .select("*, profiles!owner_id(business_name, slug, accent_color, logo_url, email, salon_email, country_code, timezone, salon_lang, reminder_hours, deactivated_at)")
       .gte("date", todayStr)
       .lte("date", horizonStr)
       .eq("status", "confirmed")
@@ -468,7 +479,7 @@ serve(async (req) => {
       // komen — de klant kreeg om 10:00 UTC nog een herinnering terwijl hij al in
       // de stoel zat. Op Bonaire (UTC-4) kantelt dezelfde fout de andere kant op:
       // daar leek 08:00 lokaal al voorbij en bleef de herinnering juist uit.
-      const tz = tzFor(p.country_code);
+      const tz = tzFor(p.country_code, p.timezone);
       const start = localToUtc(apt.date, String(apt.time || "").slice(0, 5), tz);
       if (!start) continue;
       // Al begonnen of voorbij: een herinnering heeft geen zin meer.
@@ -609,7 +620,7 @@ serve(async (req) => {
       const todayUtcStr = now.toISOString().split("T")[0];
       const { data: dayAppts } = await supabase
         .from("appointments")
-        .select("owner_id, time, client_name, service_name, staff_name, profiles!owner_id(business_name, email, salon_email, country_code, salon_lang, reminder_hours, deactivated_at)")
+        .select("owner_id, time, client_name, service_name, staff_name, profiles!owner_id(business_name, email, salon_email, country_code, timezone, salon_lang, reminder_hours, deactivated_at)")
         .eq("date", tomorrowStr)
         .eq("status", "confirmed")
         .is("cancelled_at", null);
@@ -625,6 +636,11 @@ serve(async (req) => {
         // Gedeactiveerde salon (23-10-2026): geen agenda-mail aan de eigenaar,
         // en ook geen salon_digest_log-rij — overslaan vóór de claim.
         if (appts[0].profiles?.deactivated_at) continue;
+        // Hawaï (UTC-10, 15-11-2026) staat om 09:00 UTC nog op gisteren, en dan
+        // zou "morgen" overmorgen zijn. Zo'n salon wacht op de run van 10:00
+        // UTC (middernacht daar): de claim hieronder is per UTC-dag.
+        const pz = appts[0].profiles || {};
+        if (localDateStr(now, tzFor(pz.country_code, pz.timezone)) !== todayUtcStr) continue;
         // Claim eerst de rij; ignoreDuplicates + select() gedraagt zich als
         // "insert … on conflict do nothing returning": bestond de rij al
         // (eerdere run vandaag), dan komt er een lege lijst terug en zwijgen

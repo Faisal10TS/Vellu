@@ -57,8 +57,19 @@ const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
 const TZ_BY_COUNTRY: Record<string, string> = {
   NL: "Europe/Amsterdam", BE: "Europe/Brussels", GB: "Europe/London",
   AW: "America/Curacao", CW: "America/Curacao", BQ: "America/Curacao", SX: "America/Curacao",
+  US: "America/New_York",
 };
-const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+// VS (15-11-2026): meerdere tijdzones, de salon kiest er een
+// (profiles.timezone). Telt alleen bij het eigen land; zelfde lijst als
+// US_TIMEZONES in shared.jsx en profiles_timezone_check (samen wijzigen).
+const SALON_TZS: Record<string, string[]> = {
+  US: ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"],
+};
+const tzFor = (code?: string | null, tz?: string | null) => {
+  const cc = String(code || "").toUpperCase();
+  if (tz && (SALON_TZS[cc] || []).includes(tz)) return tz;
+  return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
+};
 // Salontijd → UTC, letterlijk dezelfde helpers als book-/cancel-appointment.
 function tzOffsetMs(at: Date, tz: string) {
   try {
@@ -118,7 +129,7 @@ const sendMail = (type: string, booking: Record<string, unknown>) =>
     .then(async (r) => { if (!r.ok) console.error(`send-emails ${type} → ${r.status}`, await r.text().catch(() => "")); })
     .catch((e) => console.error(`send-emails ${type} failed:`, e));
 
-const SELECT = "id, owner_id, date, time, service_name, service_price, service_duration, client_name, client_email, client_phone, lang, payment_due_at, created_at, staff_id, staff_assignments, service_breakdown, profiles(business_name, slug, accent_color, logo_url, salon_email, email, country_code, salon_lang, iban, iban_holder, payment_link, staff_view_client_contact, waitlist_enabled, deactivated_at)";
+const SELECT = "id, owner_id, date, time, service_name, service_price, service_duration, client_name, client_email, client_phone, lang, payment_due_at, created_at, staff_id, staff_assignments, service_breakdown, profiles(business_name, slug, accent_color, logo_url, salon_email, email, country_code, timezone, salon_lang, iban, iban_holder, payment_link, staff_view_client_contact, waitlist_enabled, deactivated_at)";
 
 // Betaalgegevens van een reservering (Esther/TTNB 25-09-2026): staat er precies
 // één teamlid op en heeft zij eigen IBAN/betaallink, dan haar rekening — anders
@@ -143,7 +154,7 @@ function baseOf(a: any) {
   return {
     lang,
     oLang: ownerLang(p),
-    tz: tzFor(cc),
+    tz: tzFor(cc, p.timezone),
     booking: {
       client_name: a.client_name,
       client_email: a.client_email,
@@ -261,7 +272,7 @@ serve(async (req) => {
       // Gedeactiveerde salon (23-10-2026): reservering blijft onaangeroerd staan
       // — niet annuleren, geen mails/push, geen wachtlijst.
       if (a.profiles?.deactivated_at) return false;
-      const start = a.date && a.time ? localToUtc(String(a.date), String(a.time).slice(0, 5), tzFor(a.profiles?.country_code)) : null;
+      const start = a.date && a.time ? localToUtc(String(a.date), String(a.time).slice(0, 5), tzFor(a.profiles?.country_code, a.profiles?.timezone)) : null;
       return !(start && new Date(a.payment_due_at).getTime() >= start.getTime());
     }).slice(0, MAX_PER_RUN);
     for (const a of expired) {

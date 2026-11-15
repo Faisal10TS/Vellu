@@ -90,8 +90,19 @@ const TZ_BY_COUNTRY: Record<string, string> = {
   CW: "America/Curacao",
   BQ: "America/Curacao",
   SX: "America/Curacao",
+  US: "America/New_York",
 };
-const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+// VS (15-11-2026): meerdere tijdzones, de salon kiest er een
+// (profiles.timezone). Telt alleen bij het eigen land; zelfde lijst als
+// US_TIMEZONES in shared.jsx en profiles_timezone_check (samen wijzigen).
+const SALON_TZS: Record<string, string[]> = {
+  US: ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"],
+};
+const tzFor = (code?: string | null, tz?: string | null) => {
+  const cc = String(code || "").toUpperCase();
+  if (tz && (SALON_TZS[cc] || []).includes(tz)) return tz;
+  return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
+};
 
 function tzOffsetMs(at: Date, tz: string) {
   try {
@@ -258,7 +269,7 @@ serve(async (req) => {
   // ---------- 1. Look up salon ----------
   const { data: salon, error: salonErr } = await supabase
     .from("profiles")
-    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, iban_holder, payment_link, prepay_enabled, prepay_term_hours, country_code, salon_lang, plan, staff_view_revenue, staff_view_client_contact, auto_block_no_show_threshold, cancel_deadline_hours, deactivated_at")
+    .select("id, business_name, email, salon_email, owner_name, business_hours, day_overrides, min_advance_hours, max_advance_days, break_minutes, phone_required, discount_codes, booking_policy, account_type, accent_color, logo_url, address, kvk_number, btw_id, btw_rate, iban, iban_holder, payment_link, prepay_enabled, prepay_term_hours, country_code, timezone, salon_lang, plan, staff_view_revenue, staff_view_client_contact, auto_block_no_show_threshold, cancel_deadline_hours, deactivated_at")
     .eq("slug", salon_slug)
     .maybeSingle();
   if (salonErr || !salon) return err(404, "salon_not_found", origin);
@@ -770,7 +781,7 @@ serve(async (req) => {
   // elk zelfde-dag-slot binnen vier uur op too_soon, zelfs met min_advance_hours
   // op 0. Omrekenen via de tijdzone van het land van de salon lost dat op en
   // houdt tegelijk rekening met de zomertijdwissel van de NL/BE-salons.
-  const salonTz = tzFor(salon.country_code);
+  const salonTz = tzFor(salon.country_code, salon.timezone);
   const apptStart = localToUtc(date, time, salonTz);
   if (!apptStart) return err(400, "invalid_datetime", origin);
   const minAdvanceMs = (salon.min_advance_hours || 0) * 60 * 60 * 1000;

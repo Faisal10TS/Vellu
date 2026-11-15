@@ -134,13 +134,23 @@ const fN = (p: unknown) => {
 };
 // Tijdzone per land, zelfde tabel als TZ_BY_COUNTRY in shared.jsx en
 // send-emails. Onbekend land = Amsterdam.
-const TZ_BY_COUNTRY: Record<string, string> = { NL: "Europe/Amsterdam", BE: "Europe/Brussels", GB: "Europe/London", AW: "America/Curacao", CW: "America/Curacao", BQ: "America/Curacao", SX: "America/Curacao" };
-const tzFor = (cc: unknown) => TZ_BY_COUNTRY[String(cc || "").toUpperCase()] || "Europe/Amsterdam";
+const TZ_BY_COUNTRY: Record<string, string> = { NL: "Europe/Amsterdam", BE: "Europe/Brussels", GB: "Europe/London", AW: "America/Curacao", CW: "America/Curacao", BQ: "America/Curacao", SX: "America/Curacao", US: "America/New_York" };
+// VS (15-11-2026): meerdere tijdzones, de salon kiest er een
+// (profiles.timezone). Telt alleen bij het eigen land; zelfde lijst als
+// US_TIMEZONES in shared.jsx en profiles_timezone_check (samen wijzigen).
+const SALON_TZS: Record<string, string[]> = {
+  US: ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"],
+};
+const tzFor = (code?: unknown, tz?: string | null) => {
+  const cc = String(code || "").toUpperCase();
+  if (tz && (SALON_TZS[cc] || []).includes(tz)) return tz;
+  return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
+};
 // Uiterste uitzetmoment (begin van de afschrijvingsdag in Amsterdam) op de klok
 // van de salon, voor de push: "vóór 25 oktober" in Nederland, "vóór 24 oktober
 // 18:00" op Bonaire. Zelfde regel als offByTxt in send-emails.
-const pushOffBy = (deadline: Date, cc: unknown, lang: string) => {
-  const tz = tzFor(cc);
+const pushOffBy = (deadline: Date, cc: unknown, lang: string, ownTz?: string | null) => {
+  const tz = tzFor(cc, ownTz);
   const hm = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(deadline);
   const dag = new Intl.DateTimeFormat(lang === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "long", timeZone: tz }).format(deadline);
   if (hm === "00:00") return lang === "nl" ? `vóór ${dag}` : `before ${dag}`;
@@ -198,7 +208,7 @@ serve(async (req) => {
     const grens = new Date(nu.getTime() + DAGEN_VOORAF * DAY_MS);
     const { data: jaar, error: e1 } = await supabase
       .from("profiles")
-      .select("id, business_name, email, country_code, salon_lang, plan, billing_interval, plan_expires_at, subscription_status, mollie_subscription_id, cancel_at_period_end")
+      .select("id, business_name, email, country_code, timezone, salon_lang, plan, billing_interval, plan_expires_at, subscription_status, mollie_subscription_id, cancel_at_period_end")
       .eq("billing_interval", "yearly")
       .eq("subscription_status", "active")
       .is("mollie_subscription_id", null)   // alleen eenmalige jaarbetalers, geen machtiging
@@ -214,7 +224,7 @@ serve(async (req) => {
       if (!(await claim(s.id, s.plan_expires_at, "renewal"))) continue;
       try {
         await mail("renewal_reminder", {
-          owner_email: s.email, owner_id: s.id, owner_lang: langOf(s), country_code: s.country_code || "NL",
+          owner_email: s.email, owner_id: s.id, owner_lang: langOf(s), country_code: s.country_code || "NL", timezone: s.timezone || null,
           business_name: s.business_name, salon_name: s.business_name,
           plan: s.plan || "professional", plan_expires_at: s.plan_expires_at,
         });
@@ -226,7 +236,7 @@ serve(async (req) => {
     const proefGrens = new Date(nu.getTime() + PROEF_DAGEN_VOORAF * DAY_MS);
     const { data: bijna, error: e2 } = await supabase
       .from("profiles")
-      .select("id, business_name, email, country_code, salon_lang, plan, trial_ends_at, subscription_status, mollie_subscription_id")
+      .select("id, business_name, email, country_code, timezone, salon_lang, plan, trial_ends_at, subscription_status, mollie_subscription_id")
       .eq("subscription_status", "trialing")
       .is("mollie_subscription_id", null)
       .not("trial_ends_at", "is", null)
@@ -240,7 +250,7 @@ serve(async (req) => {
       const daysLeft = Math.max(1, Math.ceil((new Date(s.trial_ends_at).getTime() - nu.getTime()) / DAY_MS));
       try {
         await mail("trial_ending", {
-          owner_email: s.email, owner_id: s.id, owner_lang: langOf(s), country_code: s.country_code || "NL",
+          owner_email: s.email, owner_id: s.id, owner_lang: langOf(s), country_code: s.country_code || "NL", timezone: s.timezone || null,
           business_name: s.business_name, salon_name: s.business_name,
           plan: s.plan || "starter", trial_ends_at: s.trial_ends_at, days_left: daysLeft,
         });
@@ -253,7 +263,7 @@ serve(async (req) => {
     // dan dekt sectie 3b die dag.
     const { data: apBijna, error: e2b } = await supabase
       .from("profiles")
-      .select("id, business_name, email, country_code, salon_lang, plan, trial_ends_at, subscription_status, mollie_subscription_id, referral_credit_days")
+      .select("id, business_name, email, country_code, timezone, salon_lang, plan, trial_ends_at, subscription_status, mollie_subscription_id, referral_credit_days")
       .eq("subscription_status", "trialing")
       .not("mollie_subscription_id", "is", null)
       .not("trial_ends_at", "is", null)
@@ -275,11 +285,11 @@ serve(async (req) => {
       // in de mail, en die staat ook op haar klok. 0 = vandaag. De klok-
       // berekening van sectie 2 zei "over 2 dagen" bij een proef die morgen om
       // 21:00 afloopt.
-      const tz = tzFor(s.country_code);
+      const tz = tzFor(s.country_code, s.timezone);
       const daysLeft = Math.max(0, Math.round((Date.parse(ymdIn(tz, new Date(String(s.trial_ends_at))) + "T12:00:00Z") - Date.parse(ymdIn(tz, nu) + "T12:00:00Z")) / DAY_MS));
       try {
         await mail("trial_autopay_ending", {
-          owner_email: s.email, owner_id: s.id, owner_lang: lang, country_code: s.country_code || "NL",
+          owner_email: s.email, owner_id: s.id, owner_lang: lang, country_code: s.country_code || "NL", timezone: s.timezone || null,
           business_name: s.business_name, salon_name: s.business_name,
           plan, trial_ends_at: s.trial_ends_at, days_left: daysLeft,
           first_charge_date: chargeYmd, first_charge_amount: amount,
@@ -291,7 +301,7 @@ serve(async (req) => {
       try {
         const datum = pushDate(chargeYmd, lang);
         const bedrag = "€" + fN(amount);
-        const uiterlijk = pushOffBy(offDeadline, s.country_code, lang);
+        const uiterlijk = pushOffBy(offDeadline, s.country_code, lang, s.timezone);
         await push(
           s.id,
           lang === "nl" ? "Je proefperiode eindigt bijna" : "Your trial is almost over",
@@ -305,7 +315,7 @@ serve(async (req) => {
     const proefTerug = new Date(nu.getTime() - PROEF_VENSTER_NA_DAGEN * DAY_MS);
     const { data: voorbij, error: e3 } = await supabase
       .from("profiles")
-      .select("id, business_name, email, country_code, salon_lang, plan, trial_ends_at, subscription_status, mollie_subscription_id")
+      .select("id, business_name, email, country_code, timezone, salon_lang, plan, trial_ends_at, subscription_status, mollie_subscription_id")
       .eq("subscription_status", "trialing")
       .is("mollie_subscription_id", null)
       .not("trial_ends_at", "is", null)
@@ -319,7 +329,7 @@ serve(async (req) => {
       const lang = langOf(s);
       try {
         await mail("trial_expired", {
-          owner_email: s.email, owner_id: s.id, owner_lang: lang, country_code: s.country_code || "NL",
+          owner_email: s.email, owner_id: s.id, owner_lang: lang, country_code: s.country_code || "NL", timezone: s.timezone || null,
           business_name: s.business_name, salon_name: s.business_name,
           plan: s.plan || "starter", trial_ends_at: s.trial_ends_at, days_left: 0,
         });
@@ -370,7 +380,7 @@ serve(async (req) => {
     // actief en krijgt alleen de factuurmail; zo bedoeld.
     const { data: apVandaag, error: e3b } = await supabase
       .from("profiles")
-      .select("id, business_name, email, country_code, salon_lang, plan, trial_ends_at, subscription_status, mollie_subscription_id, referral_credit_days")
+      .select("id, business_name, email, country_code, timezone, salon_lang, plan, trial_ends_at, subscription_status, mollie_subscription_id, referral_credit_days")
       .eq("subscription_status", "trialing")
       .not("mollie_subscription_id", "is", null)
       .not("trial_ends_at", "is", null)
@@ -389,7 +399,7 @@ serve(async (req) => {
       const amount = PLAN_PRICES[plan].monthly;
       try {
         await mail("trial_autopay_today", {
-          owner_email: s.email, owner_id: s.id, owner_lang: lang, country_code: s.country_code || "NL",
+          owner_email: s.email, owner_id: s.id, owner_lang: lang, country_code: s.country_code || "NL", timezone: s.timezone || null,
           business_name: s.business_name, salon_name: s.business_name,
           plan, trial_ends_at: s.trial_ends_at, days_left: 0,
           first_charge_date: vandaagAms, first_charge_amount: amount,

@@ -516,10 +516,53 @@ const TZ_BY_COUNTRY = {
   CW: "America/Curacao",
   BQ: "America/Curacao",
   SX: "America/Curacao",
+  // VS zonder eigen keuze: Eastern (de meeste inwoners). Een Amerikaanse salon
+  // kiest zelf (profiles.timezone, zie US_TIMEZONES).
+  US: "America/New_York",
 };
-// Onbekend of ontbrekend land valt terug op Amsterdam, net als tzFor() in de
-// edge-functies — de meeste salons staan in Nederland.
-const tzFor = (code) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+// Landen met meer dan één tijdzone: de salon kiest er zelf een
+// (profiles.timezone, 15-11-2026). Zelfde lijst als de check-constraint
+// profiles_timezone_check en SALON_TZS in de edge-functies; samen wijzigen.
+// Arizona apart: geen zomertijd (behalve het Navajo-gebied).
+const US_TIMEZONES = [
+  { id: "America/New_York",    nl: "Eastern (New York, Miami, Atlanta)",      en: "Eastern (New York, Miami, Atlanta)",      es: "Este (Nueva York, Miami, Atlanta)" },
+  { id: "America/Chicago",     nl: "Central (Chicago, Houston, Dallas)",      en: "Central (Chicago, Houston, Dallas)",      es: "Centro (Chicago, Houston, Dallas)" },
+  { id: "America/Denver",      nl: "Mountain (Denver, Salt Lake City)",       en: "Mountain (Denver, Salt Lake City)",       es: "Montaña (Denver, Salt Lake City)" },
+  { id: "America/Phoenix",     nl: "Arizona (Phoenix, geen zomertijd)",       en: "Arizona (Phoenix, no daylight saving)",   es: "Arizona (Phoenix, sin horario de verano)" },
+  { id: "America/Los_Angeles", nl: "Pacific (Los Angeles, Seattle, Las Vegas)", en: "Pacific (Los Angeles, Seattle, Las Vegas)", es: "Pacífico (Los Ángeles, Seattle, Las Vegas)" },
+  { id: "America/Anchorage",   nl: "Alaska (Anchorage)",                      en: "Alaska (Anchorage)",                      es: "Alaska (Anchorage)" },
+  { id: "Pacific/Honolulu",    nl: "Hawaï (Honolulu)",                        en: "Hawaii (Honolulu)",                       es: "Hawái (Honolulu)" },
+];
+const TIMEZONES_BY_COUNTRY = { US: US_TIMEZONES };
+// De zone van een salon. Geef de salonrij mee (tzFor(salonData)) of
+// land + zone los (tzFor("US", "America/Chicago")). Een eigen zone telt alleen
+// als die bij het land hoort: verhuist een salon van de VS naar Nederland, dan
+// wint de landregel en niet de oude Amerikaanse zone. Onbekend of ontbrekend
+// land valt terug op Amsterdam, net als tzFor() in de edge-functies: de meeste
+// salons staan in Nederland.
+const tzFor = (code, tz) => {
+  if (code && typeof code === "object") { tz = code.timezone; code = code.country_code; }
+  const own = tz && (TIMEZONES_BY_COUNTRY[code || ""] || []).some((z) => z.id === tz) ? tz : null;
+  return own || TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+};
+// Welke zone uit US_TIMEZONES past bij de klok van dit apparaat? Om de keuze
+// bij het aanmelden alvast in te vullen. Vergelijkt de afwijking van UTC in
+// januari en juli, zodat ook "America/Detroit" of
+// "America/Indiana/Indianapolis" Eastern wordt. Geen match (bijv. een eigenaar
+// die vanuit Nederland aanmeldt): "", dan kiest ze zelf.
+function guessUsTimezone() {
+  try {
+    const own = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!own) return "";
+    if (US_TIMEZONES.some((z) => z.id === own)) return own;
+    const y = new Date().getUTCFullYear();
+    const at = [new Date(Date.UTC(y, 0, 15, 12)), new Date(Date.UTC(y, 6, 15, 12))];
+    const sig = (tz) => at.map((d) => tzOffsetMs(d, tz)).join("/");
+    const mine = sig(own);
+    const hit = US_TIMEZONES.find((z) => sig(z.id) === mine);
+    return hit ? hit.id : "";
+  } catch { return ""; }
+}
 
 // Hoeveel de opgegeven zone op dát moment van UTC afwijkt, in ms. We laten Intl
 // de datum in de doelzone formatteren en lezen het verschil met de UTC-waarde
@@ -579,9 +622,10 @@ function localToUtc(dateStr, timeStr, tz) {
 // Retourneert de cancel-URL, of null als de datum/tijd onleesbaar is of de
 // insert faalt — dan is er domweg geen geldige link en laat de caller de knop
 // weg (een dode link is erger dan geen knop).
-async function createCancellationToken(appointmentId, date, time, countryCode) {
+// Vierde argument: de salonrij (land + eigen tijdzone) of alleen de landcode.
+async function createCancellationToken(appointmentId, date, time, salon) {
   try {
-    const expiresAt = localToUtc(date, time, tzFor(countryCode));
+    const expiresAt = localToUtc(date, time, tzFor(salon));
     if (!expiresAt) { console.error("cancellation token: ongeldige datum/tijd", date, time); return null; }
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
@@ -776,7 +820,10 @@ export function EmailTypoHint({ value, onFix, lang = "nl", c, accent = ACCENT, s
 // Maarten is dus een Nederlandse toerist of bewoner: +31, niet +599 6…
 // Sint Maarten valt onder +1: een 10-cijferig "721 542 1234" krijgt de 1 ervoor
 // (anders las wa.me het als +7).
-const WA_COUNTRY_PREFIX = { NL: "31", BE: "32", BQ: "599", CW: "599", AW: "297", SX: "1721", ES: "34", DE: "49", GB: "44", SR: "597" };
+// VS (15-11-2026): een lokaal nummer is 10 cijfers ("(305) 555-1234") en
+// krijgt de 1 ervoor; met de 1 erbij (11 cijfers) blijft het zoals het is.
+// Internationaal bellen gaat daar met 011 in plaats van 00.
+const WA_COUNTRY_PREFIX = { NL: "31", BE: "32", BQ: "599", CW: "599", AW: "297", SX: "1721", ES: "34", DE: "49", GB: "44", SR: "597", US: "1" };
 const WA_CARIBBEAN = new Set(["BQ", "CW", "AW", "SX"]);
 export function waDigits(phone, countryCode) {
   let d = String(phone || "").replace(/[^0-9]/g, "");
@@ -784,6 +831,11 @@ export function waDigits(phone, countryCode) {
   const country = String(countryCode || "NL").toUpperCase();
   const cc = WA_COUNTRY_PREFIX[country] || "31";
   if (d.startsWith("00")) return d.slice(2);
+  if (country === "US") {
+    if (d.startsWith("011") && d.length > 10) return d.slice(3);
+    if (d.length === 10 && /^[2-9]/.test(d)) return "1" + d;
+    if (d.length === 11 && d.startsWith("1")) return d;
+  }
   if (d.startsWith("0") && WA_CARIBBEAN.has(country) && d.length === 10) return "31" + d.slice(1);
   if (d.startsWith("0")) return cc + d.slice(1);
   if (country === "SX" && d.length === 10 && d.startsWith("721")) return "1" + d;
@@ -965,10 +1017,10 @@ function getWhatsAppRefundMsg(lang, { clientName, salonName, amount, countryCode
 // voluit, gerekend op de klok van de salon (salonNow). Is de afspraak al
 // begonnen of geweest, dan is een herinnering onzin en blijft alleen de aanhef
 // over, zodat de medewerker zelf verder typt.
-function getWhatsAppReminderMsg(lang, { clientName, salonName, date, time, serviceName, countryCode } = {}) {
+function getWhatsAppReminderMsg(lang, { clientName, salonName, date, time, serviceName, countryCode, timezone } = {}) {
   const firstName = (clientName || "").split(" ")[0] || clientName || "";
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(String(date || "")) ? String(date) : "";
-  const now = salonNow(countryCode);
+  const now = salonNow(countryCode, timezone);
   const today = fmt(now);
   const tomorrow = fmt(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
   const clock = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -996,8 +1048,9 @@ const getToday = () => new Date();
 // vandaag-sloten klopten in beide richtingen niet (29-08). De
 // toLocaleString-round-trip projecteert de salon-wandklok in de lokale Date;
 // minuut-precies, en bij een exotische fout valt hij terug op de apparaatklok.
-export const salonNow = (countryCode) => {
-  try { return new Date(new Date().toLocaleString("en-US", { timeZone: tzFor(countryCode) })); }
+// Geef de salonrij mee (salonNow(salonData)) of land + zone, zie tzFor.
+export const salonNow = (countryCode, tz) => {
+  try { return new Date(new Date().toLocaleString("en-US", { timeZone: tzFor(countryCode, tz) })); }
   catch { return new Date(); }
 };
 // IMPORTANT: use LOCAL date components. `d.toISOString()` converts to UTC which can
@@ -1096,6 +1149,9 @@ const COUNTRIES = [
   { code: "CW", name: "Curaçao",                 defaultLang: "nl", currency: "XCG", launched: true },
   { code: "SX", name: "Sint Maarten",            defaultLang: "nl", currency: "XCG", launched: true },
   { code: "BQ", name: "Bonaire, Saba, Sint Eustatius", defaultLang: "nl", currency: "USD", launched: true },
+  // Sinds 15-11-2026. Meerdere tijdzones: de salon kiest er een
+  // (US_TIMEZONES, profiles.timezone).
+  { code: "US", name: "United States",           defaultLang: "en", currency: "USD", launched: true },
   { code: "DE", name: "Deutschland / Germany",   defaultLang: "en", currency: "EUR", launched: false },
   { code: "FR", name: "France",                  defaultLang: "en", currency: "EUR", launched: false },
   { code: "GB", name: "United Kingdom",          defaultLang: "en", currency: "GBP", launched: false },
@@ -1237,6 +1293,12 @@ const TAX_RULES = {
   // vastgesteld waar salondiensten onder vallen. Vellu vult daarom niets in en
   // vraagt de eigenaar het bij zijn boekhouder op te halen.
   CW:        { label: "OB",            idLabel: "Fiscaal nr.", serviceRate: null, productsTaxable: true,  showTaxLine: true,  rateUnknown: true, suggestedRate: 6 },
+  // VS (15-11-2026): sales tax hangt af van staat, county en stad, en Vellu kan
+  // niet vaststellen wat voor salondiensten geldt. Geen tarief, geen
+  // suggestie: de eigenaar vult in wat haar accountant opgeeft. Let op: Vellu
+  // rekent overal INCLUSIEF (terugrekenen), terwijl Amerikaanse prijzen meestal
+  // exclusief zijn. De instellingen zeggen dat er daarom met zoveel woorden bij.
+  US:        { label: "Sales tax",     idLabel: "Tax ID",      serviceRate: null, productsTaxable: true,  showTaxLine: true,  rateUnknown: true },
 };
 // Eilandkeuzes die de instellingen aanbieden zodra het land BQ is.
 const TAX_REGIONS_BY_COUNTRY = {
@@ -4038,7 +4100,7 @@ export {
   rememberRef, storedRef, useReferralPromo, rewardLabel, promoEndLabel,
   // Tijdzone-helpers: geëxporteerd zodat andere schermen die met salon-tijd
   // moeten rekenen dezelfde tabel gebruiken als de edge-functies.
-  TZ_BY_COUNTRY, tzFor, localToUtc,
+  TZ_BY_COUNTRY, US_TIMEZONES, TIMEZONES_BY_COUNTRY, tzFor, guessUsTimezone, localToUtc,
   ACCENT,
   getGoogleCalUrl, getWhatsAppUrl, getWhatsAppBookingMsg, getWhatsAppClientBookedMsg, getWhatsAppReminderMsg, getWhatsAppPaymentMsg, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg,
   getPaymentLinkWithAmount,

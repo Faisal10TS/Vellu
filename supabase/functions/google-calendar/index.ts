@@ -69,6 +69,25 @@ function localIso(date: string, time: string, addMinutes = 0) {
   return `${outY}-${pad(outMo)}-${pad(outD)}T${pad(outH)}:${pad(em)}:00`;
 }
 
+// Tijdzone per land, zelfde tabel als TZ_BY_COUNTRY in shared.jsx en de
+// andere edge-functies. Onbekend land = Amsterdam.
+const TZ_BY_COUNTRY: Record<string, string> = {
+  NL: "Europe/Amsterdam", BE: "Europe/Brussels", GB: "Europe/London",
+  AW: "America/Curacao", CW: "America/Curacao", BQ: "America/Curacao", SX: "America/Curacao",
+  US: "America/New_York",
+};
+// VS (15-11-2026): meerdere tijdzones, de salon kiest er een
+// (profiles.timezone). Telt alleen bij het eigen land; zelfde lijst als
+// US_TIMEZONES in shared.jsx en profiles_timezone_check (samen wijzigen).
+const SALON_TZS: Record<string, string[]> = {
+  US: ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"],
+};
+const tzFor = (code?: string | null, tz?: string | null) => {
+  const cc = String(code || "").toUpperCase();
+  if (tz && (SALON_TZS[cc] || []).includes(tz)) return tz;
+  return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return fail("method_not_allowed", null, 405);
@@ -94,7 +113,7 @@ serve(async (req) => {
 
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
-    .select("google_refresh_token, google_calendar_connected")
+    .select("google_refresh_token, google_calendar_connected, country_code, timezone")
     .eq("id", owner_id)
     .maybeSingle();
 
@@ -172,6 +191,9 @@ serve(async (req) => {
     if (!booking.date || !booking.time) return fail("missing_datetime");
 
     const duration = parseInt(booking.duration, 10) || 60;
+    // date/time zijn de wandklok van de SALON. Stond vast op Amsterdam, zodat
+    // een afspraak van een Caribische of Amerikaanse salon uren verschoof.
+    const salonTz = tzFor(profile?.country_code, profile?.timezone);
     const startDateTime = localIso(booking.date, booking.time, 0);
     const endDateTime = localIso(booking.date, booking.time, duration);
 
@@ -187,8 +209,8 @@ serve(async (req) => {
     const event = {
       summary: `${booking.service_name || "Afspraak"} — ${booking.client_name || ""}`.trim(),
       description: descriptionLines.join("\n"),
-      start: { dateTime: startDateTime, timeZone: "Europe/Amsterdam" },
-      end: { dateTime: endDateTime, timeZone: "Europe/Amsterdam" },
+      start: { dateTime: startDateTime, timeZone: salonTz },
+      end: { dateTime: endDateTime, timeZone: salonTz },
       reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 30 }] },
     };
 

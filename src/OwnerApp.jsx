@@ -22,7 +22,7 @@ import {
   AT, AT_COLORS, AtelierSkin, readableAccent, onAccentInk, blockAppliesOn, PullToRefresh, useVisualBottomLock, staffShareOf, staffScopedRow, partLabelOf,
   paidAmountOf, outstandingOf, paymentPatchForPrice, OPEN_PAY_METHODS, isOpenReceivable, receivableKeyOf, ageLabel, getWhatsAppRefundMsg, getWhatsAppNoShowFeeMsg, waDigits, partPricesOf,
   useReferralPromo, rewardLabel, promoEndLabel, useDashboardScrollbars, fetchAllRows,
-  RESERVED_SLUGS, salonNow, tzFor, localToUtc,
+  RESERVED_SLUGS, salonNow, tzFor, localToUtc, US_TIMEZONES, guessUsTimezone,
   EmailTypoHint,
 } from "./shared.jsx";
 import Kasboek from "./Kasboek.jsx";
@@ -1537,7 +1537,7 @@ function RevenueReportBlock({ salonData, completedAppts, lang, c, accent, toast,
     // "Deze maand", "Dit kwartaal" enz. volgen de klok van de salon: een
     // salon op Bonaire die om 21:00 een rapport maakt, zat met de
     // apparaatklok soms al in de volgende dag of maand (RP-19).
-    return periodPreset(period, lang, salonNow(salonData?.country_code));
+    return periodPreset(period, lang, salonNow(salonData));
   };
 
   // Telling in de "gedownload"-melding. Staan er kassaverkopen in het rapport,
@@ -4012,7 +4012,7 @@ function csvRowsToClients(rows) {
 
 // `loyalty`: { enabled, visits, pct, since, salonName, slug } — stempelkaart-
 // instellingen van de salon; null/uit = geen stempelkaart-blok op de kaarten.
-function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [], cur = "€", birthdayOn = false, loyalty = null, countryCode = "NL", onOpenReceivables = null }) {
+function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = [], serviceList = [], cur = "€", birthdayOn = false, loyalty = null, countryCode = "NL", timezone = null, onOpenReceivables = null }) {
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState([]);
   // Verborgen klanten ("Klant verwijderen" bij een klant met afspraken):
@@ -4106,7 +4106,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
       // "Vandaag/nu" op de klok van de salon, niet die van het toestel: een
       // Bonairiaanse salon die vanaf een Nederlandse telefoon kijkt zag anders
       // de afspraak van vanmiddag al als voorbij.
-      const salonToday = fmt(salonNow(countryCode));
+      const salonToday = fmt(salonNow(countryCode, timezone));
       const [{ data: appts }, { data: manual }, { data: wl }, { data: prof }, { data: lcodes }] = await Promise.all([
         // Alle afspraken (fetchAllRows, vaste volgorde op id): PostgREST geeft
         // er per verzoek hooguit 1000, en daarboven vielen de oudste stilletjes
@@ -4166,7 +4166,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
         setLoyaltyIssued(issued);
       }
       if (cancelled) return;
-      const nowMs = salonNow(countryCode).getTime();
+      const nowMs = salonNow(countryCode, timezone).getTime();
       // Nieuwste afspraak eerst (de query loopt op id voor het bladeren).
       const apptsSorted = (appts || []).slice().sort((x, y) => String(y.date || "").localeCompare(String(x.date || "")) || String(y.time || "").localeCompare(String(x.time || "")));
       // Klanten zonder e-mailadres: zie telKeyOf/nameKeyOf hierboven.
@@ -5069,7 +5069,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
     return { full: false, filled, left };
   };
   // "Nu" op de klok van de salon (zie het laden hierboven).
-  const nowSalonMs = salonNow(countryCode).getTime();
+  const nowSalonMs = salonNow(countryCode, timezone).getTime();
 
   const statusBadge = (a) => {
     if (a.status === "cancelled") return { label: lang === "nl" ? "Geannuleerd" : lang === "es" ? "Cancelada" : "Cancelled", bg: `${c.danger}1a`, color: c.danger };
@@ -5391,7 +5391,7 @@ function CustomersView({ ownerId, lang, c, accent, isMobile, toast, staffList = 
                 // Alleen gekozen klanten: schakelaar op de kaart; zonder vinkje
                 // geen stempels (de trigger slaat haar bezoeken over).
                 const takesPart = !loyalty.selectedOnly || !!selected.loyaltyOptIn;
-                const todayStr = fmt(salonNow(countryCode));
+                const todayStr = fmt(salonNow(countryCode, timezone));
                 return (
                   <div style={{ background: c.bgCard, border: `1px solid ${c.border}`, borderRadius: 12, padding: "10px 12px", marginTop: 4 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -6331,7 +6331,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (names.length) parts.push(names.length === 1 ? names[0] : `${names.length} ${lang === "nl" ? "behandelingen" : lang === "es" ? "tratamientos" : "treatments"}`);
     // "Verlopen" op de kalenderdag van de SALON, niet die van het apparaat:
     // een Bonaire-salon die vanuit NL wordt beheerd liep anders een dag voor.
-    const salonDay = fmt(salonNow(salonData.country_code));
+    const salonDay = fmt(salonNow(salonData));
     return {
       text: parts.join(" · "),
       title: names.join(", "),
@@ -6523,7 +6523,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   useEffect(() => {
     if (!salonData?.owner_id) return;
     const dev = deviceStartDay.current;
-    const salonDay = fmt(salonNow(salonData.country_code));
+    const salonDay = fmt(salonNow(salonData));
     if (salonDay === dev) return;
     setCalDate(d => (d === dev ? salonDay : d));
     setKassaDay(d => (d === dev ? salonDay : d));
@@ -6573,7 +6573,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (!salonData?.owner_id || !salonData.birthday_feature_enabled || !salonData.birthday_notify_owner) { setBdayToday([]); return; }
     let dood = false;
     (async () => {
-      const md = fmt(salonNow(salonData.country_code)).slice(5);
+      const md = fmt(salonNow(salonData)).slice(5);
       const [{ data: manual }, { data: booked }, { data: off }] = await Promise.all([
         fetchAllRows(() => supabase.from("manual_clients").select("name, email, birthday").eq("owner_id", salonData.owner_id).eq("hidden", false).not("birthday", "is", null).order("id")),
         fetchAllRows(() => supabase.from("clients").select("first_name, last_name, email, birthday").eq("owner_id", salonData.owner_id).not("birthday", "is", null).order("id")),
@@ -6608,7 +6608,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     if (view !== "dashboard" || yearOlder !== null || !salonData?.owner_id) return;
     let dood = false;
     (async () => {
-      const year = fmt(salonNow(salonData.country_code)).slice(0, 4);
+      const year = fmt(salonNow(salonData)).slice(0, 4);
       const until = loadedWindowFrom();
       const jan1 = `${year}-01-01`;
       // Begint het jaar binnen het venster, dan staat alles al in het geheugen.
@@ -6622,7 +6622,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // Het bereik dat de agenda-periodebalk toont, los berekend zodat het effect
   // hieronder kan zien of het (deels) vóór het geladen venster ligt.
   const agendaPeriodRange = useMemo(() => {
-    const today = salonNow(salonData.country_code);
+    const today = salonNow(salonData);
     if (calViewMode === "day") return { from: calDate, to: calDate };
     if (calViewMode === "week") {
       const base = new Date(today);
@@ -6959,6 +6959,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           name: data.business_name || prev.name,
           city: data.city || prev.city,
           country_code: data.country_code || "NL",
+          // Eigen tijdzone (alleen VS, 15-11-2026); leeg = landregel, zie tzFor.
+          timezone: data.timezone || null,
           // Zelf gekozen salontaal (12-11-2026); leeg = landregel, zie salonLangOf.
           salon_lang: data.salon_lang || null,
           accent: data.accent_color || prev.accent,
@@ -7304,7 +7306,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // toont er maar drie — zonder sortering kon de eerstvolgende klant achter
   // "+ N meer" verdwijnen.
   const todayAppts = (dashStaff ? activeAppts.filter(a => apptInvolvesStaff(a, dashStaff)) : activeAppts)
-    .filter(a => a.date === fmt(salonNow(salonData.country_code)))
+    .filter(a => a.date === fmt(salonNow(salonData)))
     .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
   // "Dit jaar"-tegel: de vóór het venster opgehaalde rijen (yearOlder) plus
   // het geheugen vanaf die grens, met de stylist-chip net als week en maand
@@ -7312,7 +7314,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // perMaand }, null zolang de oude rijen nog niet binnen zijn.
   const yearRevTile = useMemo(() => {
     if (!yearOlder) return null;
-    const today = fmt(salonNow(salonData.country_code));
+    const today = fmt(salonNow(salonData));
     const perMaand = Array(12).fill(0);
     let totaal = 0;
     const add = (a) => {
@@ -8302,7 +8304,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // "Contant" maar ook dat het het restant na de vooruitbetaling was.
         const { data: pay, error: payErr } = await supabase.from("client_payments").insert({
           owner_id: salonData.owner_id, appointment_id: id, amount: rest, method,
-          paid_on: fmt(salonNow(salonData.country_code)),
+          paid_on: fmt(salonNow(salonData)),
           note: lang === "nl" ? "Restbetaling" : lang === "es" ? "Pago restante" : "Remaining payment",
           client_name: apptRow.client_name || null, label: apptRow.service_name || null,
         }).select().single();
@@ -8596,7 +8598,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       if (!salonData.owner_id || !a.date) return null;
       // Een afspraak in het verleden annuleren maakt geen plek vrij voor de
       // wachtlijst. "Vandaag" op de klok van de salon, niet van het apparaat.
-      if (a.date < fmt(salonNow(salonData.country_code))) return null;
+      if (a.date < fmt(salonNow(salonData))) return null;
       // select("*") en niet een vaste kolomlijst: waitlist.lang komt met de
       // nieuwe migratie; zo werkt dit ook in de tussentijd.
       const { data: entries } = await supabase
@@ -9134,7 +9136,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // whichever day is currently in focus in the calendar so a single tap on
   // a day + this button gets the owner most of the way there.
   const openBlockModal = (opts) => {
-    const seed = calDate || fmt(salonNow(salonData.country_code));
+    const seed = calDate || fmt(salonNow(salonData));
     setBlockEditId(null);
     setBlockForm({ mode: (opts && opts.mode) || "time", variant: (opts && opts.variant) || "generic", from: seed, to: "", time_start: "09:00", time_end: "17:30", reason: "", staff_id: "", staff_name: "", service_id: "", repeat: false });
     setBlockModalOpen(true);
@@ -9531,7 +9533,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // Ook geen "Je afspraak is gewijzigd … Zien we je dan!" voor een bezoek dat
     // al geweest is: een correctie achteraf op een afgeronde afspraak, of een
     // afspraak waarvan de (nieuwe) datum al voorbij is (salonklok).
-    const visitDone = orig.status === "completed" || payload.date < fmt(salonNow(salonData.country_code));
+    const visitDone = orig.status === "completed" || payload.date < fmt(salonNow(salonData));
     const skipEmail = orig.status === "cancelled" || orig.status === "no_show" || visitDone;
     if ((dateChanged || timeChanged || priceChanged || serviceChanged) && !skipEmail && orig.client_email) {
       try {
@@ -9941,7 +9943,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       // Datum en tijd van de verkoop op de klok van de SALON: een Bonairiaanse
       // verkoop om 21:30, aangeslagen op een laptop op NL-tijd, landde anders
       // op morgen 03:30 (verkeerde kasboekdag en dagrapport).
-      const now = salonNow(salonData.country_code);
+      const now = salonNow(salonData);
       const pad2 = (n) => String(n).padStart(2, "0");
       // Bonnummer atomair uit de database. Uit de lokaal gecachte salonData
       // lezen ging mis zodra er twee kassa's meedraaien (tabblad naast de
@@ -10128,7 +10130,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // kasboek-dag, als PDF of Excel. Haalt de kasboekregels én de contante
   // betalingen (kassa + contant afgerekende afspraken) van de periode op.
   const exportCashbook = async (scope, format, baseDay) => {
-    const today = fmt(salonNow(salonData.country_code));
+    const today = fmt(salonNow(salonData));
     const base = baseDay && baseDay <= today ? baseDay : today;
     const d = parseDate(base);
     const locale = lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB";
@@ -10155,7 +10157,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         return false;
       }
       const movements = mv.data || [];
-      const cashRows = [...(appts || []).filter(a => a.payment_method === "cash" && a.status === "completed"), ...paymentsAsCashRows(pays.data || [], lang, tzFor(salonData.country_code))];
+      const cashRows = [...(appts || []).filter(a => a.payment_method === "cash" && a.status === "completed"), ...paymentsAsCashRows(pays.data || [], lang, tzFor(salonData))];
       if (!movements.length && !cashRows.length) {
         toast.show(lang === "nl" ? "Geen kasboekregels of contante betalingen in deze periode" : lang === "es" ? "Sin movimientos de caja ni pagos en efectivo en este período" : "No cash book lines or cash payments in this period", "error");
         return false;
@@ -10191,7 +10193,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       // vandaag en was de maand september vanaf 1 oktober niet meer te maken.
       // Nooit voorbij vandaag (klok van de salon). Jaar = kalenderjaar,
       // kwartaal = kalenderkwartaal van die dag.
-      const today = fmt(salonNow(salonData.country_code));
+      const today = fmt(salonNow(salonData));
       const base = baseDay && baseDay <= today ? baseDay : today;
       const kwartaal = Math.floor((parseInt(base.slice(5, 7), 10) - 1) / 3);
       const baseD = parseDate(base);
@@ -10479,7 +10481,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     // salonnaamregel eronder leeg.
     w.document.write(`<!doctype html><html><head><title>${esc(title)} — ${esc(salonData.name || "Vellu")}</title>
       <style>body{font-family:Arial,sans-serif;padding:24px;color:#222}h1{font-size:20px;margin:0 0 2px}h2{font-size:14px;margin:18px 0 6px}p.sub{color:#777;font-size:11px;margin:0 0 8px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 8px;font-size:12px;text-align:left}th{background:#f4f4f4}</style>
-      </head><body><h1>${esc(title)}</h1><p class="sub">${esc(salonData.name || "")} · ${esc(fmt(salonNow(salonData.country_code)))}</p>${body}
+      </head><body><h1>${esc(title)}</h1><p class="sub">${esc(salonData.name || "")} · ${esc(fmt(salonNow(salonData)))}</p>${body}
       <script>window.onload=function(){window.print()}<\/script></body></html>`);
     w.document.close();
   };
@@ -10840,7 +10842,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // factuur-mail ("Al betaald / Nog te betalen") gewoon blijven werken.
   const openPayModal = (a) => {
     setPayFor(a);
-    setPayForm({ amount: outstandingOf(a).toFixed(2), method: "cash", date: fmt(salonNow(salonData.country_code)), note: "" });
+    setPayForm({ amount: outstandingOf(a).toFixed(2), method: "cash", date: fmt(salonNow(salonData)), note: "" });
   };
   const applyPaymentPatch = (a, patch) => {
     const merged = { ...a, ...patch };
@@ -10855,7 +10857,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
     const amount = Math.round((parseFloat(payForm.amount) || 0) * 100) / 100;
     if (amount <= 0) { toast.show(lang === "nl" ? "Vul een bedrag in" : lang === "es" ? "Introduce un importe" : "Enter an amount", "error"); return; }
     if (amount > open + 0.005) { toast.show(lang === "nl" ? `Meer dan er openstaat (${fmtAmt(cur, open)})` : lang === "es" ? `Más de lo pendiente (${fmtAmt(cur, open)})` : `More than is outstanding (${fmtAmt(cur, open)})`, "error"); return; }
-    const paidOn = /^\d{4}-\d{2}-\d{2}$/.test(payForm.date) ? payForm.date : fmt(salonNow(salonData.country_code));
+    const paidOn = /^\d{4}-\d{2}-\d{2}$/.test(payForm.date) ? payForm.date : fmt(salonNow(salonData));
     setPayBusy(true);
     try {
       const { data: pay, error } = await supabase.from("client_payments").insert({
@@ -11110,7 +11112,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
   // leegmaken van het formulier.
   const openAddAppt = () => {
     setShowAddAppt(true); setAddApptDone(false);
-    setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(salonNow(salonData.country_code)), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", client_birthday: "", notify_client: true });
+    setAddApptForm({ services: [{ id: `s_${Date.now()}`, service_id: "", variant_id: "", extra_ids: [], staff_id: "" }], date: fmt(salonNow(salonData)), time: "", client_name: "", client_email: "", client_phone: "", client_allergies: "", client_birthday: "", notify_client: true });
     setClientSearch(""); setClientMode("existing"); setShowClientDropdown(false);
   };
   // Zelfde formulier, maar met dag en (optioneel) tijd al ingevuld — voor de
@@ -11208,7 +11210,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       }
       return out;
     };
-    const tz = tzFor(salonData.country_code);
+    const tz = tzFor(salonData);
     const stamp = fmtUTC(new Date());
     const events = apptList.map(a => {
       const start = localToUtc(a.date, String(a.time || "").slice(0, 5), tz);
@@ -11506,7 +11508,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
         // een mis-tik op een toekomstige afspraak telde als no-show en kon de
         // klant zelfs blokkeren. Begin = de hele boeking (_baseTime bij een deelblok).
         const noShowOpen = (() => {
-          const now = salonNow(salonData.country_code);
+          const now = salonNow(salonData);
           const today = fmt(now);
           const clock = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
           const start = String(a._baseTime || a.time || "").slice(0, 5);
@@ -11541,7 +11543,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   location: salonData.name + (salonData.city ? ", " + salonData.city : ""),
                   // Tijd van de afspraak in de tijdzone van de salon (&ctz),
                   // niet in die van het apparaat.
-                  tz: tzFor(salonData.country_code),
+                  tz: tzFor(salonData),
                 }), "_blank");
               }}><NavIcon name="calendar" size={13} color="currentColor" /></button>
               {/* WhatsApp de KLANT direct (alleen haar nummer nodig, niet het
@@ -11579,7 +11581,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             {/* Termijn op de klok van de SALON (timeZone), niet die van het
                 apparaat — een Bonaire-salon die vanuit NL kijkt zag 5 à 6 uur verschil. */}
             {a.payment_due_at ? ` · ${lang === "nl" ? "vervalt" : lang === "es" ? "caduca" : "expires"} ${(() => {
-              try { return new Date(a.payment_due_at).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { timeZone: tzFor(salonData.country_code), weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
+              try { return new Date(a.payment_due_at).toLocaleString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { timeZone: tzFor(salonData), weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
               catch { return fmtDueShort(a.payment_due_at); }
             })()}` : ""}
           </div>
@@ -12023,7 +12025,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
       {showApptImport && (
         <AfsprakenImport
           supabase={supabase} ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} cur={cur}
-          countryCode={salonData.country_code} services={salonData.services || []} staff={salonData.staff || []}
+          countryCode={salonData.country_code} timezone={salonData.timezone} services={salonData.services || []} staff={salonData.staff || []}
           existing={salonData.appointments || []} apptLang={defaultApptLang} toast={toast}
           onClose={() => setShowApptImport(false)}
           // Op id toevoegen-of-vervangen: het realtime-kanaal kan dezelfde rij
@@ -13276,7 +13278,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 // "Vandaag" op de klok van de SALON, niet die van het apparaat:
                 // een Bonairiaanse eigenaar met een telefoon op NL-tijd zag om
                 // 20:00 al de afspraken van morgen.
-                const now = salonNow(salonData.country_code);
+                const now = salonNow(salonData);
                 const todayStr = fmt(now);
                 // Compare date strings, not Date objects. `new Date("2026-04-20")` parses as
                 // UTC midnight, which misclassifies rows at the day boundary for non-UTC users.
@@ -13618,8 +13620,8 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 // Kalenderdagen op de klok van de salon, geen blokken van 24 uur:
                 // eindigt de proef morgen om 10:00, dan is het om 14:00 vandaag
                 // "morgen" (Math.ceil van 20 uur gaf "vandaag").
-                const endDay = (() => { try { return fmt(new Date(new Date(endMs).toLocaleString("en-US", { timeZone: tzFor(salonData.country_code) }))); } catch { return fmt(new Date(endMs)); } })();
-                const days = Math.round((parseDate(endDay) - parseDate(fmt(salonNow(salonData.country_code)))) / 86400000);
+                const endDay = (() => { try { return fmt(new Date(new Date(endMs).toLocaleString("en-US", { timeZone: tzFor(salonData) }))); } catch { return fmt(new Date(endMs)); } })();
+                const days = Math.round((parseDate(endDay) - parseDate(fmt(salonNow(salonData)))) / 86400000);
                 if (msLeft <= 0 || days > 5) return null;
                 const L = (nl, en, es) => lang === "nl" ? nl : lang === "es" ? es : en;
                 const title = days <= 0 ? L("Je proefperiode eindigt vandaag", "Your trial ends today", "Tu prueba termina hoy") : days === 1 ? L("Je proefperiode eindigt morgen", "Your trial ends tomorrow", "Tu prueba termina mañana") : L(`Je proefperiode eindigt over ${days} dagen`, `Your trial ends in ${days} days`, `Tu prueba termina en ${days} días`);
@@ -13671,7 +13673,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 {/* Revenue area chart */}
                 {(() => {
                   const weeks = [];
-                  const now = salonNow(salonData.country_code);
+                  const now = salonNow(salonData);
                   // Monday-start weeks to match the agenda (getDay() returns 0=Sun; shift so Monday=0).
                   const dowMon = (now.getDay() + 6) % 7;
                   for (let w = 7; w >= 0; w--) {
@@ -13918,7 +13920,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   {(() => {
                     // Vandaag op de klok van de salon; de dagkeuze kan nooit in de
                     // toekomst liggen (een apparaat dat voorloopt startte er wel).
-                    const today = fmt(salonNow(salonData.country_code));
+                    const today = fmt(salonNow(salonData));
                     const day = kassaDay && kassaDay <= today ? kassaDay : today;
                     const isToday = day === today;
                     // Zelfde ondergrens als het fetch-effect hierboven: dagen
@@ -13966,7 +13968,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         .filter(a => a.payment_method === "cash" && a.status === "completed"),
                       // Klantenrekening: contante (deel)betalingen op open posten
                       // tellen in de la op de dag van ontvangst.
-                      ...paymentsAsCashRows(clientPayments.filter(p => p.paid_on === day), lang, tzFor(salonData.country_code)),
+                      ...paymentsAsCashRows(clientPayments.filter(p => p.paid_on === day), lang, tzFor(salonData)),
                     ];
                     return (
                       <div data-kassa-sold style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
@@ -14413,7 +14415,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
 
           {/* CUSTOMERS */}
           {view === "klanten" && (
-            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} cur={cur} birthdayOn={!!salonData.birthday_feature_enabled} countryCode={salonData.country_code}
+            <CustomersView ownerId={salonData.owner_id} lang={lang} c={c} accent={accent} isMobile={isMobile} toast={toast} staffList={salonData.staff || []} serviceList={salonData.services || []} cur={cur} birthdayOn={!!salonData.birthday_feature_enabled} countryCode={salonData.country_code} timezone={salonData.timezone}
               onOpenReceivables={(cl) => { setInvoiceFilter("receivable"); setInvoiceSearch(cl.email || cl.name || ""); setInvoicesShown(INVOICES_FOLD); setView("facturen"); }}
               loyalty={salonData.loyalty_enabled ? { enabled: true, perStaff: !!salonData.loyalty_per_staff, selectedOnly: salonData.loyalty_scope === "selected", visits: salonData.loyalty_visits, pct: salonData.loyalty_discount_pct, since: salonData.loyalty_since || null, salonName: salonData.name, slug: salonData.id, countryCode: salonData.country_code } : null} />
           )}
@@ -14422,7 +14424,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {view === "agenda" && (() => {
             // Vandaag en "nu" op de klok van de salon (niet die van het
             // apparaat): week/maand/jaar, de nu-lijn en "Terug naar vandaag".
-            const todayDate = salonNow(salonData.country_code);
+            const todayDate = salonNow(salonData);
             const todayStr = fmt(todayDate);
             // Uitzonderingsdagen (extra open dagen), uit twee bronnen samen —
             // dezelfde samenvoeging als getExceptionsFor in ClientApp: de oude
@@ -14820,7 +14822,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                 const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i);
                 const nowMinutes = (() => {
                   // Nu-lijn op de klok van de salon (niet die van het apparaat).
-                  const now = salonNow(salonData.country_code);
+                  const now = salonNow(salonData);
                   const nowStr = fmt(now);
                   if (nowStr !== calDate) return null;
                   return now.getHours() * 60 + now.getMinutes();
@@ -15873,7 +15875,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
             // "Deze maand" op de klok van de SALON, niet van het apparaat: een
             // eigenaar of beheerder in NL die 's avonds een Bonaire-salon opent
             // zat anders op de 1e al in de volgende maand.
-            const salonToday = salonNow(salonData.country_code);
+            const salonToday = salonNow(salonData);
             const thisMonthPrefix = `${salonToday.getFullYear()}-${String(salonToday.getMonth() + 1).padStart(2, "0")}`;
             const thisMonthAppts = visibleCompleted.filter(a => a.date?.startsWith(thisMonthPrefix));
             const thisMonthTotal = thisMonthAppts.reduce((s, a) => s + invPrice(a), 0);
@@ -16405,7 +16407,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         {payForm.method === "cash" && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{lang === "nl" ? "Contant telt in het kasboek op de dag van ontvangst." : lang === "es" ? "El efectivo cuenta en el libro de caja el día de recepción." : "Cash counts in the cash book on the day received."}</div>}
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                        <div><label style={lbl}>{lang === "nl" ? "Datum" : lang === "es" ? "Fecha" : "Date"}</label><input data-pay-date className="input-field" type="date" max={fmt(salonNow(salonData.country_code))} value={payForm.date} onChange={e => setPayForm(f => ({ ...f, date: e.target.value }))} style={{ width: "100%", fontSize: 12 }} /></div>
+                        <div><label style={lbl}>{lang === "nl" ? "Datum" : lang === "es" ? "Fecha" : "Date"}</label><input data-pay-date className="input-field" type="date" max={fmt(salonNow(salonData))} value={payForm.date} onChange={e => setPayForm(f => ({ ...f, date: e.target.value }))} style={{ width: "100%", fontSize: 12 }} /></div>
                         <div><label style={lbl}>{lang === "nl" ? "Notitie (optioneel)" : lang === "es" ? "Nota (opcional)" : "Note (optional)"}</label><input className="input-field" value={payForm.note} onChange={e => setPayForm(f => ({ ...f, note: e.target.value }))} placeholder={lang === "nl" ? "bijv. via Maria" : lang === "es" ? "p. ej. vía María" : "e.g. via Maria"} style={{ width: "100%", fontSize: 12 }} /></div>
                       </div>
                       <button className="btn-primary" data-pay-submit disabled={payBusy || amt <= 0 || amt > open + 0.005} onClick={recordClientPayment} style={{ width: "100%", padding: "12px 16px", fontSize: 12, opacity: payBusy ? 0.6 : 1 }}>
@@ -16447,7 +16449,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
           {view === "analytics" && !isStarter && (() => {
             // Alles hieronder op de klok van de SALON (een beheerder in NL die
             // 's avonds een Bonaire-salon bekijkt zit anders al op morgen).
-            const anNow = salonNow(salonData.country_code);
+            const anNow = salonNow(salonData);
             const anToday = fmt(anNow);
             const an90 = fmt(new Date(anNow.getFullYear(), anNow.getMonth(), anNow.getDate() - 90));
             // Het geheugen bevat de laatste 90 dagen PLUS alle toekomstige
@@ -17413,6 +17415,10 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         update(d => {
                           d.country_code = newCode;
                           d.tax_region = nieuweRegio;
+                          // VS: de tijdzone kiest de eigenaar hieronder; alvast de
+                          // klok van dit apparaat als die Amerikaans is, anders Eastern.
+                          // Buiten de VS telt de kolom niet (tzFor), dus leeg.
+                          d.timezone = newCode === "US" ? (d.timezone || guessUsTimezone() || "America/New_York") : null;
                           // Het oude fiscale nummer hoort bij het oude land: een
                           // CRIB-nummer zou anders als "BTW-id" op Nederlandse
                           // facturen belanden. Leegmaken, eigenaar vult opnieuw in
@@ -17443,6 +17449,27 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                         landdefault terug en zou een Saba-salon hier "Bonaire" zien. */}
                     {(() => { const m = currencyForCountry(salonData.country_code); const tx = taxForCountry(salonData.country_code, salonData.tax_region); return `${lang === "nl" ? "Valuta" : lang === "es" ? "Moneda" : "Currency"}: ${m.symbol.trim()} · ${lang === "nl" ? "Belasting" : lang === "es" ? "Impuesto" : "Tax"}: ${tx.label}`; })()}
                   </div>
+                  {/* Tijdzone (VS, 15-11-2026): het land heeft er meerdere, dus
+                      kiest de salon. Gaat mee met Opslaan, net als het land. */}
+                  {salonData.country_code === "US" && (
+                    <div data-salon-tz style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 9, color: c.textLabel, marginBottom: 5, letterSpacing: "0.06em", textTransform: "uppercase" }}>{lang === "nl" ? "Tijdzone" : lang === "es" ? "Zona horaria" : "Time zone"}</div>
+                      <select className="input-field" value={tzFor(salonData)} style={{ width: "100%" }}
+                        aria-label={lang === "nl" ? "Tijdzone" : lang === "es" ? "Zona horaria" : "Time zone"}
+                        onChange={e => { const v = e.target.value; update(d => { d.timezone = v; return d; }); }}>
+                        {US_TIMEZONES.map(z => (
+                          <option key={z.id} value={z.id} style={{ background: c.selectBg }}>{z[lang] || z.en}</option>
+                        ))}
+                      </select>
+                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 5, lineHeight: 1.5 }}>
+                        {lang === "nl"
+                          ? "Je boekingspagina, agenda, herinneringen en mails volgen deze klok. Klik daarna op Opslaan."
+                          : lang === "es"
+                          ? "Tu página de reservas, agenda, recordatorios y correos siguen este reloj. Pulsa después en Guardar."
+                          : "Your booking page, calendar, reminders and emails follow this clock. Click Save afterwards."}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Taal van de salon (profiles.salon_lang, 12-11-2026). Voorheen
@@ -18180,6 +18207,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     const isBQ = cc === "BQ";
                     const isAW = cc === "AW";
                     const isCW = cc === "CW";
+                    const isUS = cc === "US";
                     const registered = !!taxCfg.registered;
                     const prodTaxable = !!taxCfg.productsTaxable;
                     const L = tax.label;
@@ -18266,6 +18294,9 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                                 : isCW ? (lang === "nl" ? "Het algemene OB-tarief op Cura\u00e7ao is 6%, maar er bestaan ook tarieven van 0%, 7% en 9%. Wij hebben niet kunnen vaststellen waar salondiensten onder vallen. Vul in wat je boekhouder of de Belastingdienst je opgeeft."
                                      : lang === "es" ? "El tipo general de OB en Cura\u00e7ao es del 6%, pero tambi\u00e9n existen 0%, 7% y 9%. No hemos podido determinar cu\u00e1l se aplica a los servicios de sal\u00f3n. Introduce lo que te indique tu contable."
                                      : "The general OB rate on Cura\u00e7ao is 6%, but 0%, 7% and 9% also exist. We could not establish which applies to salon services. Enter what your accountant or the tax authority tells you.")
+                                : isUS ? (lang === "nl" ? "Sales tax hangt af van je staat, county en stad, en Vellu kan niet vaststellen wat voor jouw diensten geldt. Vul in wat je accountant of de belastingdienst van je staat je opgeeft. Let op: je prijzen in Vellu zijn inclusief dit tarief; Vellu telt er nooit iets bovenop."
+                                     : lang === "es" ? "El sales tax depende de tu estado, condado y ciudad, y Vellu no puede determinar cu\u00e1l se aplica a tus servicios. Introduce lo que te indique tu contable o la oficina tributaria de tu estado. Ojo: tus precios en Vellu incluyen este impuesto; Vellu nunca lo a\u00f1ade encima."
+                                     : "Sales tax depends on your state, county and city, and Vellu can't determine which rate applies to your services. Enter what your accountant or your state's tax department tells you. Note: your prices in Vellu include this tax; Vellu never adds it on top.")
                                 : (lang === "nl" ? "Het tarief dat je over je behandelingen afdraagt. Knippen en nagels/schoonheid vallen niet altijd onder hetzelfde tarief \u2014 laat je boekhouder bevestigen wat voor jouw diensten geldt."
                                    : lang === "es" ? "El tipo que pagas sobre tus tratamientos. Pregunta a tu contable qu\u00e9 tipo aplica a tus servicios."
                                    : "The rate you remit on your treatments. Haircutting and nails/beauty don't always fall under the same rate \u2014 have your accountant confirm which applies to your services.")}
@@ -20541,7 +20572,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                     // gaan gewoon uit). Alleen voor de melding: lukt de telling niet,
                     // dan valt die zin weg. Kassaverkopen tellen niet als afspraak.
                     const { count: komend } = await supabase.from("appointments").select("id", { count: "exact", head: true })
-                      .eq("owner_id", salonData.owner_id).eq("staff_id", m.id).gte("date", fmt(salonNow(salonData.country_code)))
+                      .eq("owner_id", salonData.owner_id).eq("staff_id", m.id).gte("date", fmt(salonNow(salonData)))
                       .in("status", ["confirmed", "pending_payment"]).or("is_sale.is.null,is_sale.eq.false");
                     const k = komend || 0;
                     // Sinds 05-10-2026 sluit inactief ook haar login af (de
@@ -20574,7 +20605,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   // Alleen voor de telling in de waarschuwing; de koppeling gaat er
                   // hieronder sowieso bij alle afspraken af.
                   // Kassaverkopen (is_sale) tellen niet als afspraak in de melding.
-                  const vandaag = fmt(salonNow(salonData.country_code));
+                  const vandaag = fmt(salonNow(salonData));
                   const [alle, komend] = await Promise.all([
                     supabase.from("appointments").select("id", { count: "exact", head: true }).eq("owner_id", salonData.owner_id).eq("staff_id", m.id).or("is_sale.is.null,is_sale.eq.false"),
                     supabase.from("appointments").select("id", { count: "exact", head: true }).eq("owner_id", salonData.owner_id).eq("staff_id", m.id).gte("date", vandaag).in("status", ["confirmed", "pending_payment"]).or("is_sale.is.null,is_sale.eq.false"),
@@ -22254,7 +22285,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                 const offBy = (() => {
                   try {
                     const dl = autopayOffDeadline(bp.trial_ends_at);
-                    const tz = tzFor(salonData.country_code);
+                    const tz = tzFor(salonData);
                     const hm = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(dl);
                     const day = dl.toLocaleDateString(lang === "nl" ? "nl-NL" : lang === "es" ? "es-ES" : "en-GB", { timeZone: tz, day: "numeric", month: "short", year: "numeric" });
                     return hm === "00:00"
@@ -23454,7 +23485,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       toast.show(lang === "nl" ? "De begindatum ligt na de einddatum" : lang === "es" ? "La fecha de inicio es posterior a la de fin" : "The start date is after the end date", "error");
                       return;
                     }
-                    if (vUntil && vUntil < fmt(salonNow(salonData.country_code))) {
+                    if (vUntil && vUntil < fmt(salonNow(salonData))) {
                       toast.show(lang === "nl" ? "De einddatum ligt in het verleden" : lang === "es" ? "La fecha de fin ya pasó" : "The end date is in the past", "error");
                       return;
                     }
@@ -23716,7 +23747,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                              "Tras cada X visitas completadas, el cliente recibe automáticamente por correo un código de descuento personal para su próxima cita. Recibes un aviso y ves el progreso en cada ficha de cliente.")}
                         </div>
                       </div>
-                      <div onClick={() => update(d => { d.loyalty_enabled = !d.loyalty_enabled; if (d.loyalty_enabled && !d.loyalty_since) d.loyalty_since = fmt(salonNow(salonData.country_code)); return d; })}
+                      <div onClick={() => update(d => { d.loyalty_enabled = !d.loyalty_enabled; if (d.loyalty_enabled && !d.loyalty_since) d.loyalty_since = fmt(salonNow(salonData)); return d; })}
                         style={{ width: 40, height: 22, borderRadius: 100, position: "relative", background: on ? accent : c.inputBorder, transition: "background 0.2s", flexShrink: 0, cursor: "pointer" }}>
                         <div style={{ position: "absolute", top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
                       </div>
@@ -23775,7 +23806,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         </div>
                         <div>
                           <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>{L("Tel bezoeken vanaf", "Count visits from", "Contar visitas desde")}</div>
-                          <input className="input-field" type="date" max={fmt(salonNow(salonData.country_code))} value={salonData.loyalty_since || ""}
+                          <input className="input-field" type="date" max={fmt(salonNow(salonData))} value={salonData.loyalty_since || ""}
                             onChange={e => update(d => { d.loyalty_since = e.target.value; return d; })}
                             style={{ width: "100%", fontSize: 13, padding: "10px 12px" }} />
                         </div>
@@ -23968,6 +23999,8 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                   city: salonData.city,
                   // Region → drives currency + tax label everywhere (read live from country_code).
                   country_code: salonData.country_code || "NL",
+                  // Alleen de VS heeft een eigen tijdzone (profiles_timezone_check).
+                  timezone: salonData.country_code === "US" ? tzFor(salonData) : null,
                   accent_color: salonData.accent,
                   address: salonData.address || null,
                   kvk_number: salonData.kvk_number || null,
@@ -24243,7 +24276,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                           altijd een typefout in het jaartal. */}
                       {/* Salonklok, niet de browser: een Bonaire-afspraak voor
                           vandaag moet ook om 01:00 NL-tijd nog in te voeren zijn. */}
-                      <input type="date" className="input-field" min={fmt(salonNow(salonData.country_code))} value={addApptForm.date} onChange={e => setAddApptForm(f => ({...f, date: e.target.value}))} style={{ fontSize: 12, flex: 1 }} />
+                      <input type="date" className="input-field" min={fmt(salonNow(salonData))} value={addApptForm.date} onChange={e => setAddApptForm(f => ({...f, date: e.target.value}))} style={{ fontSize: 12, flex: 1 }} />
                       {/* Alleen tijden binnen de openingstijden van de gekozen
                           dag (pauze eruit); 06:00–22:00 tonen los van de uren
                           nodigde uit tot boeken op een moment dat dicht is. */}
@@ -24369,7 +24402,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                         <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: c.textLabel, marginBottom: 4 }}>
                           {t.birthday} ({t.allergiesOptional})
                         </div>
-                        <input className="input-field" type="date" max={fmt(salonNow(salonData.country_code))} value={addApptForm.client_birthday || ""} onChange={e => setAddApptForm(f => ({...f, client_birthday: e.target.value}))} style={{ fontSize: 12, width: "100%" }} />
+                        <input className="input-field" type="date" max={fmt(salonNow(salonData))} value={addApptForm.client_birthday || ""} onChange={e => setAddApptForm(f => ({...f, client_birthday: e.target.value}))} style={{ fontSize: 12, width: "100%" }} />
                         <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4, lineHeight: 1.45 }}>
                           {lang === "nl" ? "Voor de verjaardagsactie — laat leeg als je 'm niet weet."
                             : lang === "es" ? "Para la acción de cumpleaños — déjalo vacío si no lo sabes."
@@ -24647,7 +24680,7 @@ const zeker = await showConfirm(lang === "nl" ? "Dit product verwijderen? Je ver
                       // SALON valt en niet in die van de browser — anders zit
                       // een Bonaire-afspraak die vanuit NL wordt ingeklopt er
                       // vier uur naast.
-                      const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time, salonData.country_code);
+                      const cancelUrl = await createCancellationToken(appt.id, addApptForm.date, addApptForm.time, salonData);
                       const bookingConfirmPayload = {
                         // send-emails/send-sms halen ontvanger (adres, telefoon)
                         // en salongegevens server-side uit deze afspraak.

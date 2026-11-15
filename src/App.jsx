@@ -841,7 +841,7 @@ function SalonRoute({ lang, setLang }) {
       // blokkade van de salon-dag van vandaag weg, en leken geblokkeerde
       // tijden vrij (C1-13). Een dag extra kost niets: de boekingsmotor kijkt
       // toch alleen naar vandaag en later.
-      const salonToday = salonNow(data.country_code || "NL");
+      const salonToday = salonNow(data);
       const blocksFrom = fmt(new Date(salonToday.getFullYear(), salonToday.getMonth(), salonToday.getDate() - 1));
       // Uitrolvangnet voor de twee nieuwe views: staat deze frontend live
       // vóór de migratie (view bestaat nog niet), dan nog één keer de oude
@@ -898,6 +898,8 @@ function SalonRoute({ lang, setLang }) {
         name: (data.business_name || data.owner_name || "Studio").trim() || "Studio",
         ...(() => { const p = splitPlace(data.city, data.address); return { city: p.city || "Nederland", address: p.address }; })(),
         country_code: data.country_code || "NL",
+        // Eigen tijdzone (alleen VS, 15-11-2026; public_salons.timezone).
+        timezone: data.timezone || null,
         // Demosalon (Bloom Studio): verzonnen reviews, dus niet in Google
         // (noindex hieronder, geen JSON-LD in ClientApp, noindex in api/og.js).
         is_demo: data.is_demo === true,

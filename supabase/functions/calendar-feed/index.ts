@@ -67,8 +67,19 @@ const TZ_BY_COUNTRY: Record<string, string> = {
   CW: "America/Curacao",
   BQ: "America/Curacao",
   SX: "America/Curacao",
+  US: "America/New_York",
 };
-const tzFor = (code?: string | null) => TZ_BY_COUNTRY[code || ""] || "Europe/Amsterdam";
+// VS (15-11-2026): meerdere tijdzones, de salon kiest er een
+// (profiles.timezone). Telt alleen bij het eigen land; zelfde lijst als
+// US_TIMEZONES in shared.jsx en profiles_timezone_check (samen wijzigen).
+const SALON_TZS: Record<string, string[]> = {
+  US: ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"],
+};
+const tzFor = (code?: string | null, tz?: string | null) => {
+  const cc = String(code || "").toUpperCase();
+  if (tz && (SALON_TZS[cc] || []).includes(tz)) return tz;
+  return TZ_BY_COUNTRY[cc] || "Europe/Amsterdam";
+};
 
 // Teksten in de events in de taal van de salon (zelfde landen als owner_lang
 // in de andere functies); de feed is voor de eigenaar en haar team.
@@ -85,6 +96,24 @@ const LABELS = {
 //   - Londen: GMT/BST, dezelfde weken maar een uur lager.
 //   - Curacao: GEEN zomertijd. Alleen een STANDARD-component op -0400; een
 //     DAYLIGHT-component erbij zou de eilanden een niet-bestaande sprong geven.
+// VS (15-11-2026): zomertijd van de tweede zondag van maart tot de eerste
+// zondag van november, telkens om 02:00 lokaal (regel sinds 2007). Arizona en
+// Hawaï kennen geen zomertijd: alleen een STANDARD-component, net als Curacao.
+const usVtz = (id: string, std: string, stdName: string, dst?: string, dstName?: string): string[] => dst
+  ? [
+    "BEGIN:VTIMEZONE", `TZID:${id}`,
+    "BEGIN:DAYLIGHT", `TZOFFSETFROM:${std}`, `TZOFFSETTO:${dst}`, `TZNAME:${dstName}`,
+    "DTSTART:20070311T020000", "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU", "END:DAYLIGHT",
+    "BEGIN:STANDARD", `TZOFFSETFROM:${dst}`, `TZOFFSETTO:${std}`, `TZNAME:${stdName}`,
+    "DTSTART:20071104T020000", "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU", "END:STANDARD",
+    "END:VTIMEZONE",
+  ]
+  : [
+    "BEGIN:VTIMEZONE", `TZID:${id}`,
+    "BEGIN:STANDARD", `TZOFFSETFROM:${std}`, `TZOFFSETTO:${std}`, `TZNAME:${stdName}`,
+    "DTSTART:19700101T000000", "END:STANDARD",
+    "END:VTIMEZONE",
+  ];
 const VTIMEZONE_BY_TZ: Record<string, string[]> = {
   "Europe/Amsterdam": [
     "BEGIN:VTIMEZONE",
@@ -154,6 +183,13 @@ const VTIMEZONE_BY_TZ: Record<string, string[]> = {
     "END:STANDARD",
     "END:VTIMEZONE",
   ],
+  "America/New_York": usVtz("America/New_York", "-0500", "EST", "-0400", "EDT"),
+  "America/Chicago": usVtz("America/Chicago", "-0600", "CST", "-0500", "CDT"),
+  "America/Denver": usVtz("America/Denver", "-0700", "MST", "-0600", "MDT"),
+  "America/Phoenix": usVtz("America/Phoenix", "-0700", "MST"),
+  "America/Los_Angeles": usVtz("America/Los_Angeles", "-0800", "PST", "-0700", "PDT"),
+  "America/Anchorage": usVtz("America/Anchorage", "-0900", "AKST", "-0800", "AKDT"),
+  "Pacific/Honolulu": usVtz("Pacific/Honolulu", "-1000", "HST"),
 };
 
 serve(async (req) => {
@@ -168,7 +204,7 @@ serve(async (req) => {
   let staff: { id: string; name: string } | null = null;
   let { data: salon } = await supabase
     .from("profiles")
-    .select("id, business_name, country_code, salon_lang, staff_view_client_contact, deactivated_at")
+    .select("id, business_name, country_code, timezone, salon_lang, staff_view_client_contact, deactivated_at")
     .eq("calendar_feed_token", token)
     .maybeSingle();
   if (!salon) {
@@ -181,7 +217,7 @@ serve(async (req) => {
       staff = { id: st.id, name: st.name };
       const { data: ownerProfile } = await supabase
         .from("profiles")
-        .select("id, business_name, country_code, salon_lang, staff_view_client_contact, deactivated_at")
+        .select("id, business_name, country_code, timezone, salon_lang, staff_view_client_contact, deactivated_at")
         .eq("id", st.owner_id)
         .maybeSingle();
       salon = ownerProfile;
@@ -237,7 +273,7 @@ serve(async (req) => {
   // De tijdzone van de salon bepaalt zowel de TZID op elk event als het
   // VTIMEZONE-blok in de kop; die twee moeten per definitie hetzelfde zijn,
   // anders valt de agenda-app terug op UTC.
-  const tz = tzFor(salon.country_code);
+  const tz = tzFor(salon.country_code, salon.timezone);
   const vtimezone = VTIMEZONE_BY_TZ[tz] || VTIMEZONE_BY_TZ["Europe/Amsterdam"];
 
   const stamp = `${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}T${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}Z`;

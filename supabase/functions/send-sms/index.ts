@@ -109,7 +109,9 @@ async function verifyUserToken(tok: string): Promise<string | null> {
 // lokale nummers (Caribisch: 7 cijfers) krijgen de landcode ervoor. Tot
 // 05-10-2026 was dit NL-only: een 7-cijferig Bonaire-nummer werd overgeslagen
 // en "0…" van een Bonaire- of Belgische salon werd +31… — een vreemde.
-const WA_COUNTRY_PREFIX: Record<string, string> = { NL: "31", BE: "32", BQ: "599", CW: "599", AW: "297", SX: "1721", ES: "34", DE: "49", GB: "44", SR: "597" };
+const WA_COUNTRY_PREFIX: Record<string, string> = { NL: "31", BE: "32", BQ: "599", CW: "599", AW: "297", SX: "1721", ES: "34", DE: "49", GB: "44", SR: "597", US: "1" };
+// VS (15-11-2026): lokaal = 10 cijfers, krijgt de 1 ervoor; internationaal
+// bellen gaat daar met 011. Zelfde regels als waDigits in shared.jsx.
 function normalisePhone(raw: string | null | undefined, countryCode = "NL"): string | null {
   if (!raw) return null;
   const s = String(raw).trim();
@@ -120,6 +122,8 @@ function normalisePhone(raw: string | null | undefined, countryCode = "NL"): str
   const country = String(countryCode || "NL").toUpperCase();
   const cc = WA_COUNTRY_PREFIX[country] || "31";
   if (d.startsWith("00")) d = d.slice(2);
+  else if (country === "US" && d.startsWith("011") && d.length > 10) d = d.slice(3);
+  else if (country === "US" && d.length === 10 && /^[2-9]/.test(d)) d = "1" + d;
   else if (d.startsWith("0")) d = cc + d.slice(1);
   else if (country === "CW" && d.length === 7) d = "5999" + d;
   else if (country === "CW" && d.length === 8 && d.startsWith("9")) d = "599" + d;
