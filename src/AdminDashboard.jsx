@@ -610,6 +610,7 @@ export default function AdminDashboard({ onLogout }) {
       const note = s.churning ? (s.plan_expires_at ? `ends ${fmtDate(s.plan_expires_at)}` : null)
         : s.classification === "trialing" ? (s.trial_ends_at ? `until ${fmtDate(s.trial_ends_at)}` : null)
         : s.classification === "past_due" && !everPaid ? (s.trial_ends_at ? `ended ${fmtDate(s.trial_ends_at)}` : null)
+        : s.classification === "cancelled" ? (s.plan_expires_at ? `ended ${fmtDate(s.plan_expires_at)}` : null)
         : null;
       return { badge: statusBadge(s.classification, s.churning, c, accent, everPaid), note };
     }
@@ -1190,7 +1191,9 @@ export default function AdminDashboard({ onLogout }) {
                                     ? (everPaid
                                       ? (s.plan_expires_at ? `unpaid since ${fmtDate(s.plan_expires_at)}` : "unpaid")
                                       : (s.trial_ends_at ? `trial ended ${fmtDate(s.trial_ends_at)}` : "trial ended"))
-                                    : "—"}
+                                    : s.classification === "cancelled" && s.plan_expires_at
+                                      ? `ended ${fmtDate(s.plan_expires_at)}`
+                                      : "—"}
                           </td>
                         </tr>
                       );
@@ -1790,6 +1793,7 @@ export default function AdminDashboard({ onLogout }) {
           : sub.classification === "paying" ? (sub.plan_expires_at ? `Renews ${fmtDate(sub.plan_expires_at)}` : "Active")
           : sub.classification === "trialing" ? (sub.trial_ends_at ? `Trial ends ${fmtDate(sub.trial_ends_at)}` : "Trial")
           : sub.classification === "past_due" ? (everPaid ? (sub.plan_expires_at ? `Unpaid since ${fmtDate(sub.plan_expires_at)}` : "Unpaid") : (sub.trial_ends_at ? `Trial ended ${fmtDate(sub.trial_ends_at)}` : "Trial ended"))
+          : sub.classification === "cancelled" ? (sub.plan_expires_at ? `Cancelled, access ended ${fmtDate(sub.plan_expires_at)}` : "Cancelled")
           : null;
         const label = { fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel };
         const Section = ({ title, n, children }) => (
