@@ -158,6 +158,12 @@ const fmtDue = (iso: string, l: string, tz: string, cc?: unknown) => {
   try {
     // VS: maand eerst en 12-uursklok ("Thursday, November 19 at 2:30 PM").
     if (isUsCc(cc)) {
+      // Nederlands/Spaans: Intl schrijft daar "2:30 p.m."; eerst 24-uurs en
+      // dan dezelfde "2:30 PM" als overal in de VS (fase 3, 16-11-2026).
+      if (l === "nl" || l === "es") {
+        return usTimesIn(new Date(iso).toLocaleString(usDateLoc(l, cc),
+          { timeZone: tz, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }), cc);
+      }
       return new Date(iso).toLocaleString(usDateLoc(l, cc),
         { timeZone: tz, weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true }).replace(/\u202f/g, " ");
     }

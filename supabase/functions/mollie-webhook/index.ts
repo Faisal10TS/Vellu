@@ -315,6 +315,7 @@ async function notifyPaymentFailed(
           owner_lang: ownerLangOf(p),
           // Zodat send-emails datums in de tijdzone van de salon schrijft.
           country_code: p.country_code || "NL",
+          timezone: p.timezone || null,
           business_name: p.business_name,
           salon_name: p.business_name,
           plan: meta?.plan || p.plan || "starter",
@@ -797,7 +798,7 @@ async function processEvent(
   const meta = payment.metadata as { plan?: string; billing_interval?: string; kind?: string } | null;
   const { data: profile, error: profErr } = await supabase
     .from("profiles")
-    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, cancel_at_period_end, cancelled_at, referral_credit_days, referral_credit_days_redeemed, email, business_name, country_code, salon_lang, btw_id, trial_ends_at, deactivated_at")
+    .select("id, plan, billing_interval, mollie_customer_id, mollie_mandate_id, mollie_subscription_id, plan_expires_at, subscription_status, cancel_at_period_end, cancelled_at, referral_credit_days, referral_credit_days_redeemed, email, business_name, country_code, timezone, salon_lang, btw_id, trial_ends_at, deactivated_at")
     .eq("id", ownerId)
     .maybeSingle();
   if (profErr) {
@@ -809,6 +810,10 @@ async function processEvent(
     return { status: 200, body: "ok (no profile)", done: true };
   }
   const country = (profile as Record<string, unknown>).country_code as string | null;
+  // VS (fase 3, 16-11-2026): de eigen tijdzone van de salon mee naar send-emails,
+  // anders schrijft die datums en tijden in de standaardzone van het land
+  // (VS = Eastern, ook voor een salon in Californië of op Hawaï).
+  const salonTz = (profile as Record<string, unknown>).timezone as string | null;
   const btwId = (profile as Record<string, unknown>).btw_id as string | null;
   const salonLabel = `${profile.business_name || "?"} (${profile.email || ownerId})`;
 
@@ -954,6 +959,7 @@ async function processEvent(
               credits_used: creditsUsed || 0,
               // Land van de eigenaar: send-emails schrijft de factuur dan in VS-opmaak.
               country_code: country || "NL",
+              timezone: salonTz || null,
               ...invoiceFields,
             },
           }),
@@ -1181,6 +1187,7 @@ async function processEvent(
                 owner_id: ownerId,
                 owner_lang: ownerLangOf(profile as Record<string, unknown>),
                 country_code: country || "NL",
+                timezone: salonTz || null,
                 business_name: profile.business_name,
                 salon_name: profile.business_name,
                 plan,
@@ -1411,6 +1418,7 @@ async function processEvent(
               credits_used: firstCreditsUsed || 0,
               // Land van de eigenaar: send-emails schrijft de factuur dan in VS-opmaak.
               country_code: country || "NL",
+              timezone: salonTz || null,
               ...invoiceFields,
             },
           }),
@@ -1457,6 +1465,7 @@ async function processEvent(
               business_name: (profile as Record<string, unknown>).business_name,
               // Land van de eigenaar: send-emails schrijft de factuur dan in VS-opmaak.
               country_code: country || "NL",
+              timezone: salonTz || null,
               ...invoiceFields,
             },
           }),
@@ -1670,6 +1679,7 @@ async function processEvent(
               credits_used: creditsUsed || 0,
               // Land van de eigenaar: send-emails schrijft de factuur dan in VS-opmaak.
               country_code: country || "NL",
+              timezone: salonTz || null,
               ...invoiceFields,
             },
           }),

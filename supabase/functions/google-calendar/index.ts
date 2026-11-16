@@ -69,6 +69,28 @@ function localIso(date: string, time: string, addMinutes = 0) {
   return `${outY}-${pad(outMo)}-${pad(outD)}T${pad(outH)}:${pad(em)}:00`;
 }
 
+// Agenda-tekst in de taal en munt van de salon (fase 3, 16-11-2026). Stond vast
+// op Nederlands en "€", ook bij een Engelstalige salon of een salon op Bonaire
+// die in dollars werkt. Taal: zelf gekozen (profiles.salon_lang), anders het
+// land (zelfde regel als salonLangOf in send-reminders). Munt: zelfde kaart als
+// CUR_BY_COUNTRY in send-emails. Bedrag zoals fmtPrice in de app: ronde
+// bedragen zonder ",00" (VS ".00").
+const DUTCH_COUNTRIES = new Set(["NL", "BE", "AW", "CW", "BQ", "SX"]);
+const salonLangOf = (p: { salon_lang?: string | null; country_code?: string | null } | null) =>
+  (["nl", "en", "es"].includes(String(p?.salon_lang || "")) ? String(p?.salon_lang)
+    : DUTCH_COUNTRIES.has(String(p?.country_code || "NL").toUpperCase()) ? "nl" : "en");
+const CUR_BY_COUNTRY: Record<string, string> = { BQ: "$", AW: "Afl. ", CW: "XCG ", SX: "XCG ", GB: "£", US: "$" };
+const CAL_LABELS: Record<string, Record<string, string>> = {
+  nl: { client: "Klant", email: "Email", phone: "Tel", service: "Behandeling", price: "Prijs", staff: "Medewerker", appt: "Afspraak" },
+  en: { client: "Client", email: "Email", phone: "Phone", service: "Service", price: "Price", staff: "Staff", appt: "Appointment" },
+  es: { client: "Cliente", email: "Correo", phone: "Tel.", service: "Servicio", price: "Precio", staff: "Empleado", appt: "Cita" },
+};
+const calPrice = (n: unknown, cc?: string | null) => {
+  const code = String(cc || "").toUpperCase();
+  const s = usAmt(CUR_BY_COUNTRY[code] || "€", n, code);
+  return s.endsWith(isUsCc(code) ? ".00" : ",00") ? s.slice(0, -3) : s;
+};
+
 // Tijdzone per land, zelfde tabel als TZ_BY_COUNTRY in shared.jsx en de
 // andere edge-functies. Onbekend land = Amsterdam.
 const TZ_BY_COUNTRY: Record<string, string> = {
@@ -161,7 +183,7 @@ serve(async (req) => {
 
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
-    .select("google_refresh_token, google_calendar_connected, country_code, timezone")
+    .select("google_refresh_token, google_calendar_connected, country_code, timezone, salon_lang")
     .eq("id", owner_id)
     .maybeSingle();
 
@@ -245,18 +267,18 @@ serve(async (req) => {
     const startDateTime = localIso(booking.date, booking.time, 0);
     const endDateTime = localIso(booking.date, booking.time, duration);
 
+    const L = CAL_LABELS[salonLangOf(profile)] || CAL_LABELS.nl;
     const descriptionLines = [
-      `Klant: ${booking.client_name || ""}`,
-      booking.client_email ? `Email: ${booking.client_email}` : "",
-      booking.client_phone ? `Tel: ${booking.client_phone}` : "",
-      `Behandeling: ${booking.service_name || ""}`,
-      // VS (fase 2): "Prijs: $1,234.50"; elk ander land precies zoals het was.
-      booking.price !== undefined ? (isUsCc(profile?.country_code) ? `Prijs: ${usAmt("$", booking.price, "US")}` : `Prijs: €${booking.price}`) : "",
-      booking.staff_name ? `Medewerker: ${booking.staff_name}` : "",
+      `${L.client}: ${booking.client_name || ""}`,
+      booking.client_email ? `${L.email}: ${booking.client_email}` : "",
+      booking.client_phone ? `${L.phone}: ${booking.client_phone}` : "",
+      `${L.service}: ${booking.service_name || ""}`,
+      booking.price !== undefined ? `${L.price}: ${calPrice(booking.price, profile?.country_code)}` : "",
+      booking.staff_name ? `${L.staff}: ${booking.staff_name}` : "",
     ].filter(Boolean);
 
     const event = {
-      summary: `${booking.service_name || "Afspraak"} — ${booking.client_name || ""}`.trim(),
+      summary: `${booking.service_name || L.appt} — ${booking.client_name || ""}`.trim(),
       description: descriptionLines.join("\n"),
       start: { dateTime: startDateTime, timeZone: salonTz },
       end: { dateTime: endDateTime, timeZone: salonTz },

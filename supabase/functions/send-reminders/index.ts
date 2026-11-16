@@ -362,6 +362,25 @@ function fmtDate(dateStr: string, lang: string, cc?: unknown) {
 // avond ervoor op de Cariben, en dat wil niemand in zijn inbox.
 const DIGEST_UTC_HOURS = new Set([9, 10]);
 
+// VS (fase 3, 16-11-2026): het UTC-venster hierboven valt in de VS midden in
+// de nacht (New York 04:00-05:00, Los Angeles 01:00-02:00, Hawaï middernacht).
+// Een salon in de VS krijgt het overzicht daarom om 9 of 10 uur 's ochtends op
+// zijn EIGEN klok, met de lokale datum als dedupe-sleutel. Elk ander land blijft
+// precies op het UTC-venster. Twee uren, net als hierboven: mislukt de mail in
+// het eerste uur, dan geeft de claim zich terug en probeert het tweede uur het
+// opnieuw.
+const US_DIGEST_LOCAL_HOURS = new Set([9, 10]);
+function localHour(at: Date, tz: string) {
+  try {
+    return Number(new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", hour: "2-digit" }).format(at)) % 24;
+  } catch { return -1; }
+}
+const addDaysYmd = (ymd: string, n: number) => {
+  const d = new Date(ymd + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
 // Hartslag-rij voor de digest in cron_health — sinds v16 puur TELEMETRIE, niet
 // langer de dedupe. De dedupe zelf leeft per eigenaar in salon_digest_log (zie
 // de digest-lus in serve): de oude ene-rij-per-dag-aanpak was alles-of-niets,
@@ -391,6 +410,7 @@ async function recordDigestSent(count: number) {
 // Eén regel uit het dagoverzicht van morgen, inclusief de gejoinde salon.
 type DigestRow = {
   owner_id: string;
+  date: string;
   time: string;
   client_name: string;
   service_name: string;
@@ -667,15 +687,26 @@ serve(async (req) => {
     // sloot die salon de rest van de dag buiten.
     let digests = 0;
     const inDigestWindow = DIGEST_UTC_HOURS.has(now.getUTCHours());
-    if (inDigestWindow) {
+    // VS: staat er nu ergens een Amerikaanse zone op 9 of 10 uur 's ochtends?
+    const usDigestZones = SALON_TZS.US.filter((z) => US_DIGEST_LOCAL_HOURS.has(localHour(now, z)));
+    const usDigestWindow = usDigestZones.length > 0;
+    if (inDigestWindow || usDigestWindow) {
       // Sleutel is de UTC-dag, consequent met tomorrowStr hierboven: binnen
       // het 9/10-venster valt elke salontijd die we bedienen (UTC-4 t/m UTC+2)
-      // toch op dezelfde kalenderdag als UTC.
+      // toch op dezelfde kalenderdag als UTC. Een VS-salon gebruikt zijn eigen
+      // lokale dag (zie hieronder).
       const todayUtcStr = now.toISOString().split("T")[0];
+      // Welke "morgen"-datums deze run nodig heeft: de UTC-morgen voor het
+      // gewone venster, plus de lokale morgen van elke VS-zone die nu in zijn
+      // ochtendvenster zit (in de praktijk dezelfde datum, maar zo hangt het
+      // daar niet van af).
+      const digestDates = new Set<string>();
+      if (inDigestWindow) digestDates.add(tomorrowStr);
+      for (const z of usDigestZones) digestDates.add(addDaysYmd(localDateStr(now, z), 1));
       const { data: dayAppts } = await supabase
         .from("appointments")
-        .select("owner_id, time, client_name, service_name, staff_name, profiles!owner_id(business_name, email, salon_email, country_code, timezone, salon_lang, reminder_hours, deactivated_at)")
-        .eq("date", tomorrowStr)
+        .select("owner_id, date, time, client_name, service_name, staff_name, profiles!owner_id(business_name, email, salon_email, country_code, timezone, salon_lang, reminder_hours, deactivated_at)")
+        .in("date", [...digestDates])
         .eq("status", "confirmed")
         .is("cancelled_at", null);
 
@@ -690,11 +721,26 @@ serve(async (req) => {
         // Gedeactiveerde salon (23-10-2026): geen agenda-mail aan de eigenaar,
         // en ook geen salon_digest_log-rij — overslaan vóór de claim.
         if (appts[0].profiles?.deactivated_at) continue;
-        // Hawaï (UTC-10, 15-11-2026) staat om 09:00 UTC nog op gisteren, en dan
-        // zou "morgen" overmorgen zijn. Zo'n salon wacht op de run van 10:00
-        // UTC (middernacht daar): de claim hieronder is per UTC-dag.
         const pz = appts[0].profiles || {};
-        if (localDateStr(now, tzFor(pz.country_code, pz.timezone)) !== todayUtcStr) continue;
+        const salonTz = tzFor(pz.country_code, pz.timezone);
+        let sentOn: string;
+        let forDate: string;
+        if (isUsCc(pz.country_code)) {
+          // VS (fase 3): alleen om 9 of 10 uur 's ochtends op de klok van de
+          // salon, en "vandaag"/"morgen" volgens die klok.
+          if (!US_DIGEST_LOCAL_HOURS.has(localHour(now, salonTz))) continue;
+          sentOn = localDateStr(now, salonTz);
+          forDate = addDaysYmd(sentOn, 1);
+        } else {
+          if (!inDigestWindow) continue;
+          // Een salon die om 09:00 UTC nog op gisteren staat zou anders
+          // overmorgen als "morgen" krijgen; de claim hieronder is per UTC-dag.
+          if (localDateStr(now, salonTz) !== todayUtcStr) continue;
+          sentOn = todayUtcStr;
+          forDate = tomorrowStr;
+        }
+        const mine = appts.filter((a) => a.date === forDate);
+        if (mine.length === 0) continue;
         // Claim eerst de rij; ignoreDuplicates + select() gedraagt zich als
         // "insert … on conflict do nothing returning": bestond de rij al
         // (eerdere run vandaag), dan komt er een lege lijst terug en zwijgen
@@ -703,24 +749,24 @@ serve(async (req) => {
         const { data: claim, error: claimErr } = await supabase
           .from("salon_digest_log")
           .upsert(
-            { owner_id: ownerId, sent_on: todayUtcStr },
+            { owner_id: ownerId, sent_on: sentOn },
             { onConflict: "owner_id,sent_on", ignoreDuplicates: true },
           )
           .select("owner_id");
         if (claimErr) { console.error("digest claim failed:", ownerId, claimErr.message); continue; }
         if (!claim || claim.length === 0) continue; // vandaag al gedaan
 
-        const p = appts[0].profiles || {};
+        const p = pz;
         const ok = await sendOwnerDigest({
           email: p.salon_email || p.email || "",
           salon_name: p.business_name || "je salon",
           // Het overzicht bestaat in NL en EN (sendOwnerDigest: alles behalve
           // "en" wordt Nederlands), dus een Spaanstalige salon krijgt Engels.
           lang: salonLangOf(p) === "nl" ? "nl" : "en",
-          date: tomorrowStr,
+          date: forDate,
           reminderHours: Number(p.reminder_hours) || 0,
           country_code: p.country_code || null,
-          appts,
+          appts: mine,
         });
         if (ok) digests++;
         else {
@@ -730,10 +776,12 @@ serve(async (req) => {
             .from("salon_digest_log")
             .delete()
             .eq("owner_id", ownerId)
-            .eq("sent_on", todayUtcStr);
+            .eq("sent_on", sentOn);
         }
       }
-      await recordDigestSent(digests);
+      // Hartslag zoals altijd in het UTC-venster; in een VS-run alleen als er
+      // echt iets uitging (anders zou elk uur 13-20 UTC een rij geven).
+      if (inDigestWindow || digests > 0) await recordDigestSent(digests);
     }
 
     const healthStatus = emailAttempts > 0 && emailFailures === emailAttempts
@@ -756,6 +804,7 @@ serve(async (req) => {
         // 09/10-UTC-venster proberen we het niet eens; binnen het venster
         // betekent nul "niets te melden of alle eigenaren al geclaimd vandaag".
         digest_window: inDigestWindow,
+        us_digest_window: usDigestWindow,
         date: tomorrowStr,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },

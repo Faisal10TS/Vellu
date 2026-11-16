@@ -14,6 +14,39 @@
 
 export const RELEASES = [
   {
+    // 16-11: de hele VS-update in één blok (fase 1 4a8bce7 + fase 2 6a9b083 +
+    // fase 3). Bewust pas nu: de VS wordt als geheel aangekondigd.
+    id: "2026-11-16a",
+    date: "2026-11-16",
+    title: { nl: "Vellu werkt nu ook in de Verenigde Staten", en: "Vellu now works in the United States", es: "Vellu ya funciona en Estados Unidos" },
+    items: [
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Salons in de Verenigde Staten kunnen Vellu nu gebruiken. Kies bij het aanmelden of in Instellingen het land Verenigde Staten en je tijdzone (Eastern, Central, Mountain, Arizona, Pacific, Alaska of Hawaï). De agenda, herinneringen en mails volgen die tijdzone, telefoonnummers krijgen +1, en sales tax vul je zelf in met je eigen percentage.",
+          en: "Salons in the United States can now use Vellu. Choose United States as your country at signup or in Settings, plus your time zone (Eastern, Central, Mountain, Arizona, Pacific, Alaska or Hawaii). The calendar, reminders and emails follow that time zone, phone numbers get +1, and you enter your own sales tax percentage.",
+          es: "Los salones en Estados Unidos ya pueden usar Vellu. Elige Estados Unidos como país al registrarte o en Ajustes, y tu zona horaria (Eastern, Central, Mountain, Arizona, Pacific, Alaska o Hawái). La agenda, los recordatorios y los correos siguen esa zona horaria, los teléfonos llevan +1 y el sales tax lo indicas tú con tu propio porcentaje.",
+        },
+      },
+      {
+        kind: "new", audience: ["owner"],
+        text: {
+          nl: "Voor salons in de Verenigde Staten staan tijden, bedragen en datums op z'n Amerikaans: 2:30 PM, $1,234.50 en datums in cijfers met de maand eerst (11/19/2026). In de app, op de boekingspagina, in mails, facturen en rapporten. Salons in andere landen houden hun eigen notatie.",
+          en: "For salons in the United States, times, amounts and dates are written the American way: 2:30 PM, $1,234.50 and the month first (November 19, 11/19/2026). In the app, on the booking page, in emails, invoices and reports. Salons in other countries keep their own style.",
+          es: "Para los salones en Estados Unidos, las horas, importes y fechas se escriben al estilo estadounidense: 2:30 PM, $1,234.50 y las fechas en números con el mes primero (11/19/2026). En la app, en la página de reservas, en los correos, las facturas y los informes. Los salones de otros países mantienen su formato.",
+        },
+      },
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Afspraken die Vellu in je Google Agenda zet, staan nu in de taal en de munt van je salon. Ze waren altijd in het Nederlands en met een euroteken.",
+          en: "Appointments Vellu adds to your Google Calendar now use your salon's language and currency. They always used to be in Dutch with a euro sign.",
+          es: "Las citas que Vellu añade a tu Google Calendar ahora están en el idioma y la moneda de tu salón. Antes siempre aparecían en neerlandés y con el símbolo del euro.",
+        },
+      },
+    ],
+  },
+  {
     // 12-11 (zevende): salontaal zelf kiezen (profiles.salon_lang). Bij het
     // aanmelden en in Instellingen → Salon; voorheen volgde de taal uit het land.
     id: "2026-11-12g",

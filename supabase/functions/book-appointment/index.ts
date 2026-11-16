@@ -1432,6 +1432,12 @@ serve(async (req) => {
     try {
       // VS: maand eerst en 12-uursklok ("Thursday, November 19 at 2:30 PM").
       if (isUsCc(salon.country_code)) {
+        // Nederlands/Spaans: Intl schrijft daar "2:30 p.m."; eerst 24-uurs en
+        // dan dezelfde "2:30 PM" als overal in de VS (fase 3, 16-11-2026).
+        if (l === "nl" || l === "es") {
+          return usTimesIn(d.toLocaleString(usDateLoc(l, salon.country_code),
+            { timeZone: salonTz, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }), salon.country_code);
+        }
         return d.toLocaleString(usDateLoc(l, salon.country_code),
           { timeZone: salonTz, weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true }).replace(/\u202f/g, " ");
       }
