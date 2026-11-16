@@ -2062,7 +2062,7 @@ function StaffApp({ staffUser, lang, setLang, onLogout }) {
                     const rev = completedAppts
                       .filter(a => parseDate(a.date) >= weekStart && parseDate(a.date) < weekEnd)
                       .reduce((s, a) => s + myShare(a), 0);
-                    const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
+                    const label = formatRegion() === "US" ? `${weekStart.getMonth() + 1}/${weekStart.getDate()}` : `${weekStart.getDate()}/${weekStart.getMonth() + 1}`; // VS: maand eerst
                     weeks.push({ label, revenue: rev });
                   }
                   const total8w = weeks.reduce((s, w) => s + w.revenue, 0);

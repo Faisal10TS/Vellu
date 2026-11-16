@@ -13694,7 +13694,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                     const rev = dashAppts
                       .filter(a => a.status === "completed" && a.date >= wsStr && a.date < weStr)
                       .reduce((s, a) => s + (dashStaff ? shareOf(a, dashStaff) : parseFloat(a.service_price || 0)), 0);
-                    const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
+                    const label = formatRegion() === "US" ? `${weekStart.getMonth() + 1}/${weekStart.getDate()}` : `${weekStart.getDate()}/${weekStart.getMonth() + 1}`; // VS: maand eerst
                     weeks.push({ label, revenue: rev });
                   }
                   const total8w = weeks.reduce((s, w) => s + w.revenue, 0);
@@ -16594,7 +16594,7 @@ function OwnerApp({ user, onLogout, lang, setLang, salons = {}, onSalonUpdate })
                   const rev = appts
                     .filter(a => a.status === "completed" && a.date >= wsStr && a.date < weStr)
                     .reduce((s, a) => s + parseFloat(a.service_price || 0), 0);
-                  const label = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
+                  const label = formatRegion() === "US" ? `${weekStart.getMonth() + 1}/${weekStart.getDate()}` : `${weekStart.getDate()}/${weekStart.getMonth() + 1}`; // VS: maand eerst
                   weeks.push({ label, revenue: rev });
                 }
                 const total8w = weeks.reduce((s, w) => s + w.revenue, 0);
