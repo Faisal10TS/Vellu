@@ -1274,11 +1274,12 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
              met de tekst ("Herinnering verstuurd · automatisch" paste niet in
              222 px); n2 hangt aan de rechterkant en groeit dus over de telefoon. */
           .at-hero-note { position: absolute; width: max-content; min-width: 222px; max-width: 280px; z-index: 4; }
-          /* n1 lager (Faisal 17-11): in rust net boven de salonnaam op de
-             cover (naam begint op 87px; kaartje 50px hoog op de telefoon, 54px
-             op de computer, onderkant dus op 76/80px). Zweven gaat alleen
-             omhoog, dus het raakt de naam nooit. */
-          .at-hero-note.n1 { top: 26px; left: max(0px, calc(50% - 138px - 84px)); }
+          /* n1 lager (Faisal 17-11, twee rondes: "a little above the cover
+             title", daarna "can still move down some more"). Naam begint op
+             87px; kaartje 50px hoog op de telefoon, 54px op de computer. In
+             rust valt de onderkant over de bovenrand van de naam; bovenaan het
+             zweven (-14px) komt hij er net boven. */
+          .at-hero-note.n1 { top: 46px; left: max(0px, calc(50% - 138px - 84px)); }
           .at-hero-note.n2 { top: 252px; right: max(0px, calc(50% - 236px)); }
           .at-hero-note.n3 { top: 512px; left: max(0px, calc(50% - 138px - 66px)); }
           .at-hero-note-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: #FBF8F3; border: 1px solid ${PUTTY}; box-shadow: 0 20px 36px -18px rgba(69,58,43,0.5), 0 2px 5px rgba(69,58,43,0.07); text-align: left; animation: atNoteFloat 4.8s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
