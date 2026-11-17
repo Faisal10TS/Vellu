@@ -746,6 +746,50 @@ function rememberedClientOf(salonId) {
     return { firstName: hit.firstName, lastName: hit.lastName || "", email, phone: hit.phone || "" };
   } catch { return null; }
 }
+// Bewaart één persoon als "laatste" in localStorage (meest recent achteraan).
+function rememberLocally(salonId, cl) {
+  try {
+    const key = returnKeyOf(salonId);
+    const email = cl.email.trim().toLowerCase();
+    const store = JSON.parse(localStorage.getItem(key) || "{}");
+    delete store[email];
+    store[email] = { firstName: cl.firstName.trim(), lastName: (cl.lastName || "").trim(), phone: (cl.phone || "").trim() };
+    localStorage.setItem(key, JSON.stringify(store));
+    localStorage.setItem(returnLastKeyOf(salonId), email);
+  } catch { /* private mode / quota — skip silently */ }
+}
+// 17-11: WebKit (iPhone/iPad, ook de Instagram-browser) wist localStorage na
+// 30 dagen browsergebruik zonder bezoek, of al na 7 (oudere iOS, of binnen via
+// een tracking-link zoals Instagram met fbclid); nagelklanten komen na 3-4
+// weken terug. Daarom ook een cookie die de SERVER zet (api/rc.js, HttpOnly,
+// 1 jaar): die valt niet onder die regel. localStorage blijft de snelle weg;
+// de cookie is het vangnet.
+// "synced" onthoudt voor welk adres de cookie al gezet is (verdwijnt samen met
+// de rest van localStorage, en dan zetten we hem gewoon opnieuw).
+const returnSyncKeyOf = (salonId) => `vellu_return_synced_${salonId}`;
+// Volgorde bewaken: een "vergeet" mag nooit vóór een nog lopende "onthoud"
+// bij de server aankomen (anders staat de cookie er daarna gewoon weer).
+let serverMemoryChain = Promise.resolve();
+function rememberOnServer(salonId, cl) {
+  const email = cl.email.trim().toLowerCase();
+  serverMemoryChain = serverMemoryChain.then(() => fetch("/api/rc", {
+    method: "POST", keepalive: true, credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ s: salonId, firstName: cl.firstName, lastName: cl.lastName || "", email, phone: cl.phone || "" }),
+  }).then(r => {
+    // Alleen als deze persoon nog steeds de onthouden persoon is (niet net
+    // via "Niet jij?" gewist).
+    try { if (r.ok && localStorage.getItem(returnLastKeyOf(salonId)) === email) localStorage.setItem(returnSyncKeyOf(salonId), email); } catch { /* skip */ }
+  })).catch(() => {});
+}
+function forgetOnServer(salonId) {
+  try { localStorage.removeItem(returnSyncKeyOf(salonId)); } catch { /* skip */ }
+  serverMemoryChain = serverMemoryChain.then(() => fetch("/api/rc", {
+    method: "POST", keepalive: true, credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ s: salonId, forget: true }),
+  })).catch(() => {});
+}
 
 // ─── CLIENT BOOKING ───────────────────────────────────────────
 function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false }) {
@@ -1453,22 +1497,58 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     return () => clearTimeout(t);
   }, [form.email, initialSalon.id]);
 
-  // "Niet jij?": haalt deze persoon van dit toestel en maakt de velden leeg.
+  // "Niet jij?": wist ALLES wat dit toestel voor deze salon onthoudt (niet
+  // alleen de getoonde persoon: anders kwam bij het volgende bezoek de
+  // volgende opgeslagen persoon tevoorschijn en ging die weer in de cookie)
+  // en maakt de velden leeg.
   const forgetReturningClient = () => {
-    const email = form.email.trim().toLowerCase();
     try {
-      const key = returnKeyOf(initialSalon.id);
-      const store = JSON.parse(localStorage.getItem(key) || "{}");
-      delete store[email];
-      if (Object.keys(store).length) localStorage.setItem(key, JSON.stringify(store));
-      else localStorage.removeItem(key);
+      localStorage.removeItem(returnKeyOf(initialSalon.id));
       localStorage.removeItem(returnLastKeyOf(initialSalon.id));
     } catch { /* private mode — skip silently */ }
+    forgetOnServer(initialSalon.id);
     setClientFound(false);
     setDetailsTouched({});
     setForm(f => ({ ...f, firstName: "", lastName: "", email: "", phone: "" }));
     setTimeout(() => document.getElementById("vl-f-first")?.focus(), 0);
   };
+
+  // Zodra de klant gaat boeken: staat er niets in localStorage (nieuw toestel,
+  // of Safari heeft het gewist), dan vragen we de server-cookie op. Staat er
+  // wél iets maar is de cookie nog niet gezet (klant van vóór 17-11), dan
+  // zetten we hem nu eenmalig. Eén keer per paginabezoek.
+  const serverMemoryRef = useRef(false);
+  useEffect(() => {
+    if (mode !== "booking" || reviewMode || serverMemoryRef.current) return;
+    serverMemoryRef.current = true;
+    const salonId = initialSalon.id;
+    const local = rememberedClientOf(salonId);
+    if (local) {
+      let synced = null;
+      try { synced = localStorage.getItem(returnSyncKeyOf(salonId)); } catch { /* skip */ }
+      if (synced !== local.email) {
+        // Opslag van vóór 17-11 heeft nog geen "laatste": die nu zetten, zodat
+        // de gesynchroniseerd-vlag ook echt blijft staan (zie rememberOnServer).
+        rememberLocally(salonId, local);
+        rememberOnServer(salonId, local);
+      }
+      return;
+    }
+    fetch(`/api/rc?s=${encodeURIComponent(salonId)}`, { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => {
+        const cl = j && j.client;
+        if (!cl || !cl.firstName || !cl.email) return;
+        rememberLocally(salonId, cl);
+        try { localStorage.setItem(returnSyncKeyOf(salonId), cl.email); } catch { /* skip */ }
+        // Alleen als de klant nog niets heeft getypt; het welkomstblok volgt
+        // vanzelf via de e-mailcontrole hierboven.
+        setForm(f => (f.firstName || f.lastName || f.email || f.phone)
+          ? f
+          : { ...f, firstName: cl.firstName, lastName: cl.lastName || "", email: cl.email, phone: cl.phone || "" });
+      })
+      .catch(() => { /* geen cookie of geen server (lokale dev) — niets aan de hand */ });
+  }, [mode, reviewMode, initialSalon.id]);
 
   // Scroll-spy: update active tab based on which section is closest to top
   useEffect(() => {
@@ -2191,7 +2271,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     return selectedServices.flatMap(item => item.extras);
   };
 
-  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setPreferredStaff(null); setProductSel({}); setTime(null); setDone(false); setPrepayInfo(null); setBookedAppointmentId(null); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", birthday: "", website: "", ...rememberedClientOf(initialSalon.id) }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
+  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setPreferredStaff(null); setProductSel({}); setTime(null); setDone(false); setPrepayInfo(null); setBookedAppointmentId(null); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); { const rc = rememberedClientOf(initialSalon.id); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", birthday: "", website: "", ...rc }); setClientFound(rc ? rc.firstName : false); } setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
 
   // Alleen een dag die nog boekbare tijden heeft (vol, niet dicht) kan op de
   // wachtlijst: een dag zonder tijd — gesloten, of vandaag na de laatste slot —
@@ -2315,7 +2395,11 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     setSubmitting(false);
     setSlotsRefreshKey(k => k + 1);
     setClientNoShows(0);
-    setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", birthday: "", website: "", ...rememberedClientOf(initialSalon.id) });
+    // Welkomstblok meteen mee: het e-maileffect draait niet opnieuw als het
+    // adres gelijk blijft (bijv. "Nieuwe afspraak" direct na een boeking).
+    const rc = rememberedClientOf(initialSalon.id);
+    setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", birthday: "", website: "", ...rc });
+    setClientFound(rc ? rc.firstName : false);
     setPolicyAgreed(false);
     setAppliedDiscount(null);
     setDiscountCode("");
@@ -3039,19 +3123,13 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
       // salon so switching salons doesn't cross-pollinate. Not a DB lookup on
       // purpose — an anonymous "type any email → get name/phone" endpoint
       // would leak PII.
-      try {
-        const key = returnKeyOf(initialSalon.id);
-        const email = form.email.trim().toLowerCase();
-        const store = JSON.parse(localStorage.getItem(key) || "{}");
-        delete store[email]; // opnieuw achteraan = meest recent
-        store[email] = {
-          firstName: form.firstName.trim(),
-          lastName: form.lastName.trim(),
-          phone: (form.phone || "").trim(),
-        };
-        localStorage.setItem(key, JSON.stringify(store));
-        localStorage.setItem(returnLastKeyOf(initialSalon.id), email);
-      } catch { /* private mode / quota — skip silently */ }
+      // Plus een cookie van de server (api/rc.js): localStorage wist WebKit na
+      // 7-30 dagen zonder bezoek, die cookie niet. Zelfde adres in kleine letters
+      // als book-appointment gebruikt, dus de volgende boeking landt op
+      // dezelfde klantkaart (geen dubbele klanten).
+      const remembered = { firstName: form.firstName, lastName: form.lastName, email: form.email.trim().toLowerCase(), phone: form.phone || "" };
+      rememberLocally(initialSalon.id, remembered);
+      rememberOnServer(initialSalon.id, remembered);
 
       // Bevestiging, melding aan de salon en sms gaan volledig server-side via
       // book-appointment. De oude terugvalroute hier (sendEmails/sendSMS vanuit

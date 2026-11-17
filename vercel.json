@@ -77,6 +77,11 @@
     },
     { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
   ],
+  "functions": {
+    "api/rc.js": {
+      "regions": ["dub1"]
+    }
+  },
   "crons": [
     {
       "path": "/api/send-reminders",
