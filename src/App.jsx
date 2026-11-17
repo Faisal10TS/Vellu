@@ -4,7 +4,7 @@ import { supabase, rememberStaffInviteFromUrl, readStaffInvite, claimStaffInvite
 import {
   ThemeProvider, useTheme, useSEO, ACCENT, T, NavIcon, DEFAULT_HOURS, fmt, parseDate, Layout, curSym, fmtAmt,
   AT, AT_COLORS, AT_RADIUS, AtelierSkin, salonNow, ToastContainer,
-  dateLocale, setFormatRegion, fmtTime,
+  dateLocale, setFormatRegion, fmtTime, readableAccent, accentTextOn,
 } from "./shared.jsx";
 import { planIsActive } from "./autopay.js";
 import { splitPlace } from "./salonSchema.js";
@@ -1080,7 +1080,7 @@ function SalonRoute({ lang, setLang }) {
 
 // ─── CANCEL ROUTE (vellu.cc/cancel/TOKEN) ─────────────────────
 function CancelRoute({ lang }) {
-  const { colors: c } = useTheme();
+  const { colors: c, theme, set: setThemeMode } = useTheme();
   const navigate = useNavigate();
   const { token } = useParams();
   const t = T[lang];
@@ -1103,6 +1103,33 @@ function CancelRoute({ lang }) {
   const noteSalon = (d) => {
     if (d && (d.salon_name || d.salon_slug)) setSalonInfo({ name: d.salon_name || "", slug: d.salon_slug || "" });
   };
+  // Uitstraling van de salon (17-11): de pagina komt uit haar mail, dus knop,
+  // iconen en bedrag in haar accent en licht/donker zoals op haar
+  // boekingspagina (booking_theme, zelfde regel als ClientApp), niet het
+  // Vellu-goud met een rode knop op zwart. Uit de publieke view; lukt dat
+  // niet, dan blijft het zoals het was. Zelfde leesbaarheidsregels als de
+  // boekingspagina. Het thema wordt niet bewaard; bij weggaan terug naar de
+  // eigen voorkeur van de bezoeker.
+  const [salonAccent, setSalonAccent] = useState(null);
+  const loadSalonLook = async (slug) => {
+    if (!slug) return;
+    try {
+      const { data: s } = await supabase.from("public_salons").select("accent_color, booking_theme").eq("slug", slug).maybeSingle();
+      if (s?.accent_color) setSalonAccent(s.accent_color);
+      const pref = s?.booking_theme;
+      let wanted = null;
+      if (pref === "light" || pref === "dark") wanted = pref;
+      else if (pref === "auto") { try { wanted = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; } catch { wanted = null; } }
+      if (wanted) setThemeMode(wanted);
+    } catch { /* blijft zoals het was */ }
+  };
+  useEffect(() => () => {
+    let stored = null; try { stored = localStorage.getItem("vellu-theme"); } catch { stored = null; }
+    setThemeMode(stored === "light" || stored === "dark" ? stored : "dark");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const accent = readableAccent(salonAccent || ACCENT, theme);
+  const accentText = accentTextOn(accent, c.bg);
   const backTo = salonInfo.slug ? `/${salonInfo.slug}` : "/";
   const backLabel = salonInfo.slug
     ? (lang === "nl" ? `Naar ${salonInfo.name || "de salon"}` : lang === "es" ? `Ir a ${salonInfo.name || "el salón"}` : `Go to ${salonInfo.name || "the salon"}`)
@@ -1133,6 +1160,9 @@ function CancelRoute({ lang }) {
         return;
       }
       noteSalon(data);
+      // Eerst de uitstraling van de salon, dan pas tonen: anders flitst de
+      // pagina van goud op zwart naar haar kleur en thema.
+      await loadSalonLook(data.salon_slug);
       // Al geannuleerd (door de klant zelf, door de salon, of een niet op tijd
       // betaalde reservering): een eigen scherm, zonder te beloven dat er nu
       // een bevestigingsmail komt.
@@ -1156,6 +1186,8 @@ function CancelRoute({ lang }) {
       setStatus("error");
     };
     checkToken();
+    // Eén keer per link; loadSalonLook gebruikt alleen setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const handleCancel = async () => {
@@ -1209,7 +1241,7 @@ function CancelRoute({ lang }) {
   };
 
   return (
-    <Layout accent={ACCENT}>
+    <Layout accent={accent} rawAccent={salonAccent || ACCENT} textAccent={accentText}>
     <div style={{ minHeight: "100dvh", background: c.bg, fontFamily: "'Jost',sans-serif", color: c.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
 
       <div style={{ maxWidth: 420, width: "100%", textAlign: "center" }}>
@@ -1219,7 +1251,7 @@ function CancelRoute({ lang }) {
         
         {status === "confirm" && appointment && (
           <div className="fade-up">
-            <div style={{ marginBottom: 20 }}><NavIcon name="calendar" size={48} color={ACCENT} /></div>
+            <div style={{ marginBottom: 20 }}><NavIcon name="calendar" size={48} color={accentText} /></div>
             <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
               {t.cancelBooking}
             </h1>
@@ -1242,7 +1274,7 @@ function CancelRoute({ lang }) {
               </div>
               <div>
                 <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: c.textLabel }}>{t.total}</div>
-                <div style={{ fontWeight: 500, color: ACCENT }}>{fmtAmt(curSym(appointment.country_code), appointment.service_price)}</div>
+                <div style={{ fontWeight: 500, color: accentText }}>{fmtAmt(curSym(appointment.country_code), appointment.service_price)}</div>
               </div>
             </div>
             
@@ -1256,7 +1288,7 @@ function CancelRoute({ lang }) {
             
             {/* Uit tijdens het verzoek: de server wacht op alle mails voor hij
                 antwoordt, en een tweede tik annuleerde vroeger nog een keer. */}
-            <button className="btn-primary" style={{ background: "#ef4444", color: "#fff", width: "100%", opacity: cancelling ? 0.7 : 1, cursor: cancelling ? "wait" : "pointer" }} onClick={handleCancel} disabled={cancelling} aria-busy={cancelling}>
+            <button className="btn-primary" style={{ width: "100%", opacity: cancelling ? 0.7 : 1, cursor: cancelling ? "wait" : "pointer" }} onClick={handleCancel} disabled={cancelling} aria-busy={cancelling}>
               {cancelling ? "…" : t.confirmCancel}
             </button>
 
@@ -1268,7 +1300,7 @@ function CancelRoute({ lang }) {
 
         {status === "cancelled" && (
           <div className="fade-up">
-            <div style={{ marginBottom: 20 }}><NavIcon name="check" size={48} color="#86efac" /></div>
+            <div style={{ marginBottom: 20 }}><NavIcon name="check" size={48} color={accentText} /></div>
             <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
               {t.bookingCancelled}
             </h1>
@@ -1306,7 +1338,7 @@ function CancelRoute({ lang }) {
 
         {status === "expired" && (
           <div className="fade-up">
-            <div style={{ marginBottom: 20 }}><NavIcon name="clock" size={48} color={ACCENT} /></div>
+            <div style={{ marginBottom: 20 }}><NavIcon name="clock" size={48} color={accentText} /></div>
             <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
               {t.cannotCancel}
             </h1>
@@ -1319,7 +1351,7 @@ function CancelRoute({ lang }) {
 
         {status === "too_late" && (
           <div className="fade-up">
-            <div style={{ marginBottom: 20 }}><NavIcon name="clock" size={48} color={ACCENT} /></div>
+            <div style={{ marginBottom: 20 }}><NavIcon name="clock" size={48} color={accentText} /></div>
             <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 28, fontWeight: 300, marginBottom: 10 }}>
               {lang === "nl" ? "Online annuleren kan niet meer" : lang === "es" ? "Ya no se puede cancelar en línea" : "Online cancellation has closed"}
             </h1>
