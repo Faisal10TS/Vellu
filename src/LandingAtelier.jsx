@@ -1320,9 +1320,17 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
           .at-show-island { position: absolute; left: 50%; top: 7px; transform: translateX(-50%); width: 62px; height: 17px; border-radius: 20px; background: #000; }
           .at-show-screen img { width: 100%; flex: 1; min-height: 0; object-fit: cover; object-position: top center; display: block; }
           @media (max-width: 760px) {
-            .at-show-row { justify-content: flex-start; overflow-x: auto; scroll-snap-type: x mandatory; padding: 30px 20px 10px; margin: 0 -20px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+            /* overflow-y: hidden (Faisal 17-11): met alleen overflow-x: auto
+               wordt overflow-y ook auto, en de inhoud is net hoger dan de
+               strook (12px, plus de nog niet onthulde telefoon 22px lager),
+               dus een schuine veeg schoof de telefoons omhoog. Nu alleen
+               links-rechts; verticaal vegen gaat naar de pagina. */
+            .at-show-row { justify-content: flex-start; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; padding: 30px 20px 10px; margin: 0 -20px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
             .at-show-row::-webkit-scrollbar { display: none; }
-            .at-show-row > * { scroll-snap-align: center; flex: 0 0 auto; }
+            /* Geen Reveal-beweging in de veegstrook: de telefoon die buiten
+               beeld rechts staat werd pas bij het vegen onthuld en schoof dan
+               22px omhoog in beeld. Op de telefoon staan ze gewoon stil. */
+            .at-show-row > * { scroll-snap-align: center; flex: 0 0 auto; opacity: 1 !important; transform: none !important; }
             .at-show-item.mid { margin-top: 0; }
             .at-show-phone { width: 200px; }
           }

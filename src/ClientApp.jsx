@@ -4335,8 +4335,9 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
             zwevende pil die over de kaarten hing ═══ */}
         {createPortal(
           <div className="profile-mobile-pill-wrap profile-mobile-bar" data-mobile-bar>
-            {/* Alleen de Boek-knop (Faisal 15-09: "dat eerstvolgende weghalen"). */}
-            <button className="profile-mobile-pill" onClick={() => enterBooking()}>{t.book}</button>
+            {/* Alleen de Boek-knop (Faisal 15-09: "dat eerstvolgende weghalen").
+                Voluit, zelfde tekst als de grote knop op de computer (17-11). */}
+            <button className="profile-mobile-pill" onClick={() => enterBooking()}>{lang === "nl" ? "Afspraak boeken" : lang === "es" ? "Reservar cita" : "Book an appointment"}</button>
           </div>,
           document.body
         )}
