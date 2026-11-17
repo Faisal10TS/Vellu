@@ -1274,28 +1274,27 @@ function LandingScreen({ onSelectSalon, onOwnerEnter, lang, setLang, salons = {}
              met de tekst ("Herinnering verstuurd · automatisch" paste niet in
              222 px); n2 hangt aan de rechterkant en groeit dus over de telefoon. */
           .at-hero-note { position: absolute; width: max-content; min-width: 222px; max-width: 280px; z-index: 4; }
-          .at-hero-note.n1 { top: 8px; left: max(0px, calc(50% - 138px - 84px)); }
+          /* n1 lager (Faisal 17-11): in rust net boven de salonnaam op de
+             cover (naam begint op 87px; kaartje 50px hoog op de telefoon, 54px
+             op de computer, onderkant dus op 76/80px). Zweven gaat alleen
+             omhoog, dus het raakt de naam nooit. */
+          .at-hero-note.n1 { top: 26px; left: max(0px, calc(50% - 138px - 84px)); }
           .at-hero-note.n2 { top: 252px; right: max(0px, calc(50% - 236px)); }
           .at-hero-note.n3 { top: 512px; left: max(0px, calc(50% - 138px - 66px)); }
-          .at-hero-note-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: #FBF8F3; border: 1px solid ${PUTTY}; box-shadow: 0 20px 36px -18px rgba(69,58,43,0.5), 0 2px 5px rgba(69,58,43,0.07); text-align: left; animation: atNoteFloat 3.6s linear infinite; }
-          .at-hero-note.n2 .at-hero-note-card { animation-delay: -1.2s; }
-          .at-hero-note.n3 .at-hero-note-card { animation-delay: -2.4s; }
+          .at-hero-note-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: #FBF8F3; border: 1px solid ${PUTTY}; box-shadow: 0 20px 36px -18px rgba(69,58,43,0.5), 0 2px 5px rgba(69,58,43,0.07); text-align: left; animation: atNoteFloat 4.8s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+          .at-hero-note.n2 .at-hero-note-card { animation-delay: -1.6s; }
+          .at-hero-note.n3 .at-hero-note-card { animation-delay: -3.2s; }
           .at-hero-note-ico { width: 32px; height: 32px; border-radius: 9px; background: ${EARTH}1a; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
           .at-hero-note-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
           .at-hero-note-title { font-size: 12px; font-weight: 600; color: ${INK}; line-height: 1.25; white-space: nowrap; }
           .at-hero-note-sub { display: block; font-size: 11px; color: ${P.textSub}; line-height: 1.3; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           .at-hero-note-meta { font-size: 9.5px; color: ${EARTH}; letter-spacing: 0.04em; white-space: nowrap; }
-          /* Stuiteren (Faisal 17-11: "bounce a little more, also on desktop"):
-             was 6px in 6 s, nauwelijks te zien. Nu omhoog (uitlopend), vallen
-             (versnellend), een klein naveren bij de landing en even stil.
-             Zelfde op telefoon en computer; de drie lopen 1,2 s uit de pas. */
-          @keyframes atNoteFloat {
-            0% { transform: translateY(0); animation-timing-function: cubic-bezier(0.2, 0.6, 0.35, 1); }
-            40% { transform: translateY(-14px); animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.35); }
-            74% { transform: translateY(0); animation-timing-function: cubic-bezier(0.2, 0.6, 0.35, 1); }
-            84% { transform: translateY(-4px); animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.35); }
-            93%, 100% { transform: translateY(0); }
-          }
+          /* Zweven (Faisal 17-11): was 6px in 6 s, nauwelijks te zien ("bounce
+             a little more, also on desktop"); daarna een stuiter met vallen en
+             naveren, "te agressief". Nu 14px rustig op en neer, sinusachtig
+             (zacht versnellen en vertragen, geen klap onderaan), 4,8 s per
+             ronde, de drie 1,6 s uit de pas. Zelfde op telefoon en computer. */
+          @keyframes atNoteFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
           /* Wisselen maand/jaar (Faisal 11-11: "animatie in plaats van gewoon
              veranderen"): het cursieve woord en "/maand" komen omhoog uit een
              lichte waas, de regel "2 maanden gratis" schuift open, en het
