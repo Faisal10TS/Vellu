@@ -724,6 +724,29 @@ function SalonShareButton({ salon, lang, open, setOpen, accent, compact = false 
   );
 }
 
+// ─── TERUGKERENDE KLANT ───────────────────────────────────────
+// Na elke geslaagde boeking bewaart DEZE browser naam, e-mail en telefoon per
+// salon (localStorage). Bewust geen opzoeking op de server: een anonieme
+// "typ een adres → krijg naam en nummer" zou klantgegevens lekken.
+// Tot 11-11 stond e-mail bovenaan en vulde het typen ervan de rest in; sinds de
+// naam bovenaan staat vullen we bij het openen meteen de laatst gebruikte
+// gegevens in. "Niet jij?" wist ze van dit toestel (gedeelde tablet).
+const returnKeyOf = (salonId) => `vellu_return_${salonId}`;
+const returnLastKeyOf = (salonId) => `vellu_return_last_${salonId}`;
+function rememberedClientOf(salonId) {
+  try {
+    const store = JSON.parse(localStorage.getItem(returnKeyOf(salonId)) || "{}");
+    const emails = Object.keys(store);
+    if (!emails.length) return null;
+    const last = localStorage.getItem(returnLastKeyOf(salonId));
+    // Oudere opslag kent geen "laatste": dan de laatst toegevoegde.
+    const email = last && store[last] ? last : emails[emails.length - 1];
+    const hit = store[email];
+    if (!hit || !hit.firstName) return null;
+    return { firstName: hit.firstName, lastName: hit.lastName || "", email, phone: hit.phone || "" };
+  } catch { return null; }
+}
+
 // ─── CLIENT BOOKING ───────────────────────────────────────────
 function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false }) {
   // Teamsalon met 2+ medewerkers: book-appointment eist per dienst een
@@ -1261,7 +1284,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   // off-screen, aria-hidden, autocomplete off) but filled by dumb bots that
   // blindly populate every input on a page. If the server receives a non-empty
   // value, it rejects the booking. See also book-appointment edge fn.
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", birthday: "", website: "" });
+  const [form, setForm] = useState(() => ({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", birthday: "", website: "", ...rememberedClientOf(initialSalon.id) }));
   // Server zei phone_required (kan alleen via een verouderde/gemanipuleerde
   // pagina voorbij de client-check komen): we springen dan terug naar de
   // gegevens-stap en markeren het telefoonveld — een toast alleen verdwijnt
@@ -1415,10 +1438,10 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     const t = setTimeout(() => {
       if (myTick !== emailLookupRef.current) return;
       try {
-        const store = JSON.parse(localStorage.getItem(`vellu_return_${initialSalon.id}`) || "{}");
+        const store = JSON.parse(localStorage.getItem(returnKeyOf(initialSalon.id)) || "{}");
         const hit = store[raw];
         if (!hit) { setClientFound(false); return; }
-        setClientFound(true);
+        setClientFound(hit.firstName || true);
         setForm(f => ({
           ...f,
           firstName: f.firstName || hit.firstName || "",
@@ -1429,6 +1452,23 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     }, 350);
     return () => clearTimeout(t);
   }, [form.email, initialSalon.id]);
+
+  // "Niet jij?": haalt deze persoon van dit toestel en maakt de velden leeg.
+  const forgetReturningClient = () => {
+    const email = form.email.trim().toLowerCase();
+    try {
+      const key = returnKeyOf(initialSalon.id);
+      const store = JSON.parse(localStorage.getItem(key) || "{}");
+      delete store[email];
+      if (Object.keys(store).length) localStorage.setItem(key, JSON.stringify(store));
+      else localStorage.removeItem(key);
+      localStorage.removeItem(returnLastKeyOf(initialSalon.id));
+    } catch { /* private mode — skip silently */ }
+    setClientFound(false);
+    setDetailsTouched({});
+    setForm(f => ({ ...f, firstName: "", lastName: "", email: "", phone: "" }));
+    setTimeout(() => document.getElementById("vl-f-first")?.focus(), 0);
+  };
 
   // Scroll-spy: update active tab based on which section is closest to top
   useEffect(() => {
@@ -1906,6 +1946,16 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     const touch = (k) => () => setDetailsTouched(s => (s[k] ? s : { ...s, [k]: true }));
     return (
       <form autoComplete="on" onSubmit={e => e.preventDefault()} style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 20 }}>
+        {clientFound && (
+          <div style={{ background: `${accent}12`, border: `1px solid ${accent}30`, borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+            <NavIcon name="wave" size={18} color={accentText} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: accentText }}>{t.welcomeBackClient}{typeof clientFound === "string" ? `, ${clientFound}` : ""}!</div>
+              <div style={{ fontSize: 10, color: c.textSub, lineHeight: 1.4 }}>{t.foundYourDetails}</div>
+            </div>
+            <button type="button" onClick={forgetReturningClient} style={{ flexShrink: 0, background: "none", border: "none", padding: "8px 2px", fontFamily: "inherit", fontSize: 11, fontWeight: 500, color: accentText, textDecoration: "underline", textUnderlineOffset: 2, cursor: "pointer" }}>{t.notYouClient}</button>
+          </div>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div style={{ minWidth: 0 }}>
             {label("vl-f-first", t.firstName)}
@@ -1924,15 +1974,6 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
           {err("email")}
           <EmailTypoHint value={form.email} onFix={v => setForm(f => ({ ...f, email: v }))} lang={lang} c={c} accent={accent} style={{ margin: "6px 0 0" }} />
         </div>
-        {clientFound && (
-          <div style={{ background: `${accent}12`, border: `1px solid ${accent}30`, borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-            <NavIcon name="wave" size={18} color={accentText} />
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 500, color: accentText }}>{t.welcomeBackClient}!</div>
-              <div style={{ fontSize: 10, color: c.textSub }}>{t.foundYourDetails}</div>
-            </div>
-          </div>
-        )}
         <div>
           {label("vl-booking-phone", t.phone, initialSalon.phone_required ? t.required : t.optional)}
           <input id="vl-booking-phone" className="input-field" type="tel" name="tel" autoComplete="tel" inputMode="tel" value={form.phone} onChange={e => { setPhoneError(false); setForm(f => ({...f, phone: e.target.value})); }} onBlur={touch("phone")} {...fieldProps("phone")} />
@@ -2150,7 +2191,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     return selectedServices.flatMap(item => item.extras);
   };
 
-  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setPreferredStaff(null); setProductSel({}); setTime(null); setDone(false); setPrepayInfo(null); setBookedAppointmentId(null); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", website: "" }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
+  const reset = () => { setMode("profile"); setStep(hasLocations ? 0 : 1); setSelectedServices([]); setPreferredStaff(null); setProductSel({}); setTime(null); setDone(false); setPrepayInfo(null); setBookedAppointmentId(null); setSubmitting(false); setSlotsRefreshKey(k => k + 1); setClientNoShows(0); setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", birthday: "", website: "", ...rememberedClientOf(initialSalon.id) }); setPolicyAgreed(false); setAppliedDiscount(null); setDiscountCode(""); if (hasLocations) setSelectedLocation(null); setWaitlistOpen(false); setWaitlistDone(false); setWaitlistNotes(""); setWaitlistError(""); };
 
   // Alleen een dag die nog boekbare tijden heeft (vol, niet dicht) kan op de
   // wachtlijst: een dag zonder tijd — gesloten, of vandaag na de laatste slot —
@@ -2274,7 +2315,7 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
     setSubmitting(false);
     setSlotsRefreshKey(k => k + 1);
     setClientNoShows(0);
-    setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", birthday: "", website: "" });
+    setForm({ firstName: "", lastName: "", email: "", phone: "", payment: "on-arrival", allergies: "", birthday: "", website: "", ...rememberedClientOf(initialSalon.id) });
     setPolicyAgreed(false);
     setAppliedDiscount(null);
     setDiscountCode("");
@@ -2378,7 +2419,8 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
   // Previously we did an unauthenticated SELECT on the `clients` table keyed
   // by email to prefill the booking form for returning clients. That also
   // leaked name/phone/allergies to anyone who entered an email, allowing
-  // enumeration of the customer base. Clients now type their info each time.
+  // enumeration of the customer base. Returning clients are now remembered
+  // only in their own browser — see rememberedClientOf().
   // The server-side upsert in book-appointment still keeps one row per email.
 
   // Load booked time slots for selected date. Goes through the RPC
@@ -2992,19 +3034,23 @@ function ClientApp({ salon: salonProp, onBack, lang, setLang, reviewMode = false
       submittingRef.current = false;
       setSlotsRefreshKey(k => k + 1);
 
-      // Cache this client's details locally so a repeat booking from the same
-      // browser can prefill after they type their email. Keyed per salon so
-      // switching salons doesn't cross-pollinate. Not a DB lookup on purpose —
-      // an anonymous "type any email → get name/phone" endpoint would leak PII.
+      // Cache this client's details locally so the next booking from the same
+      // browser opens with them filled in (see rememberedClientOf). Keyed per
+      // salon so switching salons doesn't cross-pollinate. Not a DB lookup on
+      // purpose — an anonymous "type any email → get name/phone" endpoint
+      // would leak PII.
       try {
-        const key = `vellu_return_${initialSalon.id}`;
+        const key = returnKeyOf(initialSalon.id);
+        const email = form.email.trim().toLowerCase();
         const store = JSON.parse(localStorage.getItem(key) || "{}");
-        store[form.email.trim().toLowerCase()] = {
+        delete store[email]; // opnieuw achteraan = meest recent
+        store[email] = {
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
           phone: (form.phone || "").trim(),
         };
         localStorage.setItem(key, JSON.stringify(store));
+        localStorage.setItem(returnLastKeyOf(initialSalon.id), email);
       } catch { /* private mode / quota — skip silently */ }
 
       // Bevestiging, melding aan de salon en sms gaan volledig server-side via

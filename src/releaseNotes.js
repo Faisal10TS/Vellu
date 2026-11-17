@@ -14,6 +14,23 @@
 
 export const RELEASES = [
   {
+    // 17-11: sinds 11-11 (naam bovenaan) vulde het onthouden pas iets in nadat
+    // de klant haar naam al had getypt. Nu meteen bij het openen.
+    id: "2026-11-17a",
+    date: "2026-11-17",
+    title: { nl: "Terugkerende klanten hoeven niets opnieuw in te vullen", en: "Returning clients don't have to fill in their details again", es: "Los clientes que vuelven no tienen que rellenar sus datos otra vez" },
+    items: [
+      {
+        kind: "fix", audience: ["owner"],
+        text: {
+          nl: "Boekt een klant opnieuw op je boekingspagina vanaf dezelfde telefoon of computer, dan staan haar naam, e-mail en telefoonnummer weer meteen ingevuld. Is het iemand anders, dan maakt \"Niet jij?\" de velden leeg.",
+          en: "When a client books again on your booking page from the same phone or computer, their name, email and phone number are filled in right away again. If it's someone else, \"Not you?\" clears the fields.",
+          es: "Cuando un cliente vuelve a reservar en tu página de reservas desde el mismo teléfono u ordenador, su nombre, correo y teléfono vuelven a aparecer rellenados enseguida. Si es otra persona, \"¿No eres tú?\" vacía los campos.",
+        },
+      },
+    ],
+  },
+  {
     // 16-11: de hele VS-update in één blok (fase 1 4a8bce7 + fase 2 6a9b083 +
     // fase 3). Bewust pas nu: de VS wordt als geheel aangekondigd.
     id: "2026-11-16a",

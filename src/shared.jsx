@@ -1527,7 +1527,7 @@ const _T_RAW = {
     categoryNameEn:"Categorienaam (EN)", noCategory:"Geen categorie", allCategories:"Alle behandelingen",
     manageCategories:"Categorieën beheren",
     // Client accounts
-    welcomeBackClient:"Welkom terug", foundYourDetails:"We hebben je gegevens gevonden!",
+    welcomeBackClient:"Welkom terug", foundYourDetails:"We hebben je gegevens van de vorige keer ingevuld.", notYouClient:"Niet jij?",
     // Waitlist
     joinWaitlist:"Zet me op wachtlijst", waitlistTitle:"Op de wachtlijst",
     waitlistSub:"Laat je gegevens achter. We nemen contact op als er een plek vrijkomt.",
@@ -1826,7 +1826,7 @@ const _T_RAW = {
     categoryNameEn:"Category name (EN)", noCategory:"No category", allCategories:"All treatments",
     manageCategories:"Manage categories",
     // Client accounts
-    welcomeBackClient:"Welcome back", foundYourDetails:"We found your details!",
+    welcomeBackClient:"Welcome back", foundYourDetails:"We filled in your details from last time.", notYouClient:"Not you?",
     // Waitlist
     joinWaitlist:"Add me to the waitlist", waitlistTitle:"Join the waitlist",
     waitlistSub:"Leave your details. We'll reach out as soon as a spot opens up.",
@@ -2120,7 +2120,7 @@ const _T_RAW = {
     categoryNameEn:"Nombre de la categoría (EN)", noCategory:"Sin categoría", allCategories:"Todos los tratamientos",
     manageCategories:"Gestionar categorías",
     // Client accounts
-    welcomeBackClient:"Bienvenida de nuevo", foundYourDetails:"¡Encontramos tus datos!",
+    welcomeBackClient:"¡Hola de nuevo", foundYourDetails:"Rellenamos tus datos de la última vez.", notYouClient:"¿No eres tú?",
     // Waitlist
     joinWaitlist:"Agregarme a la lista de espera", waitlistTitle:"Únete a la lista de espera",
     waitlistSub:"Déjanos tus datos. Te avisaremos en cuanto se libere un lugar.",
